@@ -394,7 +394,8 @@ class Handler(BaseHTTPRequestHandler):
                 raw = self.rfile.read(length)
                 req = json.loads(raw.decode("utf-8"))
                 target = Path(req.get("target","")).resolve()
-                if not str(target).startswith(str(UPLOAD_DIR.resolve())):
+                upload_root = UPLOAD_DIR.resolve()
+                if not target.is_relative_to(upload_root):
                     return self.send_json({"error":"Invalid target location"},400)
                 mode = str(req.get("mode","/apk360"))
                 valid = {x[0] for x in APK_MODES}
