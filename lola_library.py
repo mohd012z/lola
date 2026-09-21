@@ -134,7 +134,8 @@ FUNCTIONS = [
     {"id":"analyze-apk.py","group":"Analyzer Function","label":"APK Analyzer","purpose":"Perform selected APK package/static-analysis checks with secret redaction","module":"analyze-apk.py","outputs":["apk-analysis.json"]},
     {"id":"build-apk-report.py","group":"Report Function","label":"APK Report Builder","purpose":"Create interactive APK HTML report","module":"build-apk-report.py","outputs":["apk-report.html"]},
     {"id":"android_code_reader.py","group":"Reader Function","label":"Android Code Reader Indexer","purpose":"Build searchable redacted Android code/resource/DEX library","module":"android_code_reader.py","outputs":["android-code-reader.json"]},
-    {"id":"lola_mobile.py","group":"UI Function","label":"Lola Mobile Server","purpose":"Android localhost UI, upload, target plan, live scan, library and reader APIs","module":"lola_mobile.py","outputs":["localhost UI"]}
+    {"id":"lola_mobile.py","group":"UI Function","label":"Lola Mobile Server","purpose":"Android localhost UI, upload, target plan, live scan, library and reader APIs","module":"lola_mobile.py","outputs":["localhost UI"]},
+    {"id":"apk_runtime_monitor.py","group":"Runtime Function","label":"APK Runtime Observer","purpose":"Read-only ADB/logcat observer for an authorized installed/running package; no billing state changes or network interception","module":"apk_runtime_monitor.py","outputs":["runtime-analysis.json","runtime-events.jsonl"]}
 ]
 
 STORAGE = {
@@ -146,6 +147,8 @@ STORAGE = {
     "report": ".lola-library/targets/<target-id>/apk-report.html",
     "reader": ".lola-library/targets/<target-id>/android-code-reader.json",
     "decompiled": ".lola-library/targets/<target-id>/decompiled/",
+    "runtimeAnalysis": ".lola-library/targets/<target-id>/runtime-analysis.json",
+    "runtimeEvents": ".lola-library/targets/<target-id>/runtime-events.jsonl",
     "temporaryUpload": ".lola-mobile/uploads/",
     "targetId": "first 24 hex characters of the APK SHA-256"
 }
@@ -197,6 +200,8 @@ def artifact_paths(target_id: str) -> dict[str, str]:
         "report":str(folder/"apk-report.html"),
         "reader":str(folder/"android-code-reader.json"),
         "decompiled":str(folder/"decompiled"),
+        "runtimeAnalysis":str(folder/"runtime-analysis.json"),
+        "runtimeEvents":str(folder/"runtime-events.jsonl"),
     }
 
 def load_target(target_id: str) -> dict[str, Any] | None:
