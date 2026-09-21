@@ -32,6 +32,9 @@ UPLOAD_DIR = ROOT / ".lola-mobile" / "uploads"
 STATE_DIR = ROOT / ".lola-mobile"
 ANALYZER = ROOT / "analyze-apk.py"
 REPORTER = ROOT / "build-apk-report.py"
+RUNTIME_MONITOR = ROOT / "apk_runtime_monitor.py"
+RUNTIME_ANALYSIS = ROOT / "runtime-analysis.json"
+RUNTIME_EVENTS = ROOT / "runtime-events.jsonl"
 
 HOST = "127.0.0.1"
 PORT = 8766
@@ -54,9 +57,13 @@ STATE = {
     "analysis": "",
     "reader": "",
     "tools": {},
+    "runtime": {"status":"idle","package":"","message":"Ready","started":None,"finished":None,"exitCode":None},
 }
 STATE_LOCK = threading.Lock()
 PROCESS: subprocess.Popen | None = None
+RUNTIME_PROCESS: subprocess.Popen | None = None
+RUNTIME_LOCK = threading.Lock()
+RUNTIME_STATE = {"status":"idle","package":"","message":"Ready","started":None,"finished":None,"exitCode":None}
 
 APK_MODES = [
     ["/apk360","APK 360","Complete APK overview"],
@@ -94,7 +101,7 @@ def state_copy():
         return out
 
 def detect_tools():
-    names = ["python","java","apkanalyzer","aapt2","aapt","apksigner","keytool","jadx","apktool","termux-open-url"]
+    names = ["python","java","apkanalyzer","aapt2","aapt","apksigner","keytool","jadx","apktool","adb","termux-open-url"]
     return {n: bool(shutil.which(n)) for n in names}
 
 def safe_name(name: str) -> str:
@@ -128,6 +135,53 @@ def run_cmd_stream(cmd: list[str], stage: str, progress_start: int, progress_end
     PROCESS = None
     set_state(progress=progress_end)
     return rc
+
+
+def runtime_state_copy():
+    with RUNTIME_LOCK:
+        return dict(RUNTIME_STATE)
+
+def set_runtime_state(**kwargs):
+    with RUNTIME_LOCK:
+        RUNTIME_STATE.update(kwargs)
+
+def runtime_worker(package: str, duration: int, target_id: str):
+    global RUNTIME_PROCESS
+    try:
+        set_runtime_state(status="running",package=package,message="Starting read-only ADB/logcat trace",started=time.time(),finished=None,exitCode=None)
+        for p in (RUNTIME_ANALYSIS,RUNTIME_EVENTS):
+            try:
+                if p.exists(): p.unlink()
+            except Exception: pass
+        cmd=[sys.executable,str(RUNTIME_MONITOR),"--package",package,"--duration",str(max(5,min(duration,3600))),"--output",str(RUNTIME_ANALYSIS),"--events",str(RUNTIME_EVENTS)]
+        RUNTIME_PROCESS=subprocess.Popen(cmd,cwd=str(ROOT),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,bufsize=1)
+        lines=[]
+        if RUNTIME_PROCESS.stdout:
+            for line in RUNTIME_PROCESS.stdout:
+                line=line.rstrip()
+                if line:
+                    lines.append(line)
+                    set_runtime_state(message=line[-1000:])
+        rc=RUNTIME_PROCESS.wait()
+        RUNTIME_PROCESS=None
+        if rc!=0:
+            set_runtime_state(status="error",message=(lines[-1] if lines else f"Runtime observer exited {rc}"),finished=time.time(),exitCode=rc)
+            return
+        if target_id:
+            rec=load_target(target_id)
+            if rec:
+                folder=Path((rec.get("storage") or {}).get("folder",""))
+                if folder:
+                    folder.mkdir(parents=True,exist_ok=True)
+                    if RUNTIME_ANALYSIS.exists(): shutil.copy2(RUNTIME_ANALYSIS,folder/"runtime-analysis.json")
+                    if RUNTIME_EVENTS.exists(): shutil.copy2(RUNTIME_EVENTS,folder/"runtime-events.jsonl")
+                    rec["outputs"]={**rec.get("outputs",{}),"runtime-analysis.json":str(folder/"runtime-analysis.json"),"runtime-events.jsonl":str(folder/"runtime-events.jsonl")}
+                    from lola_library import save_target
+                    save_target(rec)
+        set_runtime_state(status="complete",message="Realtime observation complete",finished=time.time(),exitCode=0)
+    except Exception as exc:
+        RUNTIME_PROCESS=None
+        set_runtime_state(status="error",message=str(exc),finished=time.time(),exitCode=1)
 
 def scan_worker(target: Path, target_id: str, mode: str, checks: list[str], decompile: bool, keep_decompiled: bool, cleanup: bool):
     analysis = ROOT / "apk-analysis.json"
@@ -330,11 +384,42 @@ button,.btn,select,input[type=text]{border:1px solid var(--line);background:#132
     <button class="ghost" onclick="loadReader('map')">Map</button>
     <button class="ghost" onclick="loadReader('codebrains')">Code Brains</button>
     <button class="ghost" onclick="loadReader('targetcodes')">Target Codes</button>
+    <button class="ghost" onclick="loadReader('maincode')">Main Code</button>
+    <button class="ghost" onclick="loadReader('urls')">URLs</button>
+    <button class="ghost" onclick="loadReader('verify')">Verify</button>
+    <button class="ghost" onclick="loadReader('callback')">Callback</button>
+    <button class="ghost" onclick="loadReader('fallback')">Fallback</button>
+    <button class="ghost" onclick="loadReader('recheck')">Recheck</button>
+    <button class="ghost" onclick="loadReader('subscribes')">Subscriptions</button>
+    <button class="ghost" onclick="loadReader('payment')">Payment</button>
+    <button class="ghost" onclick="loadReader('etc')">Etc</button>
+    <button class="ghost" onclick="startRuntime()">Test APK Realtime</button>
     <button class="ghost" onclick="loadReader('resources')">Resources</button>
     <button class="ghost" onclick="loadReader('risk')">Findings</button>
     <button class="danger" onclick="removeGeneratedCode()">Remove Generated</button>
   </div>
   <div class="libgrid" id="readerResults" style="margin-top:10px"></div>
+</div>
+
+<div class="card" id="runtimeCard">
+  <div class="row" style="justify-content:space-between"><b>⏱ Realtime APK Test</b><span class="sub" id="runtimeStatus">Idle</span></div>
+  <div class="sub">Read-only ADB/logcat observation for the selected installed test package. Open the app manually first. No purchase/subscription state is changed.</div>
+  <div class="row" style="margin-top:9px">
+    <input class="search" id="runtimePackage" type="text" placeholder="Package name, e.g. com.example.app" style="flex:1">
+    <input class="search" id="runtimeDuration" type="text" value="120" inputmode="numeric" style="max-width:100px">
+    <button class="primary" onclick="startRuntime()">Start Realtime</button>
+    <button class="danger" onclick="stopRuntime()">Stop</button>
+  </div>
+  <div class="presetbar">
+    <button class="ghost" onclick="showRuntime('all')">Traces</button>
+    <button class="ghost" onclick="showRuntime('billing')">Payment</button>
+    <button class="ghost" onclick="showRuntime('subscription')">Subscriptions</button>
+    <button class="ghost" onclick="showRuntime('callback')">Callbacks</button>
+    <button class="ghost" onclick="showRuntime('fallback')">Fallback</button>
+    <button class="ghost" onclick="showRuntime('verify')">Verify/Recheck</button>
+    <button class="ghost" onclick="showRuntime('error')">Errors</button>
+  </div>
+  <div class="libgrid" id="runtimeResults" style="margin-top:10px"></div>
 </div>
 
 <div class="card">
@@ -410,14 +495,18 @@ function renderCommandLibrary(){
       const readerMap={
         '/deep-dive main':'main','/code360':'code360','/codestring':'strings','/codeview':'codeview',
         '/codetransparent':'transparent','/trace':'trace','/routes':'routes','/map':'map',
-        '/codebrains':'codebrains','/targetcodes':'targetcodes','/androidreader':'main',
-        '/readersource':'codeview','/readerresources':'resources','/readerdex':'dex'
+        '/codebrains':'codebrains','/targetcodes':'targetcodes','/maincode':'maincode','/urls':'urls',
+        '/verify':'verify','/callback':'callback','/fallback':'fallback','/recheck':'recheck',
+        '/subscribes':'subscribes','/payment':'payment','/etc':'etc','/androidreader':'main',
+        '/readersource':'codeview','/readerresources':'resources','/readerdex':'dex','/traces':'trace'
       };
       if(readerMap[x.id]){
         d.onclick=()=>{loadReader(readerMap[x.id]);$('readerCard').scrollIntoView({behavior:'smooth',block:'start'})};
         d.style.cursor='pointer';
       } else if(x.id==='/coderemove'){
         d.onclick=removeGeneratedCode;d.style.cursor='pointer';
+      } else if(x.id==='/test apk realtime'){
+        d.onclick=()=>{$('runtimeCard').scrollIntoView({behavior:'smooth',block:'start'});startRuntime()};d.style.cursor='pointer';
       }
     }
     root.appendChild(d);
@@ -444,6 +533,7 @@ async function loadTargetRecord(id){
   if(j.lastPlan?.length){selectedChecks=new Set(j.lastPlan);renderPlan()}
   selectedMode=j.lastMode||selectedMode;renderModes();
   $('targetDetailTitle').textContent=(j.name||id)+' · '+(j.id||'');
+  if(j.apk?.package)$('runtimePackage').value=j.apk.package;
   const root=$('targetDetail');root.replaceChildren();
   const rows=[
     ['SHA-256',j.sha256||''],
@@ -502,6 +592,7 @@ async function loadReader(view='main'){
   const data=await fetchReader(),root=$('readerResults');root.replaceChildren();
   if(!data){root.innerHTML='<div class="libitem sub">Reader not built for this target yet. Tick "Build Android Code Reader" and scan.</div>';return}
   const s=data.summary||{},sections=data.sections||{};
+  if(s.package&&!$('runtimePackage').value)$('runtimePackage').value=s.package;
   $('readerSummary').textContent=(s.sourceFiles||0)+' source · '+(s.resourcePreviews||0)+' resources · '+(s.dexStrings||0)+' DEX · '+(s.traceEdges||0)+' links';
   if(view==='main'){
     [
@@ -544,6 +635,30 @@ async function loadReader(view='main'){
     readerItem(root,'DEX files',String(t.dexFiles?.length||0),JSON.stringify(t.dexFiles||[],null,2));
     readerItem(root,'Native libraries','',JSON.stringify(t.native||{},null,2));
     readerItem(root,'Analysis sections','',JSON.stringify(t.analysisSections||[],null,2));
+  }else if(view==='maincode'){
+    const m=data.mainCode||{};
+    readerItem(root,'Entry points',String(m.entryPoints?.length||0),JSON.stringify((m.entryPoints||[]).slice(0,120),null,2));
+    readerItem(root,'Billing/runtime files',String(m.billingFiles?.length||0),(m.billingFiles||[]).join('\n'));
+    (m.files||[]).slice(0,120).forEach(x=>readerItem(root,x.path,(x.classes||[]).join(', '),(x.methods||[]).slice(0,80).join(', ')));
+  }else if(view==='verify'){
+    const v=data.verification||{};
+    Object.entries(v).forEach(([k,val])=>readerItem(root,k,'',typeof val==='object'?JSON.stringify(val,null,2):String(val)));
+    ((data.billing||{}).verify?.items||[]).slice(0,180).forEach(x=>readerItem(root,'verify',x.location||'',x.preview||''));
+  }else if(view==='callback'){
+    ((data.billing||{}).callback?.items||[]).slice(0,200).forEach(x=>readerItem(root,'callback',x.location||'',x.preview||''));
+  }else if(view==='fallback'){
+    ((data.billing||{}).fallback?.items||[]).slice(0,200).forEach(x=>readerItem(root,'fallback',x.location||'',x.preview||''));
+  }else if(view==='recheck'){
+    ((data.billing||{}).recheck?.items||[]).slice(0,200).forEach(x=>readerItem(root,'recheck',x.location||'',x.preview||''));
+  }else if(view==='subscribes'){
+    ((data.billing||{}).subscribes?.items||[]).slice(0,220).forEach(x=>readerItem(root,'subscription',x.location||'',x.preview||''));
+  }else if(view==='payment'){
+    ((data.billing||{}).payment?.items||[]).slice(0,220).forEach(x=>readerItem(root,'payment',x.location||'',x.preview||''));
+  }else if(view==='etc'){
+    readerItem(root,'Tools','',JSON.stringify(data.sections?.files||{},null,2));
+    readerItem(root,'Native','',JSON.stringify(data.sections?.native||{},null,2));
+    readerItem(root,'Certificates','',JSON.stringify(data.sections?.certs||{},null,2));
+    readerItem(root,'Risk','',JSON.stringify(data.sections?.risk||{},null,2));
   }else if(view==='overview'){
     Object.entries(s).forEach(([k,v])=>readerItem(root,k,'',typeof v==='object'?JSON.stringify(v):String(v)));
   }else if(view==='source'){
@@ -579,6 +694,37 @@ async function searchReader(){
   if(!root.children.length)root.innerHTML='<div class="libitem sub">No reader matches.</div>';
 }
 $('readerSearch').oninput=()=>{clearTimeout(window.__readerTimer);window.__readerTimer=setTimeout(searchReader,300)};
+
+
+let runtimeCache={events:[],counts:{}};
+async function startRuntime(){
+  if(!targetId){alert('Select/scan a target first.');return}
+  const pkg=$('runtimePackage').value.trim();
+  if(!pkg){alert('Package name is missing. Run APK analysis first or enter the installed test package name.');return}
+  const duration=Math.max(5,Math.min(parseInt($('runtimeDuration').value||'120',10)||120,3600));
+  const r=await fetch('/api/runtime/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetId,package:pkg,duration})});
+  const j=await r.json();if(!r.ok){alert(j.error||'Could not start realtime test');return}
+  $('runtimeStatus').textContent='Starting…';
+  $('runtimeCard').scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function stopRuntime(){await fetch('/api/runtime/stop',{method:'POST'})}
+async function pollRuntime(){
+  try{
+    const r=await fetch('/api/runtime/status?t='+Date.now(),{cache:'no-store'}),j=await r.json();
+    runtimeCache=j;$('runtimeStatus').textContent=(j.status||'idle')+' · '+(j.message||'');
+    if(j.package&&!$('runtimePackage').value)$('runtimePackage').value=j.package;
+    if(j.status==='running'||j.status==='complete'||j.status==='error')showRuntime(window.__runtimeFilter||'all',false);
+  }catch{}
+  setTimeout(pollRuntime,900);
+}
+function showRuntime(filter='all',remember=true){
+  if(remember)window.__runtimeFilter=filter;
+  const root=$('runtimeResults');root.replaceChildren();
+  const counts=runtimeCache.counts||{};
+  if(filter==='all')readerItem(root,'Counts','',JSON.stringify(counts,null,2));
+  (runtimeCache.events||[]).filter(x=>filter==='all'||(x.categories||[]).includes(filter)||(filter==='verify'&&(x.categories||[]).some(y=>['verify','callback'].includes(y)))).slice(-180).forEach(x=>readerItem(root,(x.categories||[]).join(', '),new Date((x.time||0)*1000).toLocaleTimeString(),x.line||''));
+  if(!root.children.length)root.innerHTML='<div class="libitem sub">No matching runtime evidence yet. Open the installed test app manually, then start Realtime Test.</div>';
+}
 
 function renderModes(){
   const root=$('modes');root.replaceChildren();
@@ -712,6 +858,25 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send_json({"results":search_reader(data,q,200)})
                     except Exception:pass
             return self.send_json({"results":[]})
+        if path == "/api/runtime/status":
+            state=runtime_state_copy()
+            events=[]
+            counts={}
+            if RUNTIME_ANALYSIS.exists():
+                try:
+                    data=json.loads(RUNTIME_ANALYSIS.read_text(encoding="utf-8-sig"))
+                    counts=data.get("counts",{})
+                    events=data.get("events",[])
+                except Exception: pass
+            if RUNTIME_EVENTS.exists():
+                try:
+                    lines=RUNTIME_EVENTS.read_text(encoding="utf-8",errors="ignore").splitlines()[-250:]
+                    events=[json.loads(x) for x in lines if x.strip()]
+                    counts={}
+                    for ev in events:
+                        for cat in ev.get("categories",[]): counts[cat]=counts.get(cat,0)+1
+                except Exception: pass
+            return self.send_json({**state,"events":events,"counts":counts})
         if path == "/apk-report.html":
             p = ROOT / "apk-report.html"
             if not p.exists():
@@ -804,6 +969,39 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok":True})
             except Exception as exc:
                 return self.send_json({"error":str(exc)},500)
+
+        if path == "/api/runtime/start":
+            try:
+                if runtime_state_copy().get("status")=="running":
+                    return self.send_json({"error":"Realtime test already running"},409)
+                if not shutil.which("adb"):
+                    return self.send_json({"error":"ADB is not available. Static /payment /subscribes /verify /callback /fallback /recheck views still work."},400)
+                length=int(self.headers.get("Content-Length","0"))
+                req=json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+                tid=str(req.get("targetId") or STATE.get("targetId") or "")
+                package=str(req.get("package") or "").strip()
+                duration=int(req.get("duration") or 120)
+                rec=load_target(tid) if tid else None
+                expected=(rec.get("apk") or {}).get("package","") if rec else ""
+                if not rec:return self.send_json({"error":"Target not found"},404)
+                if expected and package!=expected:
+                    return self.send_json({"error":"Runtime package must match the selected target package: "+expected},400)
+                if not package:return self.send_json({"error":"Package name unavailable; run manifest/APK analysis first."},400)
+                threading.Thread(target=runtime_worker,args=(package,duration,tid),daemon=True).start()
+                return self.send_json({"ok":True,"package":package})
+            except Exception as exc:
+                return self.send_json({"error":str(exc)},500)
+
+        if path == "/api/runtime/stop":
+            global RUNTIME_PROCESS
+            if RUNTIME_PROCESS and RUNTIME_PROCESS.poll() is None:
+                try:
+                    RUNTIME_PROCESS.terminate()
+                    time.sleep(.2)
+                    if RUNTIME_PROCESS.poll() is None:RUNTIME_PROCESS.kill()
+                    set_runtime_state(status="stopped",message="Stopped by user",finished=time.time())
+                except Exception as exc:return self.send_json({"error":str(exc)},500)
+            return self.send_json({"ok":True})
 
         if path == "/api/reader/remove":
             try:
