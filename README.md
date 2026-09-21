@@ -1632,3 +1632,206 @@ apk-report.html
 ~~~
 
 Lola Mobile does not need Tkinter.
+
+
+## Target Plan + Built-in /library
+
+Before scanning an APK, Lola now asks **what to do with the target**.
+
+The Android and desktop UIs provide tick boxes for:
+
+~~~text
+Target identity
+Manifest + SDK
+Permissions
+Components
+URLs
+API references
+Keys / tokens
+Certificates
+Native libraries
+WebView
+Crypto
+File inventory
+Risk review
+JADX decompile
+Store target in Library
+~~~
+
+The presets are:
+
+~~~text
+Light
+Recommended
+Deep
+Clear
+~~~
+
+The selected target plan is passed into `analyze-apk.py --checks ...`, so unchecked analysis categories are skipped where possible.
+
+### Where target details are stored
+
+Lola separates the APK bytes from persistent target metadata.
+
+APK copy used by Android/mobile UI:
+
+~~~text
+.lola-mobile/uploads/<apk-name>.apk
+~~~
+
+Built-in library index:
+
+~~~text
+.lola-library/library.json
+~~~
+
+Detailed target record:
+
+~~~text
+.lola-library/targets/<SHA-based-target-id>.json
+~~~
+
+The target ID is derived from the APK SHA-256.
+
+A target record can contain:
+
+~~~text
+id
+sha256
+name
+storedPath
+size
+firstSeen
+lastSeen
+lastStatus
+lastPlan
+lastMode
+lastOptions
+apk.package
+apk.minSdk
+apk.targetSdk
+apk.permissions
+apk.exportedComponents
+apk.urls
+apk.nativeLibraries
+apk.riskFindings
+apk.abis
+outputs
+scan history
+notes
+~~~
+
+The actual secret/key values found during scans are not stored unredacted.
+
+### Built-in /library
+
+`.lola-library/library.json` now contains:
+
+~~~text
+commands
+apkPlan
+targets
+~~~
+
+The command catalog includes all Lola command/function families:
+
+~~~text
+System
+APK
+Security
+Code
+Network
+Pre-scan
+~~~
+
+Each command entry describes:
+
+~~~text
+command ID
+label
+purpose
+supported platform
+cost
+required/optional tools
+expected outputs
+redaction behavior where applicable
+~~~
+
+Examples:
+
+~~~text
+/library
+/targetlibrary
+/targetplan
+/apk360
+/apkpermissions
+/apkurls
+/apkkeys
+/apkcerts
+/apkwebview
+/apkcrypto
+/apkrisk
+/deep-dive
+/securitycheck
+/anonymus
+/deep-code
+/codeview
+/codepassword
+/deep-network
+/trace
+/map
+/preflight
+/viewurls
+/hiddentraces
+/hidelog
+~~~
+
+### Android UI library
+
+Lola Mobile now has:
+
+- a fixed **LIBRARY** button
+- searchable command/function catalog
+- Target Library history
+- saved target plans
+- Light / Recommended / Deep target presets
+- per-check tick buttons
+
+You can also open:
+
+~~~text
+http://127.0.0.1:8766/library
+~~~
+
+### Desktop UI library
+
+The desktop control panel now includes:
+
+~~~text
+✅ Target Plan
+📚 Library
+~~~
+
+The Target Plan tab controls APK scan categories.
+
+The Library tab lets you:
+- search all commands/functions
+- select a supported scan mode
+- view saved targets
+- reload a target's previous plan
+
+### Storage behavior
+
+Selecting an APK creates a minimal identity record so Lola can recognize the same target by SHA-256.
+
+If **Store target in Library** is checked, Lola additionally saves:
+- selected plan
+- scan mode/options
+- completed scan history
+- package/SDK summary
+- risk count
+- output report paths
+
+If it is unchecked, Lola does not persist the completed scan history/output links for that run.
+
+The library is local-only and ignored by Git.
