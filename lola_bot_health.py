@@ -5,7 +5,7 @@ Performs bounded, non-executing syntax/import/routing checks. It does not launch
 external tools, MetaTrader, Frida, Ghidra, or inspected target code.
 """
 from __future__ import annotations
-import argparse, ast, json, re, sys
+import argparse, ast, json, re
 from pathlib import Path
 
 BOT_FILES=[
@@ -50,9 +50,11 @@ def run(root="."):
     missing_imports=local_imports(root)
     syntax_fail=[x for x in rows if not x["ok"]]
     # Literal backslash-n is informational because valid Python strings may contain it.
+    escaped=[x["file"] for x in rows if x.get("literal_escaped_newline")]
     status="GREEN" if not syntax_fail and not missing_commands and not missing_imports else "RED"
     return {"schema":"Lola-BotHealth-1","status":status,"bots":rows,
             "missing_commands":missing_commands,"missing_local_imports":missing_imports,
+            "escaped_newline_review":escaped,
             "checks":{"bot_modules":len(rows),"syntax_failures":len(syntax_fail),
                       "required_commands":len(REQUIRED_COMMANDS)},
             "note":"GREEN means static bot health checks passed; external tool/runtime connectivity is reported separately."}
