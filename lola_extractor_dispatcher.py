@@ -5,6 +5,7 @@ from lola_format_extractors import *
 from lola_extractor_library import resolve, catalog
 from lola_deep_extractor import deep_extract, graph
 from lola_native_extractors import native_summary
+from lola_extended_extractors import extended_summary
 
 def run(command,target=None,arg=None):
     mod=resolve(command)
@@ -16,6 +17,8 @@ def run(command,target=None,arg=None):
     if target is None:return {"ok":True,"module":mod}
     p=Path(target)
     if not p.is_file():return {"ok":False,"error":"target is not a readable file"}
+    if command in ("/*.dex","/*.class","/*.jar","/*.apk","/*.aab","/*.wasm","/*.db","/*.sqlite","/*.sqlite3","/*.json","/*.pb","/*.protobuf","/*.pak","/*.img","/*.iso"):
+        return {"ok":True,"module":mod,"format":extended_summary(p),"evidence":extract(p)}
     if command in ("/*.exe","/*.dll","/*.so","/*.elf","/*.dat","/*.bin"):
         return {"ok":True,"module":mod,"native":native_summary(p),"evidence":extract(p)}
     if command=="/base64":
