@@ -1,75 +1,101 @@
 # Lola - Codex Security Scanner
 
-This repository contains a custom Semgrep rule pack for discovering an application's exposed surface and auditing common JavaScript/TypeScript/web security mistakes.
+Custom Semgrep rules plus automatic target discovery and a self-contained visual HTML report.
 
-## What is the target?
-
-The target is the source-code file or folder that Semgrep inspects.
-
-Use as a target:
-- a complete source repository
-- a folder such as src, app, server, public, or www
-- one source file such as app.js, server.ts, or index.html
-- configuration/source files such as JSON, YAML, .env, XML, Vue, Svelte, Dockerfile, or nginx.conf
-
-Do not normally use as a target:
-- APK/AAB/IPA
-- EXE/DLL/JAR
-- ZIP/7z/RAR
-- PDF/images/video/audio
-- generated build output
-- dependency folders such as node_modules
-
-For an APK or ZIP, obtain the original/unpacked source tree first, then scan the source.
-
-## Windows target discovery + scan
-
-From the repository folder:
+## Fastest Windows usage
 
 ~~~powershell
 python -m pip install semgrep
 .\scan-security.ps1 "C:\Projects\my-app"
 ~~~
 
-The script:
-1. verifies the target exists
-2. lists candidate source/config files
-3. groups them by extension
-4. shows the first 30 target files
-5. runs Semgrep
-6. writes semgrep-results.json
-7. prints ERROR/WARNING/INFO totals
+After the scan, two outputs are created:
 
-Scan the current folder:
+~~~text
+semgrep-results.json   raw machine-readable results
+semgrep-report.html    visual interactive dashboard
+~~~
+
+The HTML report opens automatically. Use `-NoOpen` if you only want it generated:
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\my-app" -NoOpen
+~~~
+
+## Visual report
+
+The dashboard shows:
+- total findings
+- ERROR / WARNING / INFO cards
+- number of affected files
+- top triggered rules
+- search
+- severity filter
+- category filter
+- rule filter
+- file and line number
+- CWE/category/confidence metadata
+- expandable source snippet when Semgrep provides one
+
+It is self-contained and needs no web/CDN connection.
+
+## What is the target?
+
+The target is the source-code file or folder Semgrep inspects.
+
+Good targets:
+- complete source repository
+- `src`, `app`, `server`, `public`, or `www`
+- individual `.js`, `.ts`, `.html`, `.json`, `.yaml`, `.env`, Vue/Svelte/config files
+
+Usually do not target binaries directly:
+- APK/AAB/IPA
+- EXE/DLL/JAR
+- ZIP/7z/RAR
+- PDF/images/video/audio
+- generated build output
+- `node_modules`
+
+For APK/ZIP analysis, obtain the original or unpacked source tree first.
+
+## Examples
+
+Current folder:
 
 ~~~powershell
 .\scan-security.ps1 .
 ~~~
 
-Scan one file:
+One project:
 
 ~~~powershell
-.\scan-security.ps1 "C:\Projects\my-app\src\app.js"
+.\scan-security.ps1 "C:\Projects\NovaStream"
+~~~
+
+One file:
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\NovaStream\src\app.js"
 ~~~
 
 Strict/CI mode:
 
 ~~~powershell
-.\scan-security.ps1 "C:\Projects\my-app" -Strict
+.\scan-security.ps1 "C:\Projects\NovaStream" -Strict
 ~~~
 
-Direct Semgrep:
+Rebuild only the visual report from an existing JSON result:
 
 ~~~powershell
-semgrep scan --config codex-security.yaml C:\Projects\my-app
+python build-report.py --input semgrep-results.json --output semgrep-report.html --target "C:\Projects\NovaStream"
 ~~~
 
-## What is inspected?
+## Coverage
 
-The inventory rules map URLs, fetch, Axios, XHR, WebSocket, EventSource, environment/config reads, Express-style routes, and browser storage writes.
+Inventory: URLs, fetch, Axios, XHR, WebSocket, EventSource, environment/config reads, Express-style routes, browser storage writes.
 
-The audit rules look for HTML/XSS sinks, eval/Function, string timers, possible credentials/private keys, wildcard postMessage/CORS, disabled TLS verification, weak hashes, Web Storage credentials, unsafe cookie usage, shell execution, and unsafe deserialization.
+Audit: XSS/HTML sinks, eval/Function, string timers, possible secrets/private keys, wildcard postMessage/CORS, disabled TLS validation, weak hashes, Web Storage credentials, cookie options, shell execution, unsafe deserialization.
 
-Taint rules additionally track selected untrusted browser/request inputs into HTML sinks, redirects, outbound URLs (SSRF risk), and shell execution.
+Taint rules: selected untrusted browser/request inputs flowing into HTML sinks, redirects, outbound requests (SSRF risk), and shell execution.
 
 A finding is a review signal, not proof of exploitability. A clean scan is also not proof that an application has no vulnerabilities.
