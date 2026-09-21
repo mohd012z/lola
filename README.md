@@ -1993,3 +1993,101 @@ Target-specific runtime outputs are stored as:
 The realtime monitor does not launch the purchase flow itself. This avoids accidental purchases and keeps the test observational.
 
 Current Google Play Billing static checks include references such as BillingClient, ProductDetails, PurchasesUpdatedListener, queryProductDetailsAsync, queryPurchasesAsync, launchBillingFlow, acknowledgePurchase, consumeAsync, BillingResponseCode, subscription/base-plan/offer signals, and reconnect/fallback handling.
+## Optional Frida runtime library: rooted and unrooted
+
+Lola Mobile now includes an internal Frida library and attach-only runtime panel for authorized test targets.
+
+Supported runtime backends:
+
+```text
+Unrooted / Frida Gadget   -> default Frida mode
+Rooted / frida-server     -> optional
+Unrooted / ADB logcat     -> fallback when Frida is unavailable
+```
+
+Root is not required for the Lola workflow itself. Frida's official Android documentation describes rooted `frida-server` as the common injected setup, while Frida Gadget is the embedded mode used when injected/rooted operation is not suitable.
+
+The Lola UI does not root a device, install/start `frida-server`, patch an APK, or embed Gadget automatically. Gadget mode expects an app/test build you own or are authorized to instrument to already include Gadget.
+
+### Internal Frida /library commands
+
+```text
+/frida-library
+/frida-runtime
+/frida-root
+/frida-gadget
+/frida-probes
+```
+
+The internal Frida catalog includes related tools:
+
+```text
+Frida Python bindings
+frida-tools
+frida-server
+Frida Gadget
+ADB
+JADX
+APKTool
+```
+
+### Safe built-in probes
+
+```text
+Process Overview
+App Classes
+Interesting Methods
+Activity Lifecycle
+URL Open
+DNS
+Intents
+Storage Writes
+Crypto Metadata
+Billing Signals
+Callbacks
+Timers
+```
+
+The probes are deliberately observation-only:
+
+- URL probe records URL/destination strings, not request/response bodies.
+- Intent probe records action/component/category metadata, not secret extra values.
+- Storage probe records key names and value type/length, not stored secret values.
+- Crypto probe records algorithm/transformation and key length only, never key bytes or plaintext.
+- Billing probe records billing integration signals without launching or changing purchases.
+
+Excluded by design:
+
+```text
+certificate-pinning bypass
+root detection bypass
+Frida hiding/evasion
+premium/subscription/receipt tampering
+payment modification
+secret/private-key extraction
+response manipulation
+```
+
+### Frida Mobile workflow
+
+```text
+1. Analyze the APK and confirm its package name
+2. Open the authorized test app manually
+3. Open the Frida Runtime card
+4. Choose Unrooted Gadget or Rooted frida-server
+5. Tick the safe probes you want
+6. Confirm the authorization checkbox
+7. Start Frida
+8. Interact with the app normally
+9. Review categorized events
+10. Stop the session or let the timer finish
+```
+
+Target-specific Frida outputs are stored as:
+
+```text
+.lola-library/targets/<target-id>/frida-analysis.json
+.lola-library/targets/<target-id>/frida-events.jsonl
+```
+
+`frida_runtime.py` is attach-only. The target app must already be running. It does not spawn, patch, install, or alter the target.
