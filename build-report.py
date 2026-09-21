@@ -165,6 +165,12 @@ details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{displa
   </div>
 
   <div class="section card">
+    <div class="section-head"><h2>Device & privacy map</h2><span class="sub">Browser • Android • iOS • desktop • cross-platform</span></div>
+    <div class="surface-grid" id="deviceSurfaces"></div>
+    <div class="note">This section maps <b>code that reads or requests device information/capabilities</b> such as user agent, hardware characteristics, camera/microphone, geolocation, permissions, local network interfaces, Android/iOS identifiers and cross-platform device plugins. It does not collect your actual current device values by itself.</div>
+  </div>
+
+  <div class="section card">
     <div class="section-head"><h2>Target file manifest</h2><span class="sub" id="manifestCount"></span></div>
     <div class="manifest-tools"><input id="manifestSearch" placeholder="Search every scanned path, extension, hash..."></div>
     <div class="manifest" id="manifest"></div>
@@ -207,7 +213,11 @@ const ICONS={
   filesystem:'🗂️','http-files':'📦',uploads:'⬆️','http-routes':'🛣️','browser-navigation':'🧭',
   'network-addresses':'🌐','private-network':'🏠','client-ip':'🛰️','proxy-trust':'🛡️',
   listeners:'📡',dns:'🔎',encryption:'🔐',webcrypto:'🔒','key-derivation':'🗝️',random:'🎲',
-  signatures:'✍️',tls:'🔏',database:'🗄️',inventory:'📋',security:'⚠️',secrets:'🔑',storage:'💾'
+  signatures:'✍️',tls:'🔏',database:'🗄️',inventory:'📋',security:'⚠️',secrets:'🔑',storage:'💾',
+  'device-identity':'🧩','device-fingerprinting':'🕵️','device-media':'🎥','device-location':'📍',
+  'device-permissions':'✅','device-clipboard':'📋','device-power':'🔋','device-network':'📶',
+  'device-storage':'💽','device-local-network':'🛜','device-host':'🖥️','android-device':'🤖',
+  'ios-device':'','device-identifiers':'🪪','device-capabilities':'🧰','device-bridge':'🌉'
 };
 const icon=s=>ICONS[s]||'•';
 $('target').textContent=DATA.target ? 'Target: '+DATA.target : 'Target not recorded';
@@ -230,6 +240,22 @@ Object.entries(DATA.surfaces||{}).sort((a,b)=>b[1]-a[1]).forEach(([name,count])=
   $('surfaces').appendChild(card);
 });
 if(!Object.keys(DATA.surfaces||{}).length){$('surfaces').innerHTML='<div class="empty">No surface findings</div>'}
+
+const deviceNames=new Set([
+  'device-identity','device-fingerprinting','device-media','device-location','device-permissions',
+  'device-clipboard','device-power','device-network','device-storage','device-local-network',
+  'device-host','android-device','ios-device','device-identifiers','device-capabilities','device-bridge'
+]);
+Object.entries(DATA.surfaces||{}).filter(([name])=>deviceNames.has(name)).sort((a,b)=>b[1]-a[1]).forEach(([name,count])=>{
+  const s=DATA.surfaceSeverity[name]||{};const card=document.createElement('div');card.className='surface';card.dataset.surface=name;
+  const top=document.createElement('div');top.className='surface-top';
+  const n=document.createElement('div');n.className='surface-name';n.textContent=icon(name)+' '+name;
+  const ct=document.createElement('div');ct.className='surface-count';ct.textContent=count;top.append(n,ct);card.appendChild(top);
+  const mini=document.createElement('div');mini.className='mini';mini.innerHTML='<span class="dotE">E '+(s.ERROR||0)+'</span><span class="dotW">W '+(s.WARNING||0)+'</span><span class="dotI">I '+(s.INFO||0)+'</span>';card.appendChild(mini);
+  card.onclick=()=>{const sel=$('surface');sel.value=(sel.value===name?'':name);document.querySelectorAll('.surface').forEach(x=>x.classList.toggle('active',x.dataset.surface===sel.value));render()};
+  $('deviceSurfaces').appendChild(card);
+});
+if(!$('deviceSurfaces').children.length){$('deviceSurfaces').innerHTML='<div class="empty">No device/privacy APIs detected in this scan.</div>'}
 
 function renderBars(rootId,items){
   const root=$(rootId),max=Math.max(1,...items.map(x=>x[1]));
