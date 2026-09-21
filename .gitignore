@@ -1,3 +1,5 @@
+.lola-preflight/
+preflight-analysis.json
 scan-events.json
 network-analysis.json
 code-analysis.json
