@@ -443,6 +443,11 @@ async function loadTargetRecord(id){
     ['Scan history',String((j.scans||[]).length)]
   ];
   rows.forEach(x=>readerItem(root,x[0],'',x[1]));
+  if(j.storage?.apk){
+    uploadedPath=j.storage.apk;
+    $('fileName').textContent='Library target: '+(j.name||id);
+    $('uploadStatus').textContent='Using retained library APK when available · '+j.storage.apk;
+  }
   loadReader('overview');
 }
 async function initLibrary(){
@@ -695,10 +700,16 @@ class Handler(BaseHTTPRequestHandler):
                 req = json.loads(raw.decode("utf-8"))
                 target = Path(req.get("target","")).resolve()
                 upload_root = UPLOAD_DIR.resolve()
-                if not target.is_relative_to(upload_root):
-                    return self.send_json({"error":"Invalid target location"},400)
                 mode = str(req.get("mode","/apk360"))
                 target_id=str(req.get("targetId") or "")
+                rec_for_target=load_target(target_id) if target_id else None
+                retained=""
+                if rec_for_target:
+                    retained=(rec_for_target.get("storage") or {}).get("apk","")
+                retained_path=Path(retained).resolve() if retained else None
+                allowed_target=target.is_relative_to(upload_root) or bool(retained_path and target == retained_path and retained_path.exists())
+                if not allowed_target:
+                    return self.send_json({"error":"Invalid target location"},400)
                 checks=[str(x) for x in (req.get("checks") or [])]
                 if not target_id:
                     rec=register_target(target,target.name);target_id=rec["id"]
