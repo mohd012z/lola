@@ -3,11 +3,15 @@ from pathlib import Path
 from lola_extractor_core import extract
 from lola_format_extractors import *
 from lola_extractor_library import resolve, catalog
+from lola_deep_extractor import deep_extract, graph
 
 def run(command,target=None,arg=None):
     mod=resolve(command)
     if not mod:return {"ok":False,"error":"unknown command","command":command}
     if command=="/codecli":return {"ok":True,"modules":catalog()}
+    if command in ("/deep-dive","/*.***","/*.**") and target is not None:
+        node=deep_extract(target)
+        return {"ok":True,"mode":"recursive-deep","root":node,"graph":graph(node)}
     if target is None:return {"ok":True,"module":mod}
     p=Path(target)
     if not p.is_file():return {"ok":False,"error":"target is not a readable file"}
