@@ -4,6 +4,7 @@ from lola_extractor_core import extract
 from lola_format_extractors import *
 from lola_extractor_library import resolve, catalog
 from lola_deep_extractor import deep_extract, graph
+from lola_native_extractors import native_summary
 
 def run(command,target=None,arg=None):
     mod=resolve(command)
@@ -15,6 +16,8 @@ def run(command,target=None,arg=None):
     if target is None:return {"ok":True,"module":mod}
     p=Path(target)
     if not p.is_file():return {"ok":False,"error":"target is not a readable file"}
+    if command in ("/*.exe","/*.dll","/*.so","/*.elf","/*.dat","/*.bin"):
+        return {"ok":True,"module":mod,"native":native_summary(p),"evidence":extract(p)}
     if command=="/base64":
         return decode_base64(p.read_text(encoding="utf-8",errors="replace").strip())
     if command=="/base44":return decode_base44(p.read_text(encoding="utf-8",errors="replace").strip())
