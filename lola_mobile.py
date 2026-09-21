@@ -815,12 +815,18 @@ class Handler(BaseHTTPRequestHandler):
                 result=remove_generated_code(tid)
                 working_reader=ROOT/"android-code-reader.json"
                 if working_reader.exists():
-                    try: working_reader.unlink()
-                    except Exception: pass
+                    try:
+                        wr=json.loads(working_reader.read_text(encoding="utf-8-sig"))
+                        selected=load_target(tid) or {}
+                        if (wr.get("summary") or {}).get("sha256") == selected.get("sha256"):
+                            working_reader.unlink()
+                    except Exception:
+                        pass
                 working_src=ROOT/".lola-apk"/"decompiled"
-                if working_src.exists():
+                if working_src.exists() and STATE.get("targetId")==tid:
                     shutil.rmtree(working_src,ignore_errors=True)
-                set_state(reader="")
+                if STATE.get("targetId")==tid:
+                    set_state(reader="")
                 log("Removed Lola-generated reader/JADX artifacts for target "+tid)
                 return self.send_json({"ok":True,**result})
             except Exception as exc:
