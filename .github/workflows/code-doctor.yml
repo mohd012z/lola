@@ -92,7 +92,11 @@ jobs:
         if: success() || failure()
         run: python lola_code_doctor.py . --output code-doctor-report.json
 
-      - name: Route failures to specialist bots\n        if: always()\n        run: python lola_code_specialists.py code-doctor-report.json code-specialists.json || true\n\n      - name: Run automatic bot health gate
+      - name: Route failures to specialist bots
+        if: always()
+        run: python lola_code_specialists.py code-doctor-report.json code-specialists.json || true
+
+      - name: Run automatic bot health gate
         if: always()
         run: python lola_bot_health.py . --output bot-health-report.json
 
@@ -125,7 +129,8 @@ jobs:
           name: lola-code-doctor-report
           path: |
             code-doctor-report.json
-            code-doctor-after-fix.json\n            code-specialists.json
+            code-doctor-after-fix.json
+            code-specialists.json
             python-path-report.json
             workflow-report.json
             head-report.json
