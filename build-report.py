@@ -35,6 +35,7 @@ def main():
     p.add_argument("--output", default="semgrep-report.html")
     p.add_argument("--target", default="")
     p.add_argument("--manifest", default="target-manifest.json")
+    p.add_argument("--urls", default="url-report.json")
     args = p.parse_args()
 
     src = Path(args.input)
@@ -66,6 +67,14 @@ def main():
     for item in target_files:
         item["findingCount"] = finding_count_for(item.get("path"))
 
+    url_data = {"probeEnabled": False, "urlCount": 0, "publicCount": 0, "nonPublicCount": 0, "urls": []}
+    url_path = Path(args.urls)
+    if url_path.exists():
+        try:
+            url_data = json.loads(url_path.read_text(encoding="utf-8-sig"))
+        except Exception:
+            pass
+
     sev = Counter(x["severity"] for x in findings)
     cats = Counter(x["category"] for x in findings)
     surfaces = Counter(x["surface"] for x in findings)
@@ -91,6 +100,7 @@ def main():
         "topRules": rules.most_common(12),
         "topFiles": files.most_common(12),
         "targetFiles": target_files,
+        "urlData": url_data,
         "findings": findings,
     }
 
@@ -114,9 +124,9 @@ def main():
 .findings{display:grid;gap:10px}.finding{background:var(--panel);border:1px solid var(--line);border-left-width:4px;border-radius:13px;padding:14px}.finding.ERROR{border-left-color:var(--error)}.finding.WARNING{border-left-color:var(--warn)}.finding.INFO{border-left-color:var(--info)}
 .row{display:flex;gap:12px;align-items:flex-start;justify-content:space-between}.left{min-width:0}.msg{font-weight:750;margin-bottom:5px}.meta{color:var(--muted);font-size:12px;word-break:break-all}.pill{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:99px;padding:3px 8px;font-size:11px;margin:0 0 5px 5px}.sev.ERROR{color:var(--error)}.sev.WARNING{color:var(--warn)}.sev.INFO{color:var(--info)}
 details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:10px}.detail{background:#0b1426;border:1px solid #22304e;border-radius:9px;padding:9px;min-width:0;overflow-wrap:anywhere}.detail b{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;margin-bottom:3px}pre{white-space:pre-wrap;overflow:auto;background:#070d19;border:1px solid #22304e;border-radius:9px;padding:11px;color:#dce7ff}
-.note{margin-top:12px;padding:11px 13px;border-radius:11px;background:#0c172b;border:1px solid #233a63;color:#b9c9e7}.manifest-tools{display:flex;gap:10px;align-items:center;margin-bottom:10px}.manifest-tools input{flex:1;background:#0b1426;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px 11px}.manifest{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:12px}.mf{display:grid;grid-template-columns:minmax(280px,1fr) 90px 90px 110px minmax(180px,.7fr);gap:10px;padding:10px 12px;border-bottom:1px solid #1d2d4b;align-items:center}.mf:last-child{border-bottom:0}.mfpath{word-break:break-all}.mf small{color:var(--muted)}.hash{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;word-break:break-all;color:#b8caef}.empty{padding:34px;text-align:center;color:var(--muted)}.footer{color:var(--muted);font-size:12px;margin:18px 0}
+.note{margin-top:12px;padding:11px 13px;border-radius:11px;background:#0c172b;border:1px solid #233a63;color:#b9c9e7}.url-summary{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:9px;margin-bottom:10px}.url-list{display:grid;gap:9px}.url-card{background:#0b1426;border:1px solid var(--line);border-radius:12px;padding:12px}.url-main{display:grid;grid-template-columns:minmax(250px,1fr) 90px 120px 120px;gap:10px;align-items:start}.url-src,.url-final{word-break:break-all}.url-arrow{color:var(--muted);margin:5px 0}.status-ok{color:var(--ok)}.status-warn{color:var(--warn)}.status-bad{color:var(--error)}.manifest-tools{display:flex;gap:10px;align-items:center;margin-bottom:10px}.manifest-tools input{flex:1;background:#0b1426;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px 11px}.manifest{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:12px}.mf{display:grid;grid-template-columns:minmax(280px,1fr) 90px 90px 110px minmax(180px,.7fr);gap:10px;padding:10px 12px;border-bottom:1px solid #1d2d4b;align-items:center}.mf:last-child{border-bottom:0}.mfpath{word-break:break-all}.mf small{color:var(--muted)}.hash{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;word-break:break-all;color:#b8caef}.empty{padding:34px;text-align:center;color:var(--muted)}.footer{color:var(--muted);font-size:12px;margin:18px 0}
 @media(max-width:1100px){.controls{grid-template-columns:1fr 1fr 1fr}.detail-grid{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}.hero{display:block}}
+@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}.hero{display:block}.url-summary{grid-template-columns:repeat(2,1fr)}.url-main{grid-template-columns:1fr 90px}}
 @media(max-width:600px){.wrap{padding:13px}.grid,.controls,.detail-grid{grid-template-columns:1fr}.row{display:block}.bar-row{grid-template-columns:100px 1fr 38px}}
 </style>
 </head>
@@ -139,6 +149,19 @@ details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{displa
     <div class="section-head"><h2>Attack-surface map</h2><span class="sub">Click a surface to filter findings</span></div>
     <div class="surface-grid" id="surfaces"></div>
     <div class="note">Client-IP findings show where the application reads peer/proxy IP information such as <b>req.ip</b>, <b>X-Forwarded-For</b>, <b>X-Real-IP</b>, or similar headers. They do not independently discover a person's physical location. Forwarded headers are trustworthy only when the proxy chain is correctly controlled/configured.</div>
+  </div>
+
+  <div class="section card">
+    <div class="section-head"><h2>Real URL map</h2><span class="sub" id="urlMode"></span></div>
+    <div class="url-summary">
+      <div class="detail"><b>URLs found</b><span id="urlCount">0</span></div>
+      <div class="detail"><b>Public destinations</b><span id="urlPublic">0</span></div>
+      <div class="detail"><b>Private / unresolved</b><span id="urlNonPublic">0</span></div>
+      <div class="detail"><b>Live verified</b><span id="urlVerified">0</span></div>
+    </div>
+    <div class="manifest-tools"><input id="urlSearch" placeholder="Search source URL, final URL, host, IP, source file..."></div>
+    <div class="url-list" id="urlList"></div>
+    <div class="note"><b>Source URL</b> is what appears in code/config. With <b>-ResolveUrls</b>, public destinations are requested and the report also shows the <b>final URL</b> after redirects, HTTP status, resolved public IPs, redirect chain, and TLS version/cipher. Private/local/reserved destinations are never live-probed.</div>
   </div>
 
   <div class="section card">
@@ -214,6 +237,44 @@ function renderBars(rootId,items){
   items.forEach(([name,count])=>{const row=document.createElement('div');row.className='bar-row';const n=document.createElement('div');n.className='bar-name';n.textContent=name;n.title=name;const bg=document.createElement('div');bg.className='bar-bg';const fill=document.createElement('div');fill.className='bar-fill';fill.style.width=(count/max*100)+'%';bg.appendChild(fill);const c=document.createElement('div');c.textContent=count;row.append(n,bg,c);root.appendChild(row)})
 }
 renderBars('ruleBars',DATA.topRules||[]);renderBars('fileBars',DATA.topFiles||[]);
+
+const URLDATA=DATA.urlData||{urls:[]};
+$('urlCount').textContent=URLDATA.urlCount||0;
+$('urlPublic').textContent=URLDATA.publicCount||0;
+$('urlNonPublic').textContent=URLDATA.nonPublicCount||0;
+$('urlVerified').textContent=(URLDATA.urls||[]).filter(x=>x.probed).length;
+$('urlMode').textContent=URLDATA.probeEnabled?'Live public URL verification enabled':'Static URL inventory — rerun with -ResolveUrls for final URLs';
+
+function renderUrls(){
+  const q=$('urlSearch').value.trim().toLowerCase();
+  const rows=(URLDATA.urls||[]).filter(x=>[
+    x.sourceUrl,x.finalUrl,x.host,(x.resolvedIps||[]).join(' '),
+    ...(x.occurrences||[]).map(o=>(o.path||'')+' '+(o.line||''))
+  ].join(' ').toLowerCase().includes(q));
+  const root=$('urlList');root.replaceChildren();
+  if(!rows.length){root.innerHTML='<div class="empty">No URLs match.</div>';return}
+  rows.forEach(x=>{
+    const card=document.createElement('div');card.className='url-card';
+    const main=document.createElement('div');main.className='url-main';
+    const left=document.createElement('div');
+    const src=document.createElement('div');src.className='url-src';src.textContent=x.sourceUrl||'';left.appendChild(src);
+    const arrow=document.createElement('div');arrow.className='url-arrow';arrow.textContent=x.probed?'↓ final destination':'↓ not live-probed';left.appendChild(arrow);
+    const fin=document.createElement('div');fin.className='url-final';fin.textContent=x.finalUrl||'(same/unknown until live verification)';left.appendChild(fin);
+    const st=document.createElement('div');st.textContent=x.status||'-';st.className=x.status&&x.status<400?'status-ok':(x.status?'status-warn':'');
+    const cls=document.createElement('div');cls.textContent=x.destinationClass||'-';
+    const ips=document.createElement('div');ips.textContent=(x.resolvedIps||[]).join(', ')||'-';ips.className='meta';
+    main.append(left,st,cls,ips);card.appendChild(main);
+    const details=document.createElement('details');const sm=document.createElement('summary');sm.textContent='URL evidence / redirects / TLS';details.appendChild(sm);
+    const grid=document.createElement('div');grid.className='detail-grid';
+    detailBox(grid,'Host',x.host);detailBox(grid,'Scheme',x.scheme);detailBox(grid,'Port',x.port||'-');detailBox(grid,'HTTP status',x.status||'-');detailBox(grid,'Redirects',(x.redirects||[]).length);detailBox(grid,'TLS',(x.tls&&x.tls.version)?(x.tls.version+' '+(x.tls.cipher||'')):'-');
+    details.appendChild(grid);
+    if((x.occurrences||[]).length){const pre=document.createElement('pre');pre.textContent='Found in:\n'+x.occurrences.map(o=>(o.path||'')+':'+(o.line||'?')).join('\n');details.appendChild(pre)}
+    if((x.redirects||[]).length){const pre=document.createElement('pre');pre.textContent='Redirect chain:\n'+x.redirects.map(r=>r.status+'  '+r.from+'\n  -> '+r.to).join('\n');details.appendChild(pre)}
+    if(x.error){const pre=document.createElement('pre');pre.textContent='Resolver note: '+x.error;details.appendChild(pre)}
+    card.appendChild(details);root.appendChild(card);
+  });
+}
+$('urlSearch').addEventListener('input',renderUrls);renderUrls();
 
 function fmtBytes(n){n=Number(n||0);if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(1)+' MB'}
 function renderManifest(){
