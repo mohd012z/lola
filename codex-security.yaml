@@ -1134,3 +1134,101 @@ rules:
     message: "Sensitive personal-data permission/reference found"
     metadata: {category: privacy, surface: personal-data, confidence: MEDIUM}
     pattern-regex: "(READ_CONTACTS|WRITE_CONTACTS|READ_CALENDAR|WRITE_CALENDAR|READ_SMS|READ_CALL_LOG|WRITE_CALL_LOG|READ_PHONE_NUMBERS|READ_PHONE_STATE|NSContactsUsageDescription|NSCalendarsUsageDescription|NSRemindersUsageDescription)"
+
+  # ========================= PROTOCOL / HIDDEN SURFACE =========================
+
+  - id: extract-protocol-uri
+    languages: [generic]
+    severity: INFO
+    message: "Protocol URI/reference found"
+    metadata: {category: protocol, surface: protocol, confidence: MEDIUM}
+    pattern-regex: "(?i)\\b(https?|wss?|ftp|ftps|sftp|ssh|smtp|smtps|imap|imaps|pop3|pop3s|mqtt|mqtts|amqp|amqps|grpc|grpcs|tcp|udp)://[^\\s\\\"'<>]+"
+
+  - id: extract-graphql-surface
+    languages: [generic]
+    severity: INFO
+    message: "GraphQL endpoint/schema/query surface found"
+    metadata: {category: protocol, surface: graphql, confidence: MEDIUM}
+    pattern-regex: "(?i)\\b(graphql|apollo(client|server)?|urql|relay|/graphql)\\b"
+
+  - id: extract-grpc-surface
+    languages: [generic]
+    severity: INFO
+    message: "gRPC/protobuf surface found"
+    metadata: {category: protocol, surface: grpc, confidence: MEDIUM}
+    pattern-regex: "(?i)\\b(grpc|grpc-js|protobuf|proto3|createChannel|ServerCredentials)\\b"
+
+  - id: extract-mqtt-amqp-surface
+    languages: [generic]
+    severity: INFO
+    message: "MQTT/AMQP messaging surface found"
+    metadata: {category: protocol, surface: messaging-protocol, confidence: MEDIUM}
+    pattern-regex: "(?i)\\b(mqtts?|amqps?|rabbitmq|mosquitto|paho-mqtt|mqtt\\.connect|amqplib)\\b"
+
+  - id: extract-mail-protocol-surface
+    languages: [generic]
+    severity: INFO
+    message: "Mail protocol/client surface found"
+    metadata: {category: protocol, surface: mail-protocol, confidence: MEDIUM}
+    pattern-regex: "(?i)\\b(smtp|smtps|imap|imaps|pop3|pop3s|nodemailer|imapflow)\\b"
+
+  - id: extract-ssh-sftp-surface
+    languages: [generic]
+    severity: INFO
+    message: "SSH/SFTP protocol surface found"
+    metadata: {category: protocol, surface: remote-shell, confidence: MEDIUM}
+    pattern-regex: "(?i)\\b(ssh2|node-ssh|sftp|scp|ssh://|sftp://)\\b"
+
+  - id: extract-dns-protocol-surface
+    languages: [generic]
+    severity: INFO
+    message: "DNS protocol/config surface found"
+    metadata: {category: protocol, surface: dns, confidence: LOW}
+    pattern-regex: "(?i)\\b(DNS|nameserver|resolver|CNAME|SRV)\\b"
+
+  - id: extract-tcp-udp-socket
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Raw TCP/UDP socket surface found"
+    metadata: {category: protocol, surface: raw-socket, confidence: HIGH}
+    pattern-either:
+      - pattern: net.createConnection(...)
+      - pattern: net.connect(...)
+      - pattern: net.createServer(...)
+      - pattern: dgram.createSocket(...)
+      - pattern: $NET.createConnection(...)
+      - pattern: $NET.connect(...)
+      - pattern: $DGRAM.createSocket(...)
+
+  - id: extract-hidden-dom
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Hidden DOM/UI manipulation found"
+    metadata: {category: hidden, surface: hidden-ui, confidence: MEDIUM}
+    pattern-either:
+      - pattern: $EL.hidden = true
+      - pattern: $EL.style.display = "none"
+      - pattern: $EL.style.visibility = "hidden"
+      - pattern: $EL.setAttribute("hidden", ...)
+      - pattern: $EL.setAttribute("aria-hidden", "true")
+
+  - id: extract-hidden-html-css
+    languages: [generic]
+    severity: INFO
+    message: "Hidden HTML/CSS surface found"
+    metadata: {category: hidden, surface: hidden-ui, confidence: LOW}
+    pattern-regex: "(?i)(\\shidden(?:\\s|=|>)|aria-hidden\\s*=\\s*[\\\"']true[\\\"']|display\\s*:\\s*none|visibility\\s*:\\s*hidden|opacity\\s*:\\s*0(?:[;\\s}]))"
+
+  - id: extract-hidden-config-name
+    languages: [generic]
+    severity: INFO
+    message: "Hidden/dot configuration or secret-file reference found"
+    metadata: {category: hidden, surface: hidden-config, confidence: MEDIUM}
+    pattern-regex: "(?i)(^|[\\/])\\.(env(?:\\.[A-Za-z0-9_-]+)?|npmrc|yarnrc|pypirc|netrc|dockerignore|gitignore|gitattributes|htaccess|htpasswd|ssh|aws|config)(?:$|[\\/\\s\\\"'])"
+
+  - id: extract-sensitive-config-extension
+    languages: [generic]
+    severity: INFO
+    message: "Sensitive configuration/key/certificate file reference found"
+    metadata: {category: hidden, surface: sensitive-config, confidence: MEDIUM}
+    pattern-regex: "(?i)\\b[A-Za-z0-9_.-]+\\.(pem|key|p12|pfx|jks|keystore|mobileprovision|entitlements|crt|cer|der)\\b"
