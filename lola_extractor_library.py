@@ -5,6 +5,10 @@ static analysis when installed; Frida remains an explicitly authorized attach-on
 runtime evidence source and is never required for ordinary extraction.
 """
 MODULES=[
+ {"id":"office2html","mode":"convert","purpose":"Convert office documents to responsive semantic HTML."},
+ {"id":"pdf2html","mode":"reconstruct","purpose":"PDF pages and text to responsive HTML with page provenance."},
+ {"id":"word2html","mode":"convert","purpose":"DOCX paragraphs and tables to semantic HTML."},
+ {"id":"excel2html","mode":"convert","purpose":"XLSX worksheets and cells to responsive HTML tables."},
  {"id":"pdfocr","mode":"ocr","purpose":"Per-page PDF OCR with searchable/scanned detection and provenance."},
  {"id":"ocrreadiness","mode":"static","purpose":"Detect which PDF pages need OCR."},
  {"id":"searchablepdf","mode":"ocr-export","purpose":"Create a new searchable OCR PDF when OCRmyPDF is available."},
@@ -75,6 +79,7 @@ MODULES=[
 ]
 
 ALIASES={
+ "/office2html":"office2html","/document2html":"office2html","/pdf2html":"pdf2html","/word2html":"word2html","/docx2html":"word2html","/excel2html":"excel2html","/xlsx2html":"excel2html","/csv2html":"office2html",
  "/pdfocr":"pdfocr","/ocrpdf":"pdfocr","/ocrscan":"pdfocr","/ocrreadiness":"ocrreadiness","/searchablepdf":"searchablepdf",
  "/officeconvert":"officeconvert","/officeengine":"officeconvert","/officecapabilities":"officecapabilities",
  "/csv2xlsx":"documentconvert","/xlsx2csv":"documentconvert",
