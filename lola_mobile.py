@@ -443,10 +443,14 @@ async function loadTargetRecord(id){
     ['Scan history',String((j.scans||[]).length)]
   ];
   rows.forEach(x=>readerItem(root,x[0],'',x[1]));
-  if(j.storage?.apk){
-    uploadedPath=j.storage.apk;
+  const retainedApk=j.outputs?.['target.apk']||'';
+  if(retainedApk){
+    uploadedPath=retainedApk;
     $('fileName').textContent='Library target: '+(j.name||id);
-    $('uploadStatus').textContent='Using retained library APK when available · '+j.storage.apk;
+    $('uploadStatus').textContent='Using retained library APK · '+retainedApk;
+  } else {
+    uploadedPath='';
+    $('uploadStatus').textContent='Target details loaded. APK binary was not retained; choose the APK again to rescan.';
   }
   loadReader('overview');
 }
