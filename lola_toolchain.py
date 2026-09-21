@@ -270,7 +270,7 @@ def install(tool_id: str) -> dict[str, Any]:
             url, name = resolve_release_asset(tool)
         else:
             url = tool["url"]
-            name = Path(urllib.parse.urlparse(url).path).name if False else url.rstrip("/").split("/")[-1]
+            name = url.rstrip("/").split("/")[-1]
         archive = tmp_root / name
         download(url, archive)
         expected = expected_checksum(tool)
