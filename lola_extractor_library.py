@@ -5,6 +5,13 @@ static analysis when installed; Frida remains an explicitly authorized attach-on
 runtime evidence source and is never required for ordinary extraction.
 """
 MODULES=[
+ {"id":"documentconvert","mode":"convert-plan","purpose":"PDF Word Excel and office-document conversion routing."},
+ {"id":"pdf2word","mode":"reconstruct","purpose":"PDF to editable Word reconstruction."},
+ {"id":"pdf2excel","mode":"reconstruct","purpose":"PDF table extraction to Excel."},
+ {"id":"word2pdf","mode":"render","purpose":"Word-compatible document to PDF export."},
+ {"id":"excel2pdf","mode":"render","purpose":"Spreadsheet to PDF export."},
+ {"id":"word2excel","mode":"structured","purpose":"Word tables to Excel worksheets."},
+ {"id":"excel2word","mode":"structured","purpose":"Excel worksheets to editable Word tables."},
  {"id":"py","mode":"static-source","purpose":"Python AST, imports, classes and function evidence."},
  {"id":"convertany","mode":"convert-plan","purpose":"Auto-detect compatible representation conversion path."},
  {"id":"anyformat","mode":"convert-plan","purpose":"Wildcard format conversion/evidence fallback."},
@@ -63,6 +70,8 @@ MODULES=[
 ]
 
 ALIASES={
+ "/documentconvert":"documentconvert","/pdf2word":"pdf2word","/pdf2docx":"pdf2word","/pdf2excel":"pdf2excel","/pdf2xlsx":"pdf2excel",
+ "/word2pdf":"word2pdf","/docx2pdf":"word2pdf","/excel2pdf":"excel2pdf","/xlsx2pdf":"excel2pdf","/word2excel":"word2excel","/excel2word":"excel2word",
  "/py":"py","/*.py":"py","/**.***":"anyformat","/convertany":"convertany","/anyformat":"anyformat",
  "/dex2smali":"dex2smali","/smali2dex":"smali2dex","/dex2java":"dex2java","/smali2java":"smali2java","/androidconvert":"androidconvert",
  "/*.dex":"dex","/*.class":"class","/*.jar":"jar","/*.apk":"apk","/*.aab":"aab","/*.wasm":"wasm",
