@@ -15,6 +15,9 @@ TARGET_DIR = LIB_ROOT / "targets"
 INDEX_FILE = LIB_ROOT / "library.json"
 
 COMMANDS = [
+    {"id":"/library","group":"System","label":"Built-in Library","purpose":"Search every Lola command/function, tool requirement and output","platform":["Android","Windows","Linux"],"cost":"low","tools":[],"outputs":[".lola-library/library.json"]},
+    {"id":"/targetlibrary","group":"System","label":"Target Library","purpose":"Saved target identities, SHA-256, scan plans, history and output links","platform":["Android","Windows","Linux"],"cost":"low","tools":[],"outputs":[".lola-library/targets/*.json"]},
+    {"id":"/targetplan","group":"System","label":"Target Plan","purpose":"Choose what Lola should inspect before starting a scan","platform":["Android","Windows","Linux"],"cost":"low","tools":[],"outputs":["target lastPlan"]},
     # APK
     {"id":"/apk360","group":"APK","label":"APK 360","purpose":"Complete APK overview","platform":["Android","Windows","Linux"],"cost":"medium","tools":["python"],"outputs":["apk-analysis.json","apk-report.html"]},
     {"id":"/apkmanifest","group":"APK","label":"Manifest","purpose":"Package, SDK and AndroidManifest review","platform":["Android","Windows","Linux"],"cost":"low","tools":["apkanalyzer|apktool|aapt"],"outputs":["apk-analysis.json"]},
