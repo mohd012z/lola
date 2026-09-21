@@ -72,6 +72,17 @@ jobs:
         if: success() || failure()
         run: python lola_python_path_doctor.py . --output python-path-report.json
 
+      - name: Build workflow skeleton troubleshooting reports
+        if: success() || failure()
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from lola_workflow_inspector import workflow, head, skeleton, troubleshooting
+          for name, fn in (("workflow",workflow),("head",head),("skeleton",skeleton),("troubleshooting",troubleshooting)):
+              Path(f"{name}-report.json").write_text(json.dumps(fn("."),indent=2),encoding="utf-8")
+          PY
+
       - name: Run multi-format Code Doctor
         if: success() || failure()
         run: python lola_code_doctor.py . --output code-doctor-report.json
@@ -107,4 +118,8 @@ jobs:
             code-doctor-report.json
             code-doctor-after-fix.json\n            code-specialists.json
             python-path-report.json
+            workflow-report.json
+            head-report.json
+            skeleton-report.json
+            troubleshooting-report.json
           if-no-files-found: warn
