@@ -5,6 +5,8 @@ static analysis when installed; Frida remains an explicitly authorized attach-on
 runtime evidence source and is never required for ordinary extraction.
 """
 MODULES=[
+ {"id":"officeconvert","mode":"convert","purpose":"Execute local office document conversions using built-in adapters."},
+ {"id":"officecapabilities","mode":"reference","purpose":"Report available document conversion backends."},
  {"id":"documentconvert","mode":"convert-plan","purpose":"PDF Word Excel and office-document conversion routing."},
  {"id":"pdf2word","mode":"reconstruct","purpose":"PDF to editable Word reconstruction."},
  {"id":"pdf2excel","mode":"reconstruct","purpose":"PDF table extraction to Excel."},
@@ -70,6 +72,8 @@ MODULES=[
 ]
 
 ALIASES={
+ "/officeconvert":"officeconvert","/officeengine":"officeconvert","/officecapabilities":"officecapabilities",
+ "/csv2xlsx":"documentconvert","/xlsx2csv":"documentconvert",
  "/documentconvert":"documentconvert","/pdf2word":"pdf2word","/pdf2docx":"pdf2word","/pdf2excel":"pdf2excel","/pdf2xlsx":"pdf2excel",
  "/word2pdf":"word2pdf","/docx2pdf":"word2pdf","/excel2pdf":"excel2pdf","/xlsx2pdf":"excel2pdf","/word2excel":"word2excel","/excel2word":"excel2word",
  "/py":"py","/*.py":"py","/**.***":"anyformat","/convertany":"convertany","/anyformat":"anyformat",
