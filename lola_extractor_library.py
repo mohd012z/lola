@@ -5,6 +5,10 @@ static analysis when installed; Frida remains an explicitly authorized attach-on
 runtime evidence source and is never required for ordinary extraction.
 """
 MODULES=[
+ {"id":"metatrader","mode":"specialist","purpose":"Built-in MT4/MT5 source specialist and capability report."},
+ {"id":"mtcheck","mode":"static-source","purpose":"Check MQL4/MQL5 source structure and event handlers."},
+ {"id":"mtcompile","mode":"compile","purpose":"Compile user-selected MQL4/MQL5 source with an installed MetaEditor."},
+ {"id":"help","mode":"escalation","purpose":"Create a structured help request when a specialist bot cannot resolve a task."},
  {"id":"mergecode","mode":"integration-plan","purpose":"Plan provenance-preserving integration of compatible code components."},
  {"id":"combineidea","mode":"analysis","purpose":"Combine compatible architecture ideas without blindly concatenating code."},
  {"id":"codeidea","mode":"analysis","purpose":"Generate evidence-based code architecture improvement ideas."},
@@ -92,6 +96,7 @@ MODULES=[
 ]
 
 ALIASES={
+ "/metatrader":"metatrader","/mt4":"metatrader","/mt5":"metatrader","/mtcheck":"mtcheck","/mqlcheck":"mtcheck","/mtcompile":"mtcompile","/mqlcompile":"mtcompile","/help":"help",
  "/mergecode":"mergecode","/combineidea":"combineidea","/codeidea":"codeidea","/codeintelligent":"codeintelligent","/codewrap":"codewrap","/codescriptidea":"codescriptidea",
  "/codecompile":"codecompile","/compilecode":"codecompile","/codeextract":"codeextract","/extractcode":"codeextract","/codeconvert":"codeconvert","/convertcode":"codeconvert",
  "/codeencrypt":"codeencrypt","/codedecrypt":"codedecrypt",\n "/codecheckall":"codecheckall","/codetarget":"codetarget","/codeidentify":"codeidentify","/codemethode":"codemethode","/codemethod":"codemethode",\n "/codeexpanding":"codeexpanding","/codeextra":"codeextra","/codecodecodelayer":"codecodecodelayer","/codelayer":"codecodecodelayer",\n "/skeleton":"skeleton","/troubleshooting":"troubleshooting","/codesummary":"codesummary","/codecheck":"codecheck","/pycheck":"pycheck",
