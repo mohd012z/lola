@@ -138,8 +138,14 @@ def _now() -> int:
 
 def _ensure():
     TARGET_DIR.mkdir(parents=True, exist_ok=True)
-    if not INDEX_FILE.exists():
-        INDEX_FILE.write_text(json.dumps({"version":1,"targets":[]},indent=2),encoding="utf-8")
+    data={"version":1,"commands":COMMANDS,"apkPlan":APK_PLAN,"targets":[]}
+    if INDEX_FILE.exists():
+        try:
+            old=json.loads(INDEX_FILE.read_text(encoding="utf-8"))
+            data["targets"]=old.get("targets",[])
+        except Exception:
+            pass
+    INDEX_FILE.write_text(json.dumps(data,indent=2,ensure_ascii=False),encoding="utf-8")
 
 def sha256_file(path: Path) -> str:
     h=hashlib.sha256()
