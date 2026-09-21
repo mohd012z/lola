@@ -324,3 +324,72 @@ python build-report.py --input semgrep-results.json --manifest target-manifest.j
 ~~~
 
 Static analysis findings are review signals, not automatic proof that a vulnerability is exploitable. A clean scan is not proof of complete security.
+
+
+## Scan modes / command views
+
+The visual report and scanner now support four scan modes:
+
+### /stepview
+Shows the scan as **Before → During → After**.
+
+Before includes target selection, candidate file discovery, hidden/sensitive-path discovery and static URL inventory.
+
+During includes Semgrep finding counts, severity totals, protocol surfaces and whether live public URL verification was enabled.
+
+After includes affected-file counts, categories/surfaces and generated evidence outputs.
+
+Run directly:
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\MyApp" -Mode /stepview
+~~~
+
+### /protocol
+Deep protocol view for HTTP/HTTPS, WS/WSS, DNS, TLS, raw TCP/UDP, SSH/SFTP, FTP, SMTP/IMAP/POP3, MQTT/AMQP, gRPC/protobuf and GraphQL references.
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\MyApp" -Mode /protocol
+~~~
+
+The misspelling `/protocal` is also accepted as an alias.
+
+### /hidden
+Shows hidden/sensitive surfaces:
+- Windows Hidden file attribute
+- dot paths/dotfiles
+- .env and related config
+- key/certificate/keystore references
+- hidden HTML/DOM/CSS such as hidden, aria-hidden, display:none, visibility:hidden
+- Semgrep hidden-surface findings
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\MyApp" -Mode /hidden
+~~~
+
+### /360
+Full-surface overview combining:
+- files and paths
+- URLs and redirects
+- IP/network
+- device/privacy/accounts
+- permissions/camera/media
+- encryption/TLS
+- protocols
+- hidden surfaces
+- database/routes
+- security findings
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\MyApp" -Mode /360 -ResolveUrls
+~~~
+
+After the HTML report opens, the command buttons can switch between `/stepview`, `/protocol`, `/hidden`, and `/360` without rerunning the scan.
+
+An additional generated evidence file is:
+
+~~~text
+scan-modes.json
+~~~
+
+It contains the structured data behind these four views.
