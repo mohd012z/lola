@@ -212,7 +212,7 @@ button,.btn,select,input[type=text]{border:1px solid var(--line);background:#132
 .opts{display:grid;grid-template-columns:1fr;gap:8px}.check{display:flex;gap:10px;align-items:flex-start;background:#0b1526;border:1px solid var(--line);border-radius:12px;padding:11px}.check input{width:20px;height:20px;flex:0 0 auto}.presetbar{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.libgrid{display:grid;gap:8px}.libitem{background:#0b1526;border:1px solid var(--line);border-radius:12px;padding:10px}.libitem b{display:block}.search{width:100%;margin-top:9px}
 .progress{height:14px;background:#07101d;border:1px solid var(--line);border-radius:999px;overflow:hidden}.bar{height:100%;width:0;background:linear-gradient(90deg,#4b83eb,#5ad4ae);transition:width .25s}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.metric{background:#0b1526;border:1px solid var(--line);border-radius:12px;padding:10px}.metric b{font-size:20px;display:block}.metric span{font-size:11px;color:var(--muted)}
 .log{background:#050a12;border:1px solid var(--line);border-radius:12px;padding:10px;white-space:pre-wrap;word-break:break-word;max-height:300px;overflow:auto;font:12px/1.4 ui-monospace,Consolas,monospace}
-.bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(7,16,28,.96);backdrop-filter:blur(16px);border-top:1px solid var(--line);padding:9px 12px env(safe-area-inset-bottom)}.bottom .inner{max-width:1000px;margin:auto;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.bottom button{width:100%}
+.bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(7,16,28,.96);backdrop-filter:blur(16px);border-top:1px solid var(--line);padding:9px 12px env(safe-area-inset-bottom)}.bottom .inner{max-width:1000px;margin:auto;display:grid;grid-template-columns:repeat(4,1fr);gap:8px}.bottom button{width:100%}
 .hidden{display:none!important}.ok{color:var(--ok)}.bad{color:var(--bad)}.warn{color:var(--warn)}
 @media(min-width:720px){.grid{grid-template-columns:repeat(3,minmax(0,1fr))}.opts{grid-template-columns:repeat(2,1fr)}}
 </style>
@@ -278,7 +278,7 @@ button,.btn,select,input[type=text]{border:1px solid var(--line);background:#132
   <b>Local tools</b>
   <div id="toolList" class="sub" style="margin-top:8px">Checking…</div>
 </div>
-<div class="card">
+<div class="card" id="libraryCard">
   <div class="row" style="justify-content:space-between"><b>📚 Built-in /library</b><span class="sub" id="libraryCount"></span></div>
   <input class="search" id="librarySearch" type="text" placeholder="Search command, function, output, tool...">
   <div class="libgrid" id="commandLibrary" style="margin-top:10px"></div>
@@ -295,6 +295,7 @@ button,.btn,select,input[type=text]{border:1px solid var(--line);background:#132
   <button class="primary" id="runBtn" onclick="runScan()">▶ RUN</button>
   <button class="danger" onclick="stopScan()">■ STOP</button>
   <button id="reportBtn" onclick="openReport()" disabled>REPORT</button>
+  <button onclick="openLibrary()">LIBRARY</button>
 </div></div>
 
 <script>
@@ -417,6 +418,7 @@ $('decompile').onchange=()=>{if($('decompile').checked)selectedChecks.add('decom
 $('librarySearch').oninput=renderCommandLibrary;
 async function stopScan(){await fetch('/api/stop',{method:'POST'})}
 function openReport(){location.href='/apk-report.html?t='+Date.now()}
+function openLibrary(){$('libraryCard').scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>$('librarySearch').focus(),350)}
 function clearLog(){$('log').textContent=''}
 async function poll(){
   try{
@@ -461,7 +463,7 @@ class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
         path = urllib.parse.urlsplit(self.path).path
-        if path == "/":
+        if path in {"/","/library"}:
             return self.send_bytes(INDEX_HTML.encode("utf-8"),"text/html; charset=utf-8")
         if path == "/api/status":
             s = state_copy()
