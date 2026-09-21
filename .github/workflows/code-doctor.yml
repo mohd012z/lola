@@ -87,7 +87,11 @@ jobs:
         if: success() || failure()
         run: python lola_code_doctor.py . --output code-doctor-report.json
 
-      - name: Route failures to specialist bots\n        if: always()\n        run: python lola_code_specialists.py code-doctor-report.json code-specialists.json || true\n\n      - name: Apply conservative hygiene repairs
+      - name: Route failures to specialist bots\n        if: always()\n        run: python lola_code_specialists.py code-doctor-report.json code-specialists.json || true\n\n      - name: Run automatic bot health gate
+        if: always()
+        run: python lola_bot_health.py . --output bot-health-report.json
+
+      - name: Apply conservative hygiene repairs
         if: always() && github.ref == 'refs/heads/main'
         run: python lola_code_doctor.py . --fix --output code-doctor-after-fix.json || true
 
@@ -122,4 +126,5 @@ jobs:
             head-report.json
             skeleton-report.json
             troubleshooting-report.json
+            bot-health-report.json
           if-no-files-found: warn
