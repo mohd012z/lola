@@ -89,7 +89,7 @@
 <script>
 const $=id=>document.getElementById(id);
 let NET={summary:{},trace:{items:[]},route:{items:[]},map:{nodes:[],edges:[]},visible:{},realip:{}};
-let PREFLIGHT={summary:{},viewextraction:{},viewurls:{items:[]},map:{nodes:[],edges:[]},routes:{items:[]},api:{items:[]},keys:{items:[]},hiddentraces:{items:[]},hidemodes:{items:[]},hidelog:{items:[]},ipmirror:{items:[]},certs:{items:[],copies:[]}};
+let PREFLIGHT={summary:{},viewextraction:{},viewurls:{items:[]},map:{nodes:[],edges:[]},routes:{items:[]},api:{items:[]},keys:{items:[]},anonymous:{items:[],counts:{}},hiddentraces:{items:[]},hidemodes:{items:[]},hidelog:{items:[]},ipmirror:{items:[]},certs:{items:[],copies:[]}};
 let EVENTS={status:'idle',events:[]};
 let MODE='normal';
 
@@ -194,8 +194,9 @@ function renderMode(){
     (NET.visible?.nonPublicIps||[]).forEach(x=>textItem(l,x.class+' · '+x.ip,'references '+x.references,''));
     (NET.visible?.networkFindings||[]).filter(x=>['private-network','proxy-trust','device-local-network','client-ip'].includes(x.surface)).forEach(x=>textItem(r,x.surface,(x.path||'')+':'+(x.line||'?'),x.message||''));
   }else if(MODE==='anonymus'){
-    $('leftTitle').textContent='/anonymus — identity/privacy exposure';$('rightTitle').textContent='Public IP discovery references';
-    (NET.visible?.networkFindings||[]).filter(x=>String(x.surface).includes('privacy')||['client-ip','device-local-network'].includes(x.surface)).forEach(x=>textItem(l,x.surface,(x.path||'')+':'+(x.line||'?'),x.message||''));
+    $('leftTitle').textContent='/anonymus — pre-scan privacy/identity exposure';$('rightTitle').textContent='Post-scan / IP evidence';
+    (PREFLIGHT.anonymous?.items||[]).forEach(x=>textItem(l,x.kind||'privacy',(x.path||'')+':'+(x.line||'?'),x.preview||''));
+    (NET.visible?.networkFindings||[]).filter(x=>String(x.surface).includes('privacy')||['client-ip','device-local-network'].includes(x.surface)).forEach(x=>textItem(r,x.surface,(x.path||'')+':'+(x.line||'?'),x.message||''));
     (NET.realip?.publicIpDiscoveryReferences||[]).forEach(x=>textItem(r,x.host||'IP service',x.sourceUrl||'',(x.occurrences||[]).map(o=>(o.path||'')+':'+(o.line||'?')).join(' · ')));
   }else if(MODE==='realip'){
     $('leftTitle').textContent='/realip — resolved app IPs';$('rightTitle').textContent='IP discovery references';
