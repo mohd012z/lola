@@ -5,6 +5,8 @@ static analysis when installed; Frida remains an explicitly authorized attach-on
 runtime evidence source and is never required for ordinary extraction.
 """
 MODULES=[
+ {"id":"workflow","mode":"static-flow","purpose":"Map Python entry points, dependency edges, process launches and fallback flow."},
+ {"id":"head","mode":"static-head","purpose":"Identify entry and dependency heads in the Python code graph."},
  {"id":"python","mode":"python-capability","purpose":"Python workbench capability: python."},
  {"id":"linux","mode":"python-capability","purpose":"Python workbench capability: linux."},
  {"id":"host","mode":"python-capability","purpose":"Python workbench capability: host."},
@@ -121,6 +123,7 @@ MODULES=[
 ]
 
 ALIASES={
+ "/workflow":"workflow","/head":"head",
  "/python":"python", "/linux":"linux", "/host":"host", "/pyconverter":"pyconverter", "/pyinverter":"pyinverter", "/pyheader":"pyheader", "/pytrace":"pytrace", "/pylink":"pylink", "/pyurls":"pyurls", "/pydecorder":"pydecorder", "/pyencorder":"pyencorder", "/pylayer":"pylayer", "/pylist":"pylist", "/pyghidra":"pyghidra", "/pyfrida":"pyfrida", "/pynano":"pynano", "/pyupdate":"pyupdate", "/pyupgrade":"pyupgrade",
  "/pypath":"pypath","/pyprocess":"pypath","/pyusage":"pypath","/pyscript":"pypath",
  "/exfallback":"exfallback","/exbots":"exfallback","/autofallback":"exfallback","/exevidence":"exevidence","/giveevidence":"exevidence",
