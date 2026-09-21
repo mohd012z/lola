@@ -9,11 +9,16 @@ param(
   [string]$CodeReport="code-analysis.json",
   [string]$NetworkReport="network-analysis.json",
   [string]$EventReport="scan-events.json",
-  [ValidateSet("360","stepview","protocol","protocal","hidden","deep-dive","deepdive","securitycheck","anonymous","anonymus","extraction","codesummary","codeview","codepassword","codestring","codetransparent","codemodification","codefallback","codeurls","codeencryption","hiddenmode","deep-code","deep-dive-code","deep-dive code","deep-network","deep-dive-network","deep-dive network","trace","route","map","visible","realip","cctv","normal","/360","/stepview","/protocol","/protocal","/hidden","/deep-dive","/deepdive","/securitycheck","/anonymous","/anonymus","/extraction","/codesummary","/codeview","/codepassword","/codestring","/codetransparent","/codemodification","/codefallback","/codeurls","/codeencryption","/hiddenmode","/deep-code","/deep-dive-code","/deep-dive code","/deep-network","/deep-dive-network","/deep-dive network","/trace","/route","/map","/visible","/realip","/cctv","/normal")]
+  [string]$PreflightReport="preflight-analysis.json",
+  [ValidateSet("360","stepview","protocol","protocal","hidden","deep-dive","deepdive","securitycheck","anonymous","anonymus","extraction","codesummary","codeview","codepassword","codestring","codetransparent","codemodification","codefallback","codeurls","codeencryption","hiddenmode","deep-code","deep-dive-code","deep-dive code","deep-network","deep-dive-network","deep-dive network","trace","route","map","visible","realip","cctv","normal","viewextraction","viewurls","routes","api","keys","hiddentraces","hidemodes","hidelog","ipmirror","certs","preflight","cleanup","/360","/stepview","/protocol","/protocal","/hidden","/deep-dive","/deepdive","/securitycheck","/anonymous","/anonymus","/extraction","/codesummary","/codeview","/codepassword","/codestring","/codetransparent","/codemodification","/codefallback","/codeurls","/codeencryption","/hiddenmode","/deep-code","/deep-dive-code","/deep-dive code","/deep-network","/deep-dive-network","/deep-dive network","/trace","/route","/map","/visible","/realip","/cctv","/normal","/viewextraction","/viewurls","/routes","/api","/keys","/hiddentraces","/hidemodes","/hidelog","/ipmirror","/certs","/preflight","/cleanup")]
   [string]$Mode="/360",
   [switch]$ResolveUrls,
   [switch]$LiveMonitor,
   [int]$MonitorPort=8765,
+  [switch]$CaptureAllCode,
+  [switch]$CopyPublicCerts,
+  [switch]$CleanupLolaTemp,
+  [switch]$NoPersistEvents,
   [switch]$Strict,
   [switch]$NoOpen
 )
@@ -29,12 +34,14 @@ function Write-ScanEvent([string]$Stage,[string]$Message,[string]$Level="info",[
     message = $Message
     level = $Level
   }
-  [PSCustomObject]@{
-    status = $Status
-    currentStage = $Stage
-    updatedUtc = [DateTime]::UtcNow.ToString("o")
-    events = $script:ScanEvents
-  } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $EventReport -Encoding UTF8
+  if (-not $NoPersistEvents -or $LiveMonitor) {
+    [PSCustomObject]@{
+      status = $Status
+      currentStage = $Stage
+      updatedUtc = [DateTime]::UtcNow.ToString("o")
+      events = $script:ScanEvents
+    } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $EventReport -Encoding UTF8
+  }
 }
 
 function Fail([string]$Message) {
@@ -174,6 +181,17 @@ if ($Python -and (Test-Path -LiteralPath "analyze-code.py")) {
   }
 }
 
+if ($Python -and (Test-Path -LiteralPath "preflight-analyze.py")) {
+  $PreflightArgs = @("preflight-analyze.py","--manifest",$Manifest,"--urls",$UrlReport,"--code",$CodeReport,"--output",$PreflightReport)
+  if ($CopyPublicCerts) { $PreflightArgs += "--copy-certs" }
+  if ($CaptureAllCode) { $PreflightArgs += "--capture-code" }
+  & $Python.Source @PreflightArgs
+  if (Test-Path -LiteralPath $PreflightReport) {
+    Write-Host "PREFLIGHT: $((Resolve-Path -LiteralPath $PreflightReport).Path)" -ForegroundColor Cyan
+    Write-ScanEvent "preflight" "Before-scan privacy/anonymous target analysis generated" "info" "running"
+  }
+}
+
 $argsList = @("scan","--config",$ConfigPath,"--json","--output",$Report)
 if ($Strict) { $argsList += "--error" }
 $argsList += $TargetPath
@@ -219,7 +237,7 @@ if (Test-Path -LiteralPath $Report) {
     }
 
     if ($Python -and (Test-Path -LiteralPath "build-report.py")) {
-      & $Python.Source "build-report.py" --input $Report --manifest $Manifest --urls $UrlReport --modes $ModeReport --code $CodeReport --network $NetworkReport --mode $Mode --output $HtmlReport --target $TargetPath
+      & $Python.Source "build-report.py" --input $Report --manifest $Manifest --urls $UrlReport --modes $ModeReport --code $CodeReport --network $NetworkReport --preflight $PreflightReport --mode $Mode --output $HtmlReport --target $TargetPath
       if (Test-Path -LiteralPath $HtmlReport) {
         $HtmlPath = (Resolve-Path -LiteralPath $HtmlReport).Path
         Write-Host "VISUAL  : $HtmlPath" -ForegroundColor Green
@@ -239,5 +257,20 @@ Write-ScanEvent "complete" "Scan completed. Open semgrep-report.html for final a
 if ($script:MonitorProcess -and -not $script:MonitorProcess.HasExited) {
   Start-Sleep -Milliseconds 1200
   Stop-Process -Id $script:MonitorProcess.Id -Force -ErrorAction SilentlyContinue
+}
+
+if ($CleanupLolaTemp) {
+  $CleanupTargets = @($EventReport)
+  if ($CaptureAllCode) { $CleanupTargets += ".lola-preflight\code" }
+  foreach ($Item in $CleanupTargets) {
+    try {
+      if (Test-Path -LiteralPath $Item) {
+        Remove-Item -LiteralPath $Item -Recurse -Force -ErrorAction Stop
+        Write-Host "CLEANUP : removed Lola-generated temporary item $Item" -ForegroundColor DarkGray
+      }
+    } catch {
+      Write-Host "Cleanup skipped for $Item : $($_.Exception.Message)" -ForegroundColor Yellow
+    }
+  }
 }
 exit $ExitCode
