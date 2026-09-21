@@ -4,6 +4,8 @@ param(
   [string]$Report="semgrep-results.json",
   [string]$HtmlReport="semgrep-report.html",
   [string]$Manifest="target-manifest.json",
+  [string]$UrlReport="url-report.json",
+  [switch]$ResolveUrls,
   [switch]$Strict,
   [switch]$NoOpen
 )
@@ -105,6 +107,19 @@ $ManifestObject = [PSCustomObject]@{
 $ManifestObject | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Manifest -Encoding UTF8
 Write-Host "MANIFEST: $((Resolve-Path -LiteralPath $Manifest).Path)" -ForegroundColor DarkCyan
 
+$Python = Get-Command python -ErrorAction SilentlyContinue
+if ($Python -and (Test-Path -LiteralPath "resolve-urls.py")) {
+  $UrlArgs = @("resolve-urls.py","--manifest",$Manifest,"--output",$UrlReport)
+  if ($ResolveUrls) { $UrlArgs += "--probe" }
+  & $Python.Source @UrlArgs
+  if (Test-Path -LiteralPath $UrlReport) {
+    Write-Host "URL MAP : $((Resolve-Path -LiteralPath $UrlReport).Path)" -ForegroundColor DarkCyan
+    if (-not $ResolveUrls) {
+      Write-Host "          Static URL inventory only. Add -ResolveUrls for live final-URL/redirect verification." -ForegroundColor DarkGray
+    }
+  }
+}
+
 $argsList = @("scan","--config",$ConfigPath,"--json","--output",$Report)
 if ($Strict) { $argsList += "--error" }
 $argsList += $TargetPath
@@ -132,7 +147,7 @@ if (Test-Path -LiteralPath $Report) {
 
     $Python = Get-Command python -ErrorAction SilentlyContinue
     if ($Python -and (Test-Path -LiteralPath "build-report.py")) {
-      & $Python.Source "build-report.py" --input $Report --manifest $Manifest --output $HtmlReport --target $TargetPath
+      & $Python.Source "build-report.py" --input $Report --manifest $Manifest --urls $UrlReport --output $HtmlReport --target $TargetPath
       if (Test-Path -LiteralPath $HtmlReport) {
         $HtmlPath = (Resolve-Path -LiteralPath $HtmlReport).Path
         Write-Host "VISUAL  : $HtmlPath" -ForegroundColor Green
