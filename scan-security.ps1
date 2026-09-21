@@ -6,7 +6,8 @@ param(
   [string]$Manifest="target-manifest.json",
   [string]$UrlReport="url-report.json",
   [string]$ModeReport="scan-modes.json",
-  [ValidateSet("360","stepview","protocol","protocal","hidden","deep-dive","deepdive","securitycheck","anonymous","anonymus","/360","/stepview","/protocol","/protocal","/hidden","/deep-dive","/deepdive","/securitycheck","/anonymous","/anonymus")]
+  [string]$CodeReport="code-analysis.json",
+  [ValidateSet("360","stepview","protocol","protocal","hidden","deep-dive","deepdive","securitycheck","anonymous","anonymus","extraction","codesummary","codeview","codepassword","codestring","codetransparent","codemodification","codefallback","codeurls","codeencryption","hiddenmode","deep-code","deep-dive-code","deep-dive code","/360","/stepview","/protocol","/protocal","/hidden","/deep-dive","/deepdive","/securitycheck","/anonymous","/anonymus","/extraction","/codesummary","/codeview","/codepassword","/codestring","/codetransparent","/codemodification","/codefallback","/codeurls","/codeencryption","/hiddenmode","/deep-code","/deep-dive-code","/deep-dive code")]
   [string]$Mode="/360",
   [switch]$ResolveUrls,
   [switch]$Strict,
@@ -126,6 +127,13 @@ if ($Python -and (Test-Path -LiteralPath "resolve-urls.py")) {
   }
 }
 
+if ($Python -and (Test-Path -LiteralPath "analyze-code.py")) {
+  & $Python.Source "analyze-code.py" --manifest $Manifest --urls $UrlReport --output $CodeReport
+  if (Test-Path -LiteralPath $CodeReport) {
+    Write-Host "CODE    : $((Resolve-Path -LiteralPath $CodeReport).Path)" -ForegroundColor DarkCyan
+  }
+}
+
 $argsList = @("scan","--config",$ConfigPath,"--json","--output",$Report)
 if ($Strict) { $argsList += "--error" }
 $argsList += $TargetPath
@@ -160,7 +168,7 @@ if (Test-Path -LiteralPath $Report) {
     }
 
     if ($Python -and (Test-Path -LiteralPath "build-report.py")) {
-      & $Python.Source "build-report.py" --input $Report --manifest $Manifest --urls $UrlReport --modes $ModeReport --mode $Mode --output $HtmlReport --target $TargetPath
+      & $Python.Source "build-report.py" --input $Report --manifest $Manifest --urls $UrlReport --modes $ModeReport --code $CodeReport --mode $Mode --output $HtmlReport --target $TargetPath
       if (Test-Path -LiteralPath $HtmlReport) {
         $HtmlPath = (Resolve-Path -LiteralPath $HtmlReport).Path
         Write-Host "VISUAL  : $HtmlPath" -ForegroundColor Green
