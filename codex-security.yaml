@@ -784,3 +784,234 @@ rules:
     message: "Configuration appears to disable TLS/certificate verification. Confirm this is not used in production."
     metadata: {category: crypto, surface: tls, cwe: "CWE-295", confidence: MEDIUM}
     pattern-regex: "(?i)(NODE_TLS_REJECT_UNAUTHORIZED\\s*[=:]\\s*[\\"']?0|rejectUnauthorized\\s*[:=]\\s*false|ssl[_-]?verify\\s*[:=]\\s*false|verify[_-]?ssl\\s*[:=]\\s*false)"
+# ========================= DEVICE / PRIVACY SURFACE =========================
+
+  # ---- Browser / PWA device characteristics ----
+
+  - id: extract-browser-device-identity
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Browser/device identity or capability signal read"
+    metadata: {category: device, surface: device-identity, confidence: HIGH}
+    pattern-either:
+      - pattern: navigator.userAgent
+      - pattern: navigator.platform
+      - pattern: navigator.vendor
+      - pattern: navigator.language
+      - pattern: navigator.languages
+      - pattern: navigator.hardwareConcurrency
+      - pattern: navigator.deviceMemory
+      - pattern: navigator.maxTouchPoints
+      - pattern: screen.width
+      - pattern: screen.height
+      - pattern: screen.availWidth
+      - pattern: screen.availHeight
+      - pattern: screen.colorDepth
+      - pattern: screen.pixelDepth
+      - pattern: window.devicePixelRatio
+
+  - id: audit-browser-high-entropy-device-info
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "High-entropy User-Agent Client Hints requested. Review whether device fingerprinting is necessary and privacy-appropriate."
+    metadata: {category: device, surface: device-fingerprinting, confidence: HIGH}
+    pattern-either:
+      - pattern: navigator.userAgentData.getHighEntropyValues(...)
+      - pattern: $UA.getHighEntropyValues(...)
+
+  - id: extract-browser-media-devices
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Camera/microphone/media-device API used"
+    metadata: {category: device, surface: device-media, confidence: HIGH}
+    pattern-either:
+      - pattern: navigator.mediaDevices.getUserMedia(...)
+      - pattern: navigator.mediaDevices.enumerateDevices(...)
+      - pattern: navigator.mediaDevices.getDisplayMedia(...)
+
+  - id: extract-browser-geolocation
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Browser geolocation API used"
+    metadata: {category: device, surface: device-location, confidence: HIGH}
+    pattern-either:
+      - pattern: navigator.geolocation.getCurrentPosition(...)
+      - pattern: navigator.geolocation.watchPosition(...)
+      - pattern: navigator.geolocation.clearWatch(...)
+
+  - id: extract-browser-permissions
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Browser permission state queried"
+    metadata: {category: device, surface: device-permissions, confidence: HIGH}
+    pattern: navigator.permissions.query(...)
+
+  - id: extract-browser-clipboard
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Clipboard API used"
+    metadata: {category: device, surface: device-clipboard, confidence: HIGH}
+    pattern-either:
+      - pattern: navigator.clipboard.readText(...)
+      - pattern: navigator.clipboard.writeText(...)
+      - pattern: navigator.clipboard.read(...)
+      - pattern: navigator.clipboard.write(...)
+
+  - id: extract-browser-battery
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Battery/device power information requested"
+    metadata: {category: device, surface: device-power, confidence: HIGH}
+    pattern: navigator.getBattery(...)
+
+  - id: extract-browser-network-information
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Browser network/device connection information read"
+    metadata: {category: device, surface: device-network, confidence: HIGH}
+    pattern-either:
+      - pattern: navigator.connection
+      - pattern: navigator.connection.effectiveType
+      - pattern: navigator.connection.downlink
+      - pattern: navigator.connection.rtt
+      - pattern: navigator.connection.saveData
+
+  - id: extract-browser-storage-capability
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Browser storage capability/quota API used"
+    metadata: {category: device, surface: device-storage, confidence: HIGH}
+    pattern-either:
+      - pattern: navigator.storage.estimate(...)
+      - pattern: navigator.storage.persist(...)
+      - pattern: navigator.storage.persisted(...)
+
+  - id: extract-webrtc-peerconnection
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "WebRTC peer connection/network-candidate surface found"
+    metadata: {category: device, surface: device-local-network, confidence: HIGH}
+    pattern-either:
+      - pattern: new RTCPeerConnection(...)
+      - pattern: new webkitRTCPeerConnection(...)
+      - pattern: $PC.addEventListener("icecandidate", ...)
+      - pattern: $PC.onicecandidate = $HANDLER
+
+  # ---- Node / desktop host characteristics ----
+
+  - id: extract-node-device-host-info
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Host/device OS information read"
+    metadata: {category: device, surface: device-host, confidence: HIGH}
+    pattern-either:
+      - pattern: os.hostname()
+      - pattern: os.platform()
+      - pattern: os.arch()
+      - pattern: os.release()
+      - pattern: os.type()
+      - pattern: os.cpus()
+      - pattern: os.totalmem()
+      - pattern: os.freemem()
+      - pattern: process.platform
+      - pattern: process.arch
+
+  - id: extract-node-network-interfaces
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Local device network interfaces enumerated"
+    metadata: {category: device, surface: device-local-network, confidence: HIGH}
+    pattern-either:
+      - pattern: os.networkInterfaces()
+      - pattern: $OS.networkInterfaces()
+
+  # ---- Android identifiers / hardware / permissions (cross-language) ----
+
+  - id: extract-android-build-device-info
+    languages: [generic]
+    severity: INFO
+    message: "Android Build/device characteristic reference found"
+    metadata: {category: device, surface: android-device, confidence: MEDIUM}
+    pattern-regex: "\\bBuild\\.(MODEL|MANUFACTURER|BRAND|DEVICE|PRODUCT|HARDWARE|BOARD|FINGERPRINT|DISPLAY|ID|TYPE|TAGS|SUPPORTED_ABIS|SUPPORTED_32_BIT_ABIS|SUPPORTED_64_BIT_ABIS|VERSION\\.(SDK_INT|RELEASE|CODENAME|SECURITY_PATCH))\\b"
+
+  - id: audit-android-stable-device-id
+    languages: [generic]
+    severity: WARNING
+    message: "Stable Android/device identifier API referenced. Review privacy, consent, reset behavior, and whether a less identifying signal is sufficient."
+    metadata: {category: device, surface: device-identifiers, confidence: MEDIUM}
+    pattern-regex: "(Settings\\.Secure\\.ANDROID_ID|getImei\\s*\\(|getMeid\\s*\\(|getDeviceId\\s*\\(|getSubscriberId\\s*\\(|getSimSerialNumber\\s*\\(|AdvertisingIdClient|advertisingId)"
+
+  - id: extract-android-network-device-info
+    languages: [generic]
+    severity: INFO
+    message: "Android Wi-Fi/network interface device information reference found"
+    metadata: {category: device, surface: device-local-network, confidence: MEDIUM}
+    pattern-regex: "(getMacAddress\\s*\\(|getBSSID\\s*\\(|getSSID\\s*\\(|getIpAddress\\s*\\(|NetworkInterface\\.getNetworkInterfaces\\s*\\(|WifiInfo|ConnectivityManager|NetworkCapabilities)"
+
+  - id: extract-android-sensitive-capability
+    languages: [generic]
+    severity: INFO
+    message: "Android sensitive device capability/API reference found"
+    metadata: {category: device, surface: device-capabilities, confidence: MEDIUM}
+    pattern-regex: "(LocationManager|FusedLocationProviderClient|CameraManager|MediaRecorder|AudioRecord|BluetoothAdapter|BluetoothManager|NfcAdapter|SensorManager|BiometricPrompt)"
+
+  - id: extract-android-permission
+    languages: [generic]
+    severity: INFO
+    message: "Android permission declaration/reference found"
+    metadata: {category: device, surface: device-permissions, confidence: HIGH}
+    pattern-regex: "android\\.permission\\.(CAMERA|RECORD_AUDIO|ACCESS_FINE_LOCATION|ACCESS_COARSE_LOCATION|ACCESS_BACKGROUND_LOCATION|READ_PHONE_STATE|READ_PHONE_NUMBERS|READ_SMS|SEND_SMS|READ_CONTACTS|WRITE_CONTACTS|BLUETOOTH_SCAN|BLUETOOTH_CONNECT|NEARBY_WIFI_DEVICES|ACCESS_WIFI_STATE|CHANGE_WIFI_STATE|READ_EXTERNAL_STORAGE|WRITE_EXTERNAL_STORAGE|READ_MEDIA_IMAGES|READ_MEDIA_VIDEO|READ_MEDIA_AUDIO|POST_NOTIFICATIONS|BODY_SENSORS|ACTIVITY_RECOGNITION)"
+
+  # ---- Apple / iOS identifiers / permissions (cross-language) ----
+
+  - id: extract-ios-device-info
+    languages: [generic]
+    severity: INFO
+    message: "Apple/iOS device characteristic reference found"
+    metadata: {category: device, surface: ios-device, confidence: MEDIUM}
+    pattern-regex: "UIDevice\\.current\\.(name|model|localizedModel|systemName|systemVersion|batteryLevel|batteryState|orientation)"
+
+  - id: audit-ios-stable-device-id
+    languages: [generic]
+    severity: WARNING
+    message: "Apple/iOS stable advertising/vendor identifier referenced. Review privacy purpose and tracking requirements."
+    metadata: {category: device, surface: device-identifiers, confidence: MEDIUM}
+    pattern-regex: "(identifierForVendor|ASIdentifierManager|advertisingIdentifier|IDFA)"
+
+  - id: extract-ios-sensitive-capability
+    languages: [generic]
+    severity: INFO
+    message: "Apple/iOS sensitive device capability/API reference found"
+    metadata: {category: device, surface: device-capabilities, confidence: MEDIUM}
+    pattern-regex: "(CLLocationManager|AVCaptureDevice|AVAudioSession|PHPhotoLibrary|CNContactStore|CBCentralManager|CMMotionManager|LAContext|UIPasteboard|NEHotspotNetwork)"
+
+  - id: extract-ios-privacy-usage-description
+    languages: [generic]
+    severity: INFO
+    message: "Apple/iOS privacy permission usage-description key found"
+    metadata: {category: device, surface: device-permissions, confidence: HIGH}
+    pattern-regex: "NS(Camera|Microphone|LocationWhenInUse|LocationAlwaysAndWhenInUse|PhotoLibrary|PhotoLibraryAdd|BluetoothAlways|LocalNetwork|Contacts|Calendars|Reminders|Motion|FaceID|SpeechRecognition|HealthShare|HealthUpdate)UsageDescription"
+
+  # ---- Cross-platform frameworks / bridges ----
+
+  - id: extract-capacitor-cordova-device-plugin
+    languages: [generic]
+    severity: INFO
+    message: "Capacitor/Cordova device-capability plugin reference found"
+    metadata: {category: device, surface: device-bridge, confidence: MEDIUM}
+    pattern-regex: "(?i)(@capacitor/(device|camera|geolocation|filesystem|network|clipboard|haptics|local-notifications|push-notifications)|cordova-plugin-(device|camera|geolocation|file|network-information|contacts|media-capture|diagnostic))"
+
+  - id: extract-react-native-device-info
+    languages: [generic]
+    severity: INFO
+    message: "React Native device information/capability reference found"
+    metadata: {category: device, surface: device-bridge, confidence: MEDIUM}
+    pattern-regex: "(?i)(react-native-device-info|react-native-permissions|react-native-geolocation|react-native-camera|@react-native-community/netinfo)"
+
+  - id: extract-flutter-device-info
+    languages: [generic]
+    severity: INFO
+    message: "Flutter device information/capability package reference found"
+    metadata: {category: device, surface: device-bridge, confidence: MEDIUM}
+    pattern-regex: "(?i)(device_info_plus|permission_handler|geolocator|camera|connectivity_plus|network_info_plus|package_info_plus)"
+
