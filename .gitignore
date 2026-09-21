@@ -1,2 +1,1 @@
-semgrep-results.json
-.semgrep/
+semgrep-results.json\nsemgrep-report.html\n.semgrep/\n
