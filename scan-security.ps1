@@ -5,6 +5,9 @@ param(
   [string]$HtmlReport="semgrep-report.html",
   [string]$Manifest="target-manifest.json",
   [string]$UrlReport="url-report.json",
+  [string]$ModeReport="scan-modes.json",
+  [ValidateSet("360","stepview","protocol","hidden","/360","/stepview","/protocol","/hidden")]
+  [string]$Mode="/360",
   [switch]$ResolveUrls,
   [switch]$Strict,
   [switch]$NoOpen
@@ -95,6 +98,9 @@ foreach ($File in $Files) {
     bytes = [int64]$File.Length
     modifiedUtc = $File.LastWriteTimeUtc.ToString("o")
     sha256 = $Hash
+    attributes = [string]$File.Attributes
+    isHidden = [bool](($File.Attributes -band [IO.FileAttributes]::Hidden) -ne 0)
+    isDotPath = [bool](($File.FullName -split '[\\/]') | Where-Object { $_ -match '^\.[^.]' } | Select-Object -First 1)
   }
 }
 
@@ -146,8 +152,15 @@ if (Test-Path -LiteralPath $Report) {
     Write-Host "JSON    : $((Resolve-Path -LiteralPath $Report).Path)"
 
     $Python = Get-Command python -ErrorAction SilentlyContinue
+    if ($Python -and (Test-Path -LiteralPath "build-modes.py")) {
+      & $Python.Source "build-modes.py" --input $Report --manifest $Manifest --urls $UrlReport --output $ModeReport
+      if (Test-Path -LiteralPath $ModeReport) {
+        Write-Host "MODES   : $((Resolve-Path -LiteralPath $ModeReport).Path)" -ForegroundColor DarkCyan
+      }
+    }
+
     if ($Python -and (Test-Path -LiteralPath "build-report.py")) {
-      & $Python.Source "build-report.py" --input $Report --manifest $Manifest --urls $UrlReport --output $HtmlReport --target $TargetPath
+      & $Python.Source "build-report.py" --input $Report --manifest $Manifest --urls $UrlReport --modes $ModeReport --mode $Mode --output $HtmlReport --target $TargetPath
       if (Test-Path -LiteralPath $HtmlReport) {
         $HtmlPath = (Resolve-Path -LiteralPath $HtmlReport).Path
         Write-Host "VISUAL  : $HtmlPath" -ForegroundColor Green
