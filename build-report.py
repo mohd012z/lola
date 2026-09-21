@@ -37,6 +37,7 @@ def main():
     p.add_argument("--manifest", default="target-manifest.json")
     p.add_argument("--urls", default="url-report.json")
     p.add_argument("--modes", default="scan-modes.json")
+    p.add_argument("--code", default="code-analysis.json")
     p.add_argument("--mode", default="/360")
     args = p.parse_args()
 
@@ -85,6 +86,20 @@ def main():
         except Exception:
             pass
 
+    code_data = {
+        "summary": {}, "extraction": {}, "codesummary": {}, "codeview": {"files":[]},
+        "codepassword": {"items":[]}, "codestring": {"items":[]},
+        "codetransparent": {"files":[]}, "codemodification": {"items":[]},
+        "codefallback": {"items":[]}, "codeurls": {"items":[]},
+        "codeencryption": {"items":[]}, "hiddenmode": {"items":[]}
+    }
+    code_path = Path(args.code)
+    if code_path.exists():
+        try:
+            code_data = json.loads(code_path.read_text(encoding="utf-8-sig"))
+        except Exception:
+            pass
+
     sev = Counter(x["severity"] for x in findings)
     cats = Counter(x["category"] for x in findings)
     surfaces = Counter(x["surface"] for x in findings)
@@ -112,6 +127,7 @@ def main():
         "targetFiles": target_files,
         "urlData": url_data,
         "modeData": mode_data,
+        "codeData": code_data,
         "initialMode": args.mode,
         "findings": findings,
     }
@@ -129,7 +145,7 @@ def main():
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 20% 0,#152443 0,#0b1426 34%,#08101d 70%);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 .wrap{max-width:1500px;margin:auto;padding:24px}.hero{display:flex;gap:18px;justify-content:space-between;align-items:flex-start;margin-bottom:18px}.hero h1{margin:0 0 5px;font-size:29px}.sub{color:var(--muted);word-break:break-all}
 .grid{display:grid;grid-template-columns:repeat(5,minmax(140px,1fr));gap:12px}.card{background:rgba(17,26,45,.97);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 12px 35px #0003}.metric{font-size:30px;font-weight:800}.label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.09em}.error .metric{color:var(--error)}.warning .metric{color:var(--warn)}.info .metric{color:var(--info)}
-.modebar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.modebtn{width:auto;background:#101c33;color:var(--text);border:1px solid var(--line);border-radius:999px;padding:9px 13px;cursor:pointer;font-weight:700}.modebtn.active{outline:2px solid var(--accent);background:#1b2a49}.modepanel{display:none}.modepanel.active{display:block}.timeline{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.phase{background:#0b1426;border:1px solid var(--line);border-radius:13px;padding:13px}.phase h3{margin:0 0 9px}.phase-row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #1c2c48}.phase-row:last-child{border-bottom:0}.phase-row span:first-child{color:var(--muted)}.mode-list{display:grid;gap:8px}.mode-item{background:#0b1426;border:1px solid var(--line);border-radius:11px;padding:11px;word-break:break-word}.section{margin-top:16px}.section-head{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:10px}.section h2{font-size:17px;margin:0}
+.modebar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.modebtn{width:auto;background:#101c33;color:var(--text);border:1px solid var(--line);border-radius:999px;padding:9px 13px;cursor:pointer;font-weight:700}.modebtn.active{outline:2px solid var(--accent);background:#1b2a49}.modepanel{display:none}.modepanel.active{display:block}.timeline{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.phase{background:#0b1426;border:1px solid var(--line);border-radius:13px;padding:13px}.phase h3{margin:0 0 9px}.phase-row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #1c2c48}.phase-row:last-child{border-bottom:0}.phase-row span:first-child{color:var(--muted)}.mode-list{display:grid;gap:8px}.mode-item{background:#0b1426;border:1px solid var(--line);border-radius:11px;padding:11px;word-break:break-word}.code-toolbar{display:grid;grid-template-columns:minmax(220px,1fr) minmax(180px,320px);gap:9px;margin:10px 0}.code-toolbar input,.code-toolbar select{width:100%;background:#0b1426;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px 11px}.code-view{max-height:620px;overflow:auto;background:#070d19;border:1px solid var(--line);border-radius:12px;padding:12px}.code-view pre{margin:0;white-space:pre;overflow:auto}.code-redact{color:var(--warn);font-size:12px}.section{margin-top:16px}.section-head{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:10px}.section h2{font-size:17px;margin:0}
 .surface-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}.surface{cursor:pointer;background:var(--panel3);border:1px solid var(--line);border-radius:13px;padding:13px;transition:.15s}.surface:hover{transform:translateY(-1px);border-color:#536d9f}.surface.active{outline:2px solid var(--accent)}.surface-top{display:flex;justify-content:space-between;gap:8px}.surface-name{font-weight:750}.surface-count{font-size:22px;font-weight:850}.mini{display:flex;gap:7px;margin-top:7px;font-size:11px;color:var(--muted)}.dotE{color:var(--error)}.dotW{color:var(--warn)}.dotI{color:var(--info)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.bars{display:grid;gap:9px}.bar-row{display:grid;grid-template-columns:minmax(120px,220px) 1fr 46px;gap:10px;align-items:center}.bar-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bar-bg{height:10px;background:#091223;border:1px solid #22304e;border-radius:99px;overflow:hidden}.bar-fill{height:100%;background:linear-gradient(90deg,#628eff,#9674ff);border-radius:inherit}
 .controls{display:grid;grid-template-columns:minmax(240px,1.5fr) repeat(5,minmax(130px,1fr));gap:9px;margin-top:16px}.controls input,.controls select{width:100%;background:#0b1426;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px 11px}
@@ -139,7 +155,7 @@ details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{displa
 .note{margin-top:12px;padding:11px 13px;border-radius:11px;background:#0c172b;border:1px solid #233a63;color:#b9c9e7}.url-summary{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:9px;margin-bottom:10px}.url-list{display:grid;gap:9px}.url-card{background:#0b1426;border:1px solid var(--line);border-radius:12px;padding:12px}.url-main{display:grid;grid-template-columns:minmax(250px,1fr) 90px 120px 120px;gap:10px;align-items:start}.url-src,.url-final{word-break:break-all}.url-arrow{color:var(--muted);margin:5px 0}.status-ok{color:var(--ok)}.status-warn{color:var(--warn)}.status-bad{color:var(--error)}.manifest-tools{display:flex;gap:10px;align-items:center;margin-bottom:10px}.manifest-tools input{flex:1;background:#0b1426;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px 11px}.manifest{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:12px}.mf{display:grid;grid-template-columns:minmax(280px,1fr) 90px 90px 110px minmax(180px,.7fr);gap:10px;padding:10px 12px;border-bottom:1px solid #1d2d4b;align-items:center}.mf:last-child{border-bottom:0}.mfpath{word-break:break-all}.mf small{color:var(--muted)}.hash{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;word-break:break-all;color:#b8caef}.empty{padding:34px;text-align:center;color:var(--muted)}.footer{color:var(--muted);font-size:12px;margin:18px 0}
 @media(max-width:1100px){.controls{grid-template-columns:1fr 1fr 1fr}.detail-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.two,.timeline{grid-template-columns:1fr}.hero{display:block}.url-summary{grid-template-columns:repeat(2,1fr)}.url-main{grid-template-columns:1fr 90px}}
-@media(max-width:600px){.wrap{padding:13px}.grid,.controls,.detail-grid{grid-template-columns:1fr}.row{display:block}.bar-row{grid-template-columns:100px 1fr 38px}}
+@media(max-width:600px){.wrap{padding:13px}.grid,.controls,.detail-grid,.code-toolbar{grid-template-columns:1fr}.row{display:block}.bar-row{grid-template-columns:100px 1fr 38px}}
 </style>
 </head>
 <body>
@@ -165,6 +181,36 @@ details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{displa
     <button class="modebtn" data-mode="/protocol">/protocol</button>
     <button class="modebtn" data-mode="/hidden">/hidden</button>
     <button class="modebtn" data-mode="/360">/360</button>
+  </div>
+
+  <div class="card" style="margin-top:10px">
+    <div class="section-head"><h2>Code analysis commands</h2><span class="sub">Source indexing uses redaction for secret-like values</span></div>
+    <div class="modebar" style="margin:0">
+      <button class="modebtn" data-mode="/deep-code">/deep-dive code</button>
+      <button class="modebtn" data-mode="/extraction">/extraction</button>
+      <button class="modebtn" data-mode="/codesummary">/codesummary</button>
+      <button class="modebtn" data-mode="/codeview">/codeview</button>
+      <button class="modebtn" data-mode="/codepassword">/codepassword</button>
+      <button class="modebtn" data-mode="/codestring">/codestring</button>
+      <button class="modebtn" data-mode="/codetransparent">/codetransparent</button>
+      <button class="modebtn" data-mode="/codemodification">/codemodification</button>
+      <button class="modebtn" data-mode="/codefallback">/codefallback</button>
+      <button class="modebtn" data-mode="/codeurls">/codeurls</button>
+      <button class="modebtn" data-mode="/codeencryption">/codeencryption</button>
+      <button class="modebtn" data-mode="/hiddenmode">/hiddenmode</button>
+    </div>
+  </div>
+
+  <div class="section card modepanel" id="codeModePanel">
+    <div class="section-head"><h2 id="codeModeTitle">Code analysis</h2><span class="sub" id="codeModeSubtitle"></span></div>
+    <div class="url-summary" id="codeModeSummary"></div>
+    <div class="code-toolbar">
+      <input id="codeModeSearch" placeholder="Search current code view...">
+      <select id="codeFileSelect"><option value="">All files</option></select>
+    </div>
+    <div class="mode-list" id="codeModeList"></div>
+    <div class="code-view" id="codeViewBox" style="display:none"><pre id="codeViewPre"></pre></div>
+    <div class="note"><b>Redaction:</b> password/token/key values and private-key material are masked in generated code-analysis output. Locations and variable names remain visible for review.</div>
   </div>
 
   <div class="section card modepanel" id="deepDivePanel">
@@ -282,6 +328,7 @@ details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{displa
 const DATA=JSON.parse(document.getElementById('semgrep-data').textContent);
 const $=id=>document.getElementById(id);
 const MODEDATA=DATA.modeData||{stepview:{},protocol:{},hidden:{},360:{}};
+const CODEDATA=DATA.codeData||{};
 
 function miniMetric(parent,label,value){
   const d=document.createElement('div');d.className='detail';
@@ -289,6 +336,121 @@ function miniMetric(parent,label,value){
   const s=document.createElement('span');s.textContent=String(value??'-');
   d.append(b,s);parent.appendChild(d);
 }
+
+const CODE_MODES=new Set(['/deep-code','/extraction','/codesummary','/codeview','/codepassword','/codestring','/codetransparent','/codemodification','/codefallback','/codeurls','/codeencryption','/hiddenmode']);
+let CURRENT_CODE_MODE='/deep-code';
+
+function codeText(x){
+  if(x===null||x===undefined)return '';
+  if(typeof x==='string'||typeof x==='number'||typeof x==='boolean')return String(x);
+  return JSON.stringify(x);
+}
+function codeItem(parent,title,meta,body){
+  const d=document.createElement('div');d.className='mode-item';
+  if(title){const h=document.createElement('strong');h.textContent=title;d.appendChild(h)}
+  if(meta){const m=document.createElement('div');m.className='meta';m.textContent=meta;d.appendChild(m)}
+  if(body){const b=document.createElement('div');b.textContent=body;d.appendChild(b)}
+  parent.appendChild(d);
+}
+function fillCodeFiles(){
+  const sel=$('codeFileSelect');
+  const old=sel.value;
+  while(sel.options.length>1)sel.remove(1);
+  const files=[...new Set((CODEDATA.codeview?.files||[]).map(x=>x.path).filter(Boolean))].sort();
+  files.forEach(f=>{const o=document.createElement('option');o.value=f;o.textContent=f;sel.appendChild(o)});
+  if(files.includes(old))sel.value=old;
+}
+function renderCodeMode(mode=CURRENT_CODE_MODE){
+  CURRENT_CODE_MODE=mode;
+  const q=$('codeModeSearch').value.trim().toLowerCase();
+  const fileFilter=$('codeFileSelect').value;
+  const titleMap={
+    '/deep-code':'/deep-dive code — Combined source analysis',
+    '/extraction':'/extraction — Symbols, imports, environment and routes',
+    '/codesummary':'/codesummary — Repository/source summary',
+    '/codeview':'/codeview — Redacted source browser',
+    '/codepassword':'/codepassword — Password/token/key references',
+    '/codestring':'/codestring — String literal inventory',
+    '/codetransparent':'/codetransparent — Data source/sink transparency',
+    '/codemodification':'/codemodification — State/file/data modification points',
+    '/codefallback':'/codefallback — Error, retry and fallback paths',
+    '/codeurls':'/codeurls — URLs and final destinations',
+    '/codeencryption':'/codeencryption — Crypto/password/key usage',
+    '/hiddenmode':'/hiddenmode — Hidden code/UI/config evidence'
+  };
+  $('codeModeTitle').textContent=titleMap[mode]||'Code analysis';
+  $('codeModeSubtitle').textContent='code-analysis.json';
+  const sum=$('codeModeSummary');sum.replaceChildren();
+  const list=$('codeModeList');list.replaceChildren();
+  $('codeViewBox').style.display='none';
+  const s=CODEDATA.summary||{};
+  miniMetric(sum,'Files',s.filesIndexed||0);miniMetric(sum,'Lines',s.totalLines||0);
+  miniMetric(sum,'Functions',s.functions||0);miniMetric(sum,'Classes',s.classes||0);
+  miniMetric(sum,'Secret refs',s.secretRefs||0);miniMetric(sum,'URLs',s.urlRefs||0);
+
+  const match=(obj)=>{
+    const txt=JSON.stringify(obj).toLowerCase();
+    const f=obj?.path||obj?.occurrences?.[0]?.path||'';
+    return (!q||txt.includes(q))&&(!fileFilter||f===fileFilter||txt.includes(fileFilter.toLowerCase()));
+  };
+
+  if(mode==='/codesummary'){
+    const cs=CODEDATA.codesummary||{};
+    Object.entries(cs.summary||{}).forEach(([k,v])=>codeItem(list,k,'',codeText(v)));
+    (cs.largestFiles||[]).filter(match).forEach(x=>codeItem(list,x.path,(x.lines??'?')+' lines',String(x.bytes||0)+' bytes'));
+  } else if(mode==='/extraction'){
+    const ex=CODEDATA.extraction||{};
+    (ex.imports||[]).filter(match).forEach(x=>codeItem(list,'Import '+x.module,x.path+':'+x.line,''));
+    (ex.functions||[]).filter(match).forEach(x=>codeItem(list,'Function '+x.name,x.path+':'+x.line,''));
+    (ex.classes||[]).filter(match).forEach(x=>codeItem(list,'Class '+x.name,x.path+':'+x.line,''));
+    (ex.environment||[]).filter(match).forEach(x=>codeItem(list,'Environment/config',x.path+':'+x.line,x.preview||''));
+    (ex.routes||[]).filter(match).forEach(x=>codeItem(list,x.method+' '+x.route,x.path+':'+x.line,''));
+  } else if(mode==='/codeview'){
+    const files=(CODEDATA.codeview?.files||[]).filter(x=>(!fileFilter||x.path===fileFilter)&&(!q||(x.path||'').toLowerCase().includes(q)||(x.view||'').toLowerCase().includes(q)));
+    if(files.length===1){
+      $('codeViewBox').style.display='block';$('codeViewPre').textContent=files[0].view||'[No embedded source preview]';
+      codeItem(list,files[0].path,(files[0].lines??'?')+' lines'+(files[0].truncated?' · preview truncated':''),'');
+    } else {
+      files.forEach(x=>codeItem(list,x.path,(x.lines??'?')+' lines'+(x.truncated?' · preview truncated':''),'Select this file in the file filter to view its redacted source preview.'));
+    }
+  } else if(mode==='/codepassword'){
+    (CODEDATA.codepassword?.items||[]).filter(match).forEach(x=>codeItem(list,x.type+' · '+x.name,x.path+':'+x.line,'Masked: '+(x.masked||'<redacted>')));
+  } else if(mode==='/codestring'){
+    (CODEDATA.codestring?.items||[]).filter(match).forEach(x=>codeItem(list,x.sensitive?'Sensitive string (redacted)':'String',x.path+':'+x.line,x.value||''));
+  } else if(mode==='/codetransparent'){
+    (CODEDATA.codetransparent?.files||[]).filter(match).forEach(x=>codeItem(list,x.path,'Sources: '+(x.sourceTypes||[]).join(', ')+' · Sinks: '+(x.sinkTypes||[]).join(', '),'Source count '+(x.sources||[]).length+' · Sink count '+(x.sinks||[]).length));
+  } else if(mode==='/codemodification'){
+    (CODEDATA.codemodification?.items||[]).filter(match).forEach(x=>codeItem(list,x.kind,x.path+':'+x.line,x.preview||''));
+  } else if(mode==='/codefallback'){
+    (CODEDATA.codefallback?.items||[]).filter(match).forEach(x=>codeItem(list,x.kind,x.path+':'+x.line,x.preview||''));
+  } else if(mode==='/codeurls'){
+    (CODEDATA.codeurls?.items||[]).filter(match).forEach(x=>codeItem(list,x.sourceUrl||'URL',(x.scheme||'')+' · '+(x.host||'')+' · '+(x.destinationClass||''),(x.finalUrl&&x.finalUrl!==x.sourceUrl?'Final: '+x.finalUrl:'')+' '+((x.resolvedIps||[]).join(', '))));
+  } else if(mode==='/codeencryption'){
+    (CODEDATA.codeencryption?.items||[]).filter(match).forEach(x=>codeItem(list,x.kind+(x.passwordOrKeyRelated?' · password/key related':''),x.path+':'+x.line,x.preview||''));
+  } else if(mode==='/hiddenmode'){
+    (CODEDATA.hiddenmode?.items||[]).filter(match).forEach(x=>codeItem(list,x.kind,x.path+':'+x.line,x.preview||''));
+    (MODEDATA.hidden?.files||[]).filter(match).forEach(x=>codeItem(list,'Hidden/sensitive file',x.reason||'',x.path||x.name||''));
+  } else {
+    const sections=[
+      ['Extraction',CODEDATA.extraction?.functions?.length||0],
+      ['Imports',CODEDATA.extraction?.imports?.length||0],
+      ['Password/key refs',CODEDATA.codepassword?.items?.length||0],
+      ['Strings',CODEDATA.codestring?.items?.length||0],
+      ['Transparent-flow files',CODEDATA.codetransparent?.files?.length||0],
+      ['Modification points',CODEDATA.codemodification?.items?.length||0],
+      ['Fallback points',CODEDATA.codefallback?.items?.length||0],
+      ['URLs',CODEDATA.codeurls?.items?.length||0],
+      ['Crypto refs',CODEDATA.codeencryption?.items?.length||0],
+      ['Hidden code refs',CODEDATA.hiddenmode?.items?.length||0]
+    ];
+    sections.forEach(([a,b])=>codeItem(list,a,'',String(b)));
+    (CODEDATA.codepassword?.items||[]).filter(match).slice(0,40).forEach(x=>codeItem(list,'Secret ref · '+x.name,x.path+':'+x.line,'Masked: '+(x.masked||'<redacted>')));
+    (CODEDATA.codeencryption?.items||[]).filter(match).slice(0,40).forEach(x=>codeItem(list,'Crypto · '+x.kind,x.path+':'+x.line,x.preview||''));
+    (CODEDATA.codemodification?.items||[]).filter(match).slice(0,40).forEach(x=>codeItem(list,'Modification · '+x.kind,x.path+':'+x.line,x.preview||''));
+  }
+  if(!list.children.length && $('codeViewBox').style.display==='none')list.innerHTML='<div class="empty">No matching code-analysis entries.</div>';
+}
+
 function renderModes(){
   const dd=MODEDATA['deep-dive']||{};
   const ds=$('deepDiveSummary');ds.replaceChildren();
@@ -374,13 +536,19 @@ function setMode(mode){
   if(normalized==='/protocal') normalized='/protocol';
   if(normalized==='/deepdive') normalized='/deep-dive';
   if(normalized==='/anonymous') normalized='/anonymus';
+  if(normalized==='/deep-dive code'||normalized==='/deep-dive-code') normalized='/deep-code';
   document.querySelectorAll('.modebtn').forEach(b=>b.classList.toggle('active',b.dataset.mode===normalized));
   const map={
     '/deep-dive':'deepDivePanel','/securitycheck':'securityCheckPanel','/anonymus':'anonymousPanel',
-    '/stepview':'stepviewPanel','/protocol':'protocolPanel','/hidden':'hiddenPanel','/360':'view360Panel'
+    '/stepview':'stepviewPanel','/protocol':'protocolPanel','/hidden':'hiddenPanel','/360':'view360Panel',
+    '/deep-code':'codeModePanel','/extraction':'codeModePanel','/codesummary':'codeModePanel','/codeview':'codeModePanel',
+    '/codepassword':'codeModePanel','/codestring':'codeModePanel','/codetransparent':'codeModePanel',
+    '/codemodification':'codeModePanel','/codefallback':'codeModePanel','/codeurls':'codeModePanel',
+    '/codeencryption':'codeModePanel','/hiddenmode':'codeModePanel'
   };
   document.querySelectorAll('.modepanel').forEach(p=>p.classList.remove('active'));
   const panel=$(map[normalized]||'view360Panel');if(panel)panel.classList.add('active');
+  if(CODE_MODES.has(normalized)){renderCodeMode(normalized)}
   if(normalized==='/protocol'){$('category').value='protocol';render()}
   else if(normalized==='/hidden'){$('category').value='hidden';render()}
   else if(normalized==='/anonymus'){$('category').value='privacy';render()}
@@ -545,6 +713,9 @@ function render(){
   });
 }
 ['search','severity','surface','category','file','rule'].forEach(id=>$(id).addEventListener(id==='search'?'input':'change',render));
+fillCodeFiles();
+$('codeModeSearch').addEventListener('input',()=>renderCodeMode(CURRENT_CODE_MODE));
+$('codeFileSelect').addEventListener('change',()=>renderCodeMode(CURRENT_CODE_MODE));
 document.querySelectorAll('.modebtn').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
 renderModes();
 render();
