@@ -990,3 +990,258 @@ It deliberately does **not** delete:
 - target-project logs
 
 There is therefore no destructive `/deletelogs` feature. For privacy, Lola minimizes its own persistent temporary data instead of erasing external evidence.
+
+
+## APK-focused scanning
+
+Lola now has a dedicated APK pipeline. An `.apk` target is automatically routed away from the generic source scanner and into:
+
+~~~text
+scan-apk.ps1
+  ↓
+analyze-apk.py
+  ↓
+apk-analysis.json
+  ↓
+build-apk-report.py
+  ↓
+apk-report.html
+~~~
+
+### Quick APK scan
+
+~~~powershell
+.\scan-security.ps1 "C:\Apps\sample.apk"
+~~~
+
+or directly:
+
+~~~powershell
+.\scan-apk.ps1 "C:\Apps\sample.apk"
+~~~
+
+The default view is:
+
+~~~text
+/apk360
+~~~
+
+### APK report modes
+
+~~~text
+/apk360
+/apkmanifest
+/apkpermissions
+/apkcomponents
+/apkurls
+/apkapi
+/apkkeys
+/apkcerts
+/apknative
+/apkwebview
+/apkcrypto
+/apkfiles
+/apkcode
+/apkrisk
+/apktools
+~~~
+
+### /apk360
+Combined APK summary:
+- APK path
+- SHA-256
+- package name
+- file/ZIP entry count
+- minimum SDK
+- target SDK
+- permissions
+- exported Android components
+- DEX count
+- ABI/native library count
+- URLs and API references
+- redacted secret references
+- WebView references
+- crypto references
+- review findings
+
+### /apkmanifest
+Shows package/SDK/application manifest information.
+
+Lola attempts manifest decoding with locally installed tools in this order:
+- Android SDK `apkanalyzer`
+- `aapt2` / `aapt` metadata where useful
+- APKTool fallback for decoded AndroidManifest.xml
+
+If no decoder is installed, the rest of the ZIP/DEX/string analysis still runs.
+
+### /apkpermissions
+Lists Android permissions and highlights permission categories that deserve review, such as:
+- camera/microphone
+- precise/background location
+- SMS/call log
+- contacts
+- phone-state/phone-number access
+- install-package requests
+- broad package queries
+- broad storage access
+- system overlay permission
+
+A permission finding means the APK declares the capability; it does not prove misuse.
+
+### /apkcomponents
+Shows:
+- activities
+- activity aliases
+- services
+- receivers
+- providers
+- exported state when the decoded manifest is available
+
+Exported components are review signals, not automatic vulnerabilities.
+
+### /apkurls
+Recovers literal URL/protocol strings from:
+- DEX printable strings
+- text resources
+- assets/config
+- bundled HTML/JavaScript
+- media/config files
+
+The report links each recovered URL to its APK entry and binary/text offset.
+
+### /apkapi
+Indexes API/endpoint-style references such as:
+- /api
+- versioned /vN paths
+- auth/login/token
+- GraphQL
+- OAuth
+- config/media/stream/video/playlist paths
+
+### /apkkeys
+Finds secret/password/token/key-like references in APK resources and DEX strings.
+
+Lola stores only:
+- APK entry
+- offset
+- reference type/name
+- masked value or "value not collected"
+
+Full credentials and private-key material are not written to the report.
+
+### /apkcerts
+Shows:
+- META-INF signing-related entries
+- signer/certificate metadata when `apksigner` or `keytool` is installed
+
+Lola does not copy private keys.
+
+### /apknative
+Maps:
+- ABI folders
+- .so native libraries
+- native library sizes
+
+Typical ABI groups such as arm64-v8a, armeabi-v7a, x86, or x86_64 are shown separately when present.
+
+### /apkwebview
+Looks for WebView-related code/string references such as:
+- WebView
+- JavaScript enablement
+- JavaScript interfaces
+- file/content access
+- mixed-content handling
+- WebView debugging
+- loadUrl/evaluateJavascript
+
+These are review locations; they are not automatically exploitable.
+
+### /apkcrypto
+Inventories crypto/key-store references such as:
+- AES/GCM/CBC/ECB
+- Cipher.getInstance
+- PBKDF2
+- bcrypt/scrypt/Argon2
+- SHA/MD5 references
+- RSA
+- ChaCha20
+- KeyStore/SecretKey
+
+Legacy references such as ECB, MD5, or SHA-1 are surfaced for review.
+
+### /apkfiles
+Displays the APK ZIP inventory:
+- path
+- extension
+- uncompressed size
+- compressed size
+- CRC
+
+It also identifies DEX, assets, signing entries, and native libraries.
+
+### /apkcode
+Optional JADX decompilation status.
+
+Run:
+
+~~~powershell
+.\scan-apk.ps1 "C:\Apps\sample.apk" -Mode /apkcode -Decompile -KeepDecompiled
+~~~
+
+When JADX is installed, decompiled output is placed under:
+
+~~~text
+.lola-apk\decompiled
+~~~
+
+Use only on APKs you are authorized to inspect. Lola does not attempt to defeat code protection or licensing controls.
+
+To decompile temporarily and remove the generated source afterward:
+
+~~~powershell
+.\scan-apk.ps1 "C:\Apps\sample.apk" -Decompile -CleanupLolaApk
+~~~
+
+### /apkrisk
+Collects review findings including:
+- sensitive permissions
+- exported components
+- debug-build flags when detected
+- cleartext-traffic settings
+- WebView debugging references
+- weak/legacy crypto references
+- secret-like references
+
+These are static-analysis review signals, not proof that an APK is malicious or exploitable.
+
+### /apktools
+Shows which optional local tools Lola can use:
+
+~~~text
+apkanalyzer
+aapt2
+aapt
+apksigner
+keytool
+jadx
+apktool
+~~~
+
+Python alone provides:
+- APK/ZIP integrity
+- SHA-256
+- file inventory
+- DEX/assets/native-library inventory
+- printable-string URL/API detection
+- redacted secret-reference detection
+- WebView/crypto indicator detection
+
+Android SDK/JADX/APKTool utilities add richer manifest, signing, and code information.
+
+### APK generated outputs
+
+~~~text
+apk-analysis.json
+apk-report.html
+.lola-apk\decompiled     optional temporary/decompiled source
+~~~
