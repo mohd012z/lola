@@ -298,7 +298,8 @@ function renderModes(){
   miniMetric(vs,'Warnings',sm.warnings||0);miniMetric(vs,'Protocols',sm.protocolSurfaces||0);miniMetric(vs,'Hidden files',sm.hiddenFiles||0);miniMetric(vs,'Info',sm.info||0);
 }
 function setMode(mode){
-  const normalized=mode.startsWith('/')?mode:'/'+mode;
+  let normalized=mode.startsWith('/')?mode:'/'+mode;
+  if(normalized==='/protocal') normalized='/protocol';
   document.querySelectorAll('.modebtn').forEach(b=>b.classList.toggle('active',b.dataset.mode===normalized));
   const map={'/stepview':'stepviewPanel','/protocol':'protocolPanel','/hidden':'hiddenPanel','/360':'view360Panel'};
   document.querySelectorAll('.modepanel').forEach(p=>p.classList.remove('active'));
