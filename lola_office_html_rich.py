@@ -5,6 +5,7 @@ from pathlib import Path
 from lola_office_html_styles import xlsx_style, xlsx_images, docx_headers_footers, hyperlink_map
 from lola_office_layout import word_body_in_order, excel_layout, excel_colgroup
 from lola_office_verify import verify
+from lola_office_diagnostics import diagnose, save_report
 
 def data_uri(blob,mime):
     return "data:"+mime+";base64,"+base64.b64encode(blob).decode("ascii")
