@@ -11,13 +11,13 @@ from lola_document_converter import conversion_plan as document_conversion_plan,
 from lola_office_engine import capabilities as office_capabilities, convert as office_convert
 from lola_office_html import convert as html_convert, matrix as html_matrix
 from lola_pdf_html_rich import pdf_rich, batch_convert
-from lola_pdf_ocr import capabilities as ocr_capabilities, readiness as ocr_readiness, ocr_pages, searchable_pdf
+from lola_pdf_ocr import capabilities as ocr_capabilities, readiness as ocr_readiness, ocr_pages, searchable_pdf\nfrom lola_code_inspector import run_mode as code_inspect
 
 def run(command,target=None,arg=None):
     cmd=(command or "").strip().lower()
     mod=resolve(cmd)
     if not mod:return {"ok":False,"error":"unknown command","command":command}
-    if cmd=="/codecli":return {"ok":True,"modules":catalog()}
+    if cmd=="/codecli":return {"ok":True,"modules":catalog()}\n    inspect_cmds={"/codecheckall","/codetarget","/codeidentify","/codemethode","/codemethod","/codeexpanding","/codeextra","/codecodecodelayer","/codelayer","/skeleton","/troubleshooting","/codesummary","/codecheck","/pycheck"}\n    if cmd in inspect_cmds:\n        root=Path(target or ".")\n        if not root.exists():return {"ok":False,"error":"inspection target does not exist"}\n        # arg narrows file/definition matching for target/method modes.\n        return {"ok":True,"mode":cmd[1:],"inspection":code_inspect(root,cmd,arg)}
     if cmd=="/officecapabilities":return {"ok":True,"office":office_capabilities(),"ocr":ocr_capabilities()}
     if cmd=="/documentconvert" and target is None:
         return {"ok":True,"module":mod,"matrix":document_matrix(),"tools":available_tools()}
