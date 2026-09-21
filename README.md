@@ -1929,3 +1929,67 @@ The Android mobile reader now exposes these target-focused buttons:
 `/targetcodes` is the selected APK's code inventory: source files/classes/methods, resources, DEX files, native libraries and available analysis sections.
 
 `/coderemove` requires confirmation and removes only Lola-generated Android Code Reader/JADX artifacts for the selected target. It does not remove the original APK, analysis/report history, application/device/browser/security logs, or unrelated target data.
+## Realtime APK testing + billing/subscription review
+
+Lola Mobile now adds these target-focused views:
+
+```text
+/test apk realtime
+/traces
+/maincode
+/urls
+/verify
+/callback
+/fallback
+/recheck
+/subscribes
+/payment
+/etc
+```
+
+`/test apk realtime` is an optional read-only ADB/logcat observer for the selected installed/running test package. It does not install, patch, proxy, intercept TLS, automate purchases, fake entitlements, or alter subscription/payment state.
+
+Realtime events are categorized as billing, subscription, callback, fallback, verify, network, lifecycle, and error. Secret/token-like text and sensitive URL query values are redacted before storage.
+
+Target-specific runtime outputs are stored as:
+
+```text
+.lola-library/targets/<target-id>/runtime-analysis.json
+.lola-library/targets/<target-id>/runtime-events.jsonl
+```
+
+`/maincode` shows static entry points, Android components, source/class/method inventory, and files containing billing/runtime-relevant code.
+
+`/urls` shows target URLs, hosts and API references from APK/static evidence.
+
+`/verify` reviews purchase-state, acknowledgement, backend/server and verification signals. It is a presence/review check, not proof that billing is correct.
+
+`/callback` reviews callback/listener references including purchase updates and billing-service setup/disconnect handling.
+
+`/fallback` reviews retry, reconnect, timeout, exception and failure-handling paths.
+
+`/recheck` reviews restore/re-query/resume/reconnect patterns such as purchase/product rechecks.
+
+`/subscribes` reviews subscription, base-plan, offer, renewal, entitlement and subscription-query references without modifying subscriptions.
+
+`/payment` reviews Google Play Billing/payment integration references without attempting purchase bypass or checkout automation.
+
+`/etc` collects supporting files/native/certificate/risk sections that do not fit the focused views.
+
+### Realtime test workflow
+
+```text
+1. Analyze the APK normally
+2. Ensure package name is detected
+3. Install/run your authorized test app normally
+4. Ensure ADB is available and authorized
+5. Open the Realtime APK Test card
+6. Start read-only observation
+7. Manually reproduce the app flow you want to test
+8. Review categorized traces
+9. Stop the observer or let the timer finish
+```
+
+The realtime monitor does not launch the purchase flow itself. This avoids accidental purchases and keeps the test observational.
+
+Current Google Play Billing static checks include references such as BillingClient, ProductDetails, PurchasesUpdatedListener, queryProductDetailsAsync, queryPurchasesAsync, launchBillingFlow, acknowledgePurchase, consumeAsync, BillingResponseCode, subscription/base-plan/offer signals, and reconnect/fallback handling.
