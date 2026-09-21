@@ -10,7 +10,7 @@ param(
   [string]$NetworkReport="network-analysis.json",
   [string]$EventReport="scan-events.json",
   [string]$PreflightReport="preflight-analysis.json",
-  [ValidateSet("360","stepview","protocol","protocal","hidden","deep-dive","deepdive","securitycheck","anonymous","anonymus","extraction","codesummary","codeview","codepassword","codestring","codetransparent","codemodification","codefallback","codeurls","codeencryption","hiddenmode","deep-code","deep-dive-code","deep-dive code","deep-network","deep-dive-network","deep-dive network","trace","route","map","visible","realip","cctv","normal","viewextraction","viewurls","routes","api","keys","hiddentraces","hidemodes","hidelog","ipmirror","certs","preflight","cleanup","/360","/stepview","/protocol","/protocal","/hidden","/deep-dive","/deepdive","/securitycheck","/anonymous","/anonymus","/extraction","/codesummary","/codeview","/codepassword","/codestring","/codetransparent","/codemodification","/codefallback","/codeurls","/codeencryption","/hiddenmode","/deep-code","/deep-dive-code","/deep-dive code","/deep-network","/deep-dive-network","/deep-dive network","/trace","/route","/map","/visible","/realip","/cctv","/normal","/viewextraction","/viewurls","/routes","/api","/keys","/hiddentraces","/hidemodes","/hidelog","/ipmirror","/certs","/preflight","/cleanup")]
+  [ValidateSet("360","stepview","protocol","protocal","hidden","deep-dive","deepdive","securitycheck","anonymous","anonymus","extraction","codesummary","codeview","codepassword","codestring","codetransparent","codemodification","codefallback","codeurls","codeencryption","hiddenmode","deep-code","deep-dive-code","deep-dive code","deep-network","deep-dive-network","deep-dive network","trace","route","map","visible","realip","cctv","normal","viewextraction","viewurls","routes","api","keys","hiddentraces","hidemodes","hidelog","ipmirror","certs","preflight","cleanup","apk360","apkmanifest","apkpermissions","apkcomponents","apkurls","apkapi","apkkeys","apkcerts","apknative","apkwebview","apkcrypto","apkfiles","apkcode","apkrisk","apktools","/360","/stepview","/protocol","/protocal","/hidden","/deep-dive","/deepdive","/securitycheck","/anonymous","/anonymus","/extraction","/codesummary","/codeview","/codepassword","/codestring","/codetransparent","/codemodification","/codefallback","/codeurls","/codeencryption","/hiddenmode","/deep-code","/deep-dive-code","/deep-dive code","/deep-network","/deep-dive-network","/deep-dive network","/trace","/route","/map","/visible","/realip","/cctv","/normal","/viewextraction","/viewurls","/routes","/api","/keys","/hiddentraces","/hidemodes","/hidelog","/ipmirror","/certs","/preflight","/cleanup","/apk360","/apkmanifest","/apkpermissions","/apkcomponents","/apkurls","/apkapi","/apkkeys","/apkcerts","/apknative","/apkwebview","/apkcrypto","/apkfiles","/apkcode","/apkrisk","/apktools")]]
   [string]$Mode="/360",
   [switch]$ResolveUrls,
   [switch]$LiveMonitor,
@@ -56,9 +56,10 @@ if ((Test-Path -LiteralPath $TargetPath -PathType Leaf) -and ([IO.Path]::GetExte
   if (-not (Test-Path -LiteralPath "scan-apk.ps1")) { Fail "APK target detected but scan-apk.ps1 is missing." }
   Write-Host "APK target detected — switching to Lola APK pipeline." -ForegroundColor Cyan
   $ApkMode = if ($Mode -like "apk*" -or $Mode -like "/apk*") { $Mode } else { "/apk360" }
-  $ApkArgs = @("-ExecutionPolicy","Bypass","-File","scan-apk.ps1",$TargetPath,"-Mode",$ApkMode)
-  if ($NoOpen) { $ApkArgs += "-NoOpen" }
-  & powershell @ApkArgs
+  $ApkScanner = Join-Path $PSScriptRoot "scan-apk.ps1"
+  $ApkParams = @{ Apk = $TargetPath; Mode = $ApkMode }
+  if ($NoOpen) { $ApkParams.NoOpen = $true }
+  & $ApkScanner @ApkParams
   exit $LASTEXITCODE
 }
 
