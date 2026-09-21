@@ -606,10 +606,11 @@ class LolaUI(tk.Tk):
             cmd_checks=",".join(checks)
             if not self.current_target_record:
                 self.current_target_record=register_target(p,p.name)
-            set_plan(
-                self.current_target_record["id"], checks, mode,
-                {"decompile":self.decompile.get(),"keepDecompiled":self.keep_decompiled.get(),"cleanup":self.cleanup.get()}
-            )
+            if "store_target" in checks:
+                set_plan(
+                    self.current_target_record["id"], checks, mode,
+                    {"decompile":self.decompile.get(),"keepDecompiled":self.keep_decompiled.get(),"cleanup":self.cleanup.get()}
+                )
         if not is_apk and mode.startswith("/apk"):
             raise ValueError("Project/source target selected. Choose a Security, Code, Network, or Pre-scan mode.")
 
