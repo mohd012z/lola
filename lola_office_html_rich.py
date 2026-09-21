@@ -4,6 +4,7 @@ import base64, html, io
 from pathlib import Path
 from lola_office_html_styles import xlsx_style, xlsx_images, docx_headers_footers, hyperlink_map
 from lola_office_layout import word_body_in_order, excel_layout, excel_colgroup
+from lola_office_verify import verify
 
 def data_uri(blob,mime):
     return "data:"+mime+";base64,"+base64.b64encode(blob).decode("ascii")
@@ -52,4 +53,4 @@ def interactive_shell(title,body):
 def save_rich(src,dst,kind):
     body=docx_rich(src) if kind=="docx" else xlsx_rich(src)
     p=Path(dst);p.parent.mkdir(parents=True,exist_ok=True);p.write_text(interactive_shell(Path(src).name,body),encoding="utf-8")
-    return {"ok":True,"output":str(p),"mode":"interactive-rich-html"}
+    report=verify(src,p)\n    return {"ok":True,"output":str(p),"mode":"interactive-rich-html","verification":report}
