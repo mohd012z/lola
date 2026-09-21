@@ -1,24 +1,29 @@
-# codex-security.yaml — run with: semgrep scan --config codex-security.yaml <target>
-rules:
+# Codex Security Semgrep rules
+# Run: semgrep scan --config codex-security.yaml <target>
+# Example: semgrep scan --config codex-security.yaml .
 
-# ═══════════ EXTRACT ═══════════
+rules:
+  # ========================= INVENTORY / EXTRACT =========================
 
   - id: extract-urls
-    languages: [generic]          # works on ANY file: js, html, json, yaml, md
+    languages: [generic]
     severity: INFO
-    message: "URL found"
+    message: "External URL/reference found"
+    metadata: {category: inventory, confidence: HIGH}
     pattern-regex: "https?://[A-Za-z0-9._~:/?#@!$&'()*+,;=%-]+"
 
   - id: extract-fetch-calls
     languages: [javascript, typescript]
     severity: INFO
-    message: "fetch → $URL"
+    message: "fetch() outbound request -> $URL"
+    metadata: {category: inventory, confidence: HIGH}
     pattern: fetch($URL, ...)
 
   - id: extract-axios-calls
     languages: [javascript, typescript]
     severity: INFO
-    message: "axios.$METHOD → $URL"
+    message: "Axios request: $METHOD -> $URL"
+    metadata: {category: inventory, confidence: HIGH}
     patterns:
       - pattern: $AXIOS.$METHOD($URL, ...)
       - metavariable-regex:
@@ -28,10 +33,32 @@ rules:
           metavariable: $METHOD
           regex: ^(get|post|put|patch|delete|head|options|request)$
 
+  - id: extract-xhr-calls
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "XMLHttpRequest endpoint: $METHOD -> $URL"
+    metadata: {category: inventory, confidence: HIGH}
+    pattern: $XHR.open($METHOD, $URL, ...)
+
+  - id: extract-websocket
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "WebSocket endpoint -> $URL"
+    metadata: {category: inventory, confidence: HIGH}
+    pattern: new WebSocket($URL, ...)
+
+  - id: extract-eventsource
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "EventSource/SSE endpoint -> $URL"
+    metadata: {category: inventory, confidence: HIGH}
+    pattern: new EventSource($URL, ...)
+
   - id: extract-config-surface
     languages: [javascript, typescript]
     severity: INFO
-    message: "Config/env read: $KEY"   # everything the app pulls from its environment
+    message: "Configuration/environment read: $KEY"
+    metadata: {category: inventory, confidence: HIGH}
     pattern-either:
       - pattern: process.env.$KEY
       - pattern: process.env[$KEY]
@@ -40,39 +67,54 @@ rules:
   - id: extract-express-routes
     languages: [javascript, typescript]
     severity: INFO
-    message: "Route $METHOD $PATH → $HANDLER"
+    message: "Express-style route: $METHOD $PATH -> $HANDLER"
+    metadata: {category: inventory, confidence: HIGH}
     patterns:
       - pattern: $APP.$METHOD($PATH, ..., $HANDLER)
       - metavariable-regex:
           metavariable: $METHOD
           regex: ^(get|post|put|patch|delete|all|options|head)$
 
-# ═══════════ AUDIT ═══════════
+  - id: extract-webstorage-writes
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Browser storage write: $STORE.setItem($KEY, ...)"
+    metadata: {category: inventory, confidence: HIGH}
+    patterns:
+      - pattern: $STORE.setItem($KEY, $VALUE)
+      - metavariable-regex:
+          metavariable: $STORE
+          regex: ^(localStorage|sessionStorage)$
+
+  # ========================= DIRECT AUDIT =========================
 
   - id: audit-xss-sinks
     languages: [javascript, typescript]
     severity: ERROR
-    metadata: {cwe: "CWE-79", owasp: "A03:2021 Injection"}
-    message: "XSS sink: assigning $VALUE to DOM HTML. If it can contain user/AI/tool output, use textContent or sanitize with DOMPurify."
+    message: "Potential XSS sink. Prefer textContent for text, or sanitize trusted markup before insertion."
+    metadata: {category: security, cwe: "CWE-79", confidence: MEDIUM}
     pattern-either:
       - pattern: $EL.innerHTML = $VALUE
       - pattern: $EL.outerHTML = $VALUE
       - pattern: $EL.insertAdjacentHTML(..., $VALUE)
       - pattern: document.write($VALUE)
+      - pattern: document.writeln($VALUE)
 
   - id: audit-eval-family
     languages: [javascript, typescript]
     severity: ERROR
-    metadata: {cwe: "CWE-95"}
-    message: "Code executed from strings — untrusted input here is RCE."
+    message: "Dynamic code execution detected. Never pass untrusted input to eval/Function."
+    metadata: {category: security, cwe: "CWE-95", confidence: HIGH}
     pattern-either:
       - pattern: eval($VALUE)
       - pattern: new Function(...)
+      - pattern: Function(...)
 
   - id: audit-string-timers
     languages: [javascript, typescript]
     severity: WARNING
-    message: "String argument to setTimeout/setInterval is eval in disguise."
+    message: "String-based timer executes code. Pass a function instead of a string."
+    metadata: {category: security, cwe: "CWE-95", confidence: HIGH}
     pattern-either:
       - pattern: setTimeout("...", ...)
       - pattern: setInterval("...", ...)
@@ -80,73 +122,200 @@ rules:
   - id: audit-hardcoded-secrets
     languages: [generic]
     severity: ERROR
-    metadata: {cwe: "CWE-798"}
-    message: "Possible hardcoded credential — move to env/secret store; rotate if ever committed."
-    pattern-regex: "(?i)\\b(api[_-]?key|secret|access[_-]?token|auth[_-]?token|password|client[_-]?secret)\\b[\\\"'\\s:=]{1,4}[\\\"'][A-Za-z0-9_\\-]{16,}[\\\"']"
+    message: "Possible hardcoded credential. Move it to a secret store/environment variable and rotate it if committed."
+    metadata: {category: secrets, cwe: "CWE-798", confidence: MEDIUM}
+    pattern-regex: "(?i)\\b(api[_-]?key|secret|access[_-]?token|auth[_-]?token|password|passwd|client[_-]?secret)\\b[\\"'\\s:=]{1,8}[\\"'][A-Za-z0-9_./+\\-=]{16,}[\\"']"
+
+  - id: audit-provider-tokens
+    languages: [generic]
+    severity: ERROR
+    message: "Possible provider credential/token found in source. Remove it from source/history and rotate it."
+    metadata: {category: secrets, cwe: "CWE-798", confidence: HIGH}
+    pattern-regex: "(gh[pousr]_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|AIza[0-9A-Za-z_-]{30,})"
 
   - id: audit-private-key
     languages: [generic]
     severity: ERROR
-    message: "Private key material in source. Remove from git history and rotate."
-    pattern-regex: "-----BEGIN [A-Z ]*PRIVATE KEY-----"
-
-  - id: audit-sql-concat
-    languages: [javascript, typescript]
-    severity: ERROR
-    metadata: {cwe: "CWE-89"}
-    message: "SQL built by interpolation/concatenation — use parameterized queries or the ORM builder."
-    patterns:
-      - pattern-either:
-          - pattern: $Q(`...${$X}...`)
-          - pattern: $Q(... + $X + ...)
-      - metavariable-regex:
-          metavariable: $Q
-          regex: (?i).*(query|execute|exec|raw).*
+    message: "Private-key material found in source. Remove it from Git history and rotate/revoke the key."
+    metadata: {category: secrets, cwe: "CWE-321", confidence: HIGH}
+    pattern-regex: "-----BEGIN ([A-Z0-9 ]+ )?PRIVATE KEY-----"
 
   - id: audit-postmessage-wildcard
     languages: [javascript, typescript]
     severity: WARNING
-    message: "postMessage targetOrigin '*' — any window can read this. Pin to an origin allowlist."
+    message: "postMessage targetOrigin is '*'. Pin messages to an explicit trusted origin."
+    metadata: {category: security, cwe: "CWE-346", confidence: HIGH}
     pattern: $X.postMessage($DATA, "*")
+
+  - id: audit-message-listener
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "message event handler found. Verify event.origin against an allowlist before trusting event.data."
+    metadata: {category: security, cwe: "CWE-346", confidence: LOW}
+    pattern-either:
+      - pattern: window.addEventListener("message", $HANDLER, ...)
+      - pattern: addEventListener("message", $HANDLER, ...)
 
   - id: audit-tls-disabled
     languages: [javascript, typescript]
     severity: ERROR
-    metadata: {cwe: "CWE-295"}
-    message: "TLS verification disabled — MITM risk. Never ship this."
+    message: "TLS certificate verification is disabled."
+    metadata: {category: security, cwe: "CWE-295", confidence: HIGH}
     pattern-either:
-      - pattern: rejectUnauthorized: false
-      - pattern: $ENV.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+      - pattern: '{..., rejectUnauthorized: false, ...}'
+      - pattern: process.env.NODE_TLS_REJECT_UNAUTHORIZED = "0"
 
   - id: audit-weak-hash
     languages: [javascript, typescript]
     severity: WARNING
-    metadata: {cwe: "CWE-327"}
-    message: "MD5/SHA-1 broken for security use — SHA-256+, argon2/bcrypt for passwords."
+    message: "Weak hash algorithm used. MD5/SHA-1 are unsuitable for security-sensitive hashing."
+    metadata: {category: security, cwe: "CWE-327", confidence: HIGH}
     pattern-either:
-      - pattern: crypto.createHash("md5")
-      - pattern: crypto.createHash("sha1")
+      - pattern: $CRYPTO.createHash("md5")
+      - pattern: $CRYPTO.createHash("sha1")
+
+  - id: audit-insecure-random
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Math.random() is not cryptographically secure; do not use it for security tokens or reset codes."
+    metadata: {category: security, cwe: "CWE-338", confidence: LOW}
+    pattern: Math.random()
 
   - id: audit-token-in-webstorage
     languages: [javascript, typescript]
     severity: WARNING
-    message: "Token/secret in Web Storage — any XSS can exfiltrate it. Prefer memory or httpOnly cookies."
+    message: "Credential-like data appears to be stored in Web Storage, which is readable by JavaScript running in the page."
+    metadata: {category: security, cwe: "CWE-922", confidence: MEDIUM}
     patterns:
       - pattern-either:
           - pattern: localStorage.setItem($KEY, $VALUE)
           - pattern: sessionStorage.setItem($KEY, $VALUE)
       - metavariable-regex:
-          metavariable: $VALUE
-          regex: (?i).*(token|jwt|secret|apikey|api_key|password).*
+          metavariable: $KEY
+          regex: (?i).*(token|jwt|secret|api.?key|password|auth|session).*
 
-  - id: audit-open-redirect
+  - id: audit-cors-wildcard
     languages: [javascript, typescript]
     severity: WARNING
-    metadata: {cwe: "CWE-601"}
-    message: "Redirect target from external input — validate against an allowlist first."
-    patterns:
+    message: "Wildcard CORS origin found. Confirm that public cross-origin access is intentional."
+    metadata: {category: security, cwe: "CWE-942", confidence: MEDIUM}
+    pattern-either:
+      - pattern: 'cors({..., origin: "*", ...})'
+      - pattern: $RES.setHeader("Access-Control-Allow-Origin", "*")
+      - pattern: $RES.header("Access-Control-Allow-Origin", "*")
+
+  - id: audit-cookie-no-options
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Cookie set without visible security options. Review httpOnly, secure, and sameSite."
+    metadata: {category: security, cwe: "CWE-614", confidence: LOW}
+    pattern: $RES.cookie($NAME, $VALUE)
+
+  - id: audit-node-child-process-exec
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Shell command execution found. Avoid shell execution when possible and never interpolate untrusted input."
+    metadata: {category: security, cwe: "CWE-78", confidence: MEDIUM}
+    pattern-either:
+      - pattern: child_process.exec($CMD, ...)
+      - pattern: child_process.execSync($CMD, ...)
+      - pattern: $CP.exec($CMD, ...)
+      - pattern: $CP.execSync($CMD, ...)
+
+  - id: audit-dangerous-deserialization
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Potentially dangerous deserialization API. Never deserialize untrusted data with unsafe serializers."
+    metadata: {category: security, cwe: "CWE-502", confidence: MEDIUM}
+    pattern-either:
+      - pattern: serialize.unserialize($DATA)
+      - pattern: nodeSerialize.unserialize($DATA)
+      - pattern: $SERIALIZER.unserialize($DATA)
+
+  # ========================= TAINT AUDIT =========================
+
+  - id: audit-tainted-browser-xss
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Browser-controlled input appears to reach an HTML execution sink."
+    metadata: {category: security, cwe: "CWE-79", confidence: HIGH}
+    pattern-sources:
       - pattern-either:
-          - pattern: $RES.redirect($URL)
-          - pattern: window.location.href = $URL
-          - pattern: location.href = $URL
-      - pattern-not: $RES.redirect("/...")
+          - pattern: location.hash
+          - pattern: location.search
+          - pattern: document.URL
+          - pattern: document.documentURI
+          - pattern: document.referrer
+          - pattern: window.name
+          - pattern: $PARAMS.get(...)
+    pattern-sanitizers:
+      - pattern-either:
+          - pattern: DOMPurify.sanitize(...)
+          - pattern: $PURIFY.sanitize(...)
+    pattern-sinks:
+      - pattern-either:
+          - pattern: $EL.innerHTML = $SINK
+          - pattern: $EL.outerHTML = $SINK
+          - pattern: $EL.insertAdjacentHTML(..., $SINK)
+          - pattern: document.write($SINK)
+
+  - id: audit-tainted-express-redirect
+    mode: taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Request-controlled input appears to reach a redirect. Validate the destination against a strict allowlist."
+    metadata: {category: security, cwe: "CWE-601", confidence: HIGH}
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.query.$X
+          - pattern: $REQ.query[$X]
+          - pattern: $REQ.body.$X
+          - pattern: $REQ.body[$X]
+          - pattern: $REQ.params.$X
+          - pattern: $REQ.params[$X]
+    pattern-sinks:
+      - pattern: $RES.redirect($SINK)
+
+  - id: audit-tainted-server-ssrf
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Request-controlled data appears to determine an outbound URL. Validate scheme and host against an allowlist."
+    metadata: {category: security, cwe: "CWE-918", confidence: MEDIUM}
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.query.$X
+          - pattern: $REQ.query[$X]
+          - pattern: $REQ.body.$X
+          - pattern: $REQ.body[$X]
+          - pattern: $REQ.params.$X
+          - pattern: $REQ.params[$X]
+    pattern-sinks:
+      - pattern-either:
+          - pattern: fetch($SINK, ...)
+          - pattern: axios.get($SINK, ...)
+          - pattern: axios.post($SINK, ...)
+          - pattern: $HTTP.get($SINK, ...)
+          - pattern: $HTTPS.get($SINK, ...)
+
+  - id: audit-tainted-command-exec
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Request-controlled input appears to reach shell execution."
+    metadata: {category: security, cwe: "CWE-78", confidence: HIGH}
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.query.$X
+          - pattern: $REQ.query[$X]
+          - pattern: $REQ.body.$X
+          - pattern: $REQ.body[$X]
+          - pattern: $REQ.params.$X
+          - pattern: $REQ.params[$X]
+    pattern-sinks:
+      - pattern-either:
+          - pattern: child_process.exec($SINK, ...)
+          - pattern: child_process.execSync($SINK, ...)
+          - pattern: $CP.exec($SINK, ...)
+          - pattern: $CP.execSync($SINK, ...)
