@@ -5,6 +5,24 @@ static analysis when installed; Frida remains an explicitly authorized attach-on
 runtime evidence source and is never required for ordinary extraction.
 """
 MODULES=[
+ {"id":"python","mode":"python-capability","purpose":"Python workbench capability: python."},
+ {"id":"linux","mode":"python-capability","purpose":"Python workbench capability: linux."},
+ {"id":"host","mode":"python-capability","purpose":"Python workbench capability: host."},
+ {"id":"pyconverter","mode":"python-capability","purpose":"Python workbench capability: pyconverter."},
+ {"id":"pyinverter","mode":"python-capability","purpose":"Python workbench capability: pyinverter."},
+ {"id":"pyheader","mode":"python-capability","purpose":"Python workbench capability: pyheader."},
+ {"id":"pytrace","mode":"python-capability","purpose":"Python workbench capability: pytrace."},
+ {"id":"pylink","mode":"python-capability","purpose":"Python workbench capability: pylink."},
+ {"id":"pyurls","mode":"python-capability","purpose":"Python workbench capability: pyurls."},
+ {"id":"pydecorder","mode":"python-capability","purpose":"Python workbench capability: pydecorder."},
+ {"id":"pyencorder","mode":"python-capability","purpose":"Python workbench capability: pyencorder."},
+ {"id":"pylayer","mode":"python-capability","purpose":"Python workbench capability: pylayer."},
+ {"id":"pylist","mode":"python-capability","purpose":"Python workbench capability: pylist."},
+ {"id":"pyghidra","mode":"python-capability","purpose":"Python workbench capability: pyghidra."},
+ {"id":"pyfrida","mode":"python-capability","purpose":"Python workbench capability: pyfrida."},
+ {"id":"pynano","mode":"python-capability","purpose":"Python workbench capability: pynano."},
+ {"id":"pyupdate","mode":"python-capability","purpose":"Python workbench capability: pyupdate."},
+ {"id":"pyupgrade","mode":"python-capability","purpose":"Python workbench capability: pyupgrade."},
  {"id":"pypath","mode":"static-python-graph","purpose":"Map Python paths, imports, entry points and subprocess launch sites without importing target code."},
  {"id":"exfallback","mode":"bot-coordinator","purpose":"Continue unresolved EX4/EX5 diagnosis across available evidence bots and request optional evidence."},
  {"id":"exevidence","mode":"evidence-request","purpose":"Show useful optional evidence for an unresolved EX4/EX5 case."},
@@ -103,6 +121,7 @@ MODULES=[
 ]
 
 ALIASES={
+ "/python":"python", "/linux":"linux", "/host":"host", "/pyconverter":"pyconverter", "/pyinverter":"pyinverter", "/pyheader":"pyheader", "/pytrace":"pytrace", "/pylink":"pylink", "/pyurls":"pyurls", "/pydecorder":"pydecorder", "/pyencorder":"pyencorder", "/pylayer":"pylayer", "/pylist":"pylist", "/pyghidra":"pyghidra", "/pyfrida":"pyfrida", "/pynano":"pynano", "/pyupdate":"pyupdate", "/pyupgrade":"pyupgrade",
  "/pypath":"pypath","/pyprocess":"pypath","/pyusage":"pypath","/pyscript":"pypath",
  "/exfallback":"exfallback","/exbots":"exfallback","/autofallback":"exfallback","/exevidence":"exevidence","/giveevidence":"exevidence",
  "/exproblem":"exproblem","/ex4problem":"exproblem","/ex5problem":"exproblem","/exdiagnose":"exproblem","/exaskmt5":"exaskmt5",
