@@ -5,6 +5,11 @@ static analysis when installed; Frida remains an explicitly authorized attach-on
 runtime evidence source and is never required for ordinary extraction.
 """
 MODULES=[
+ {"id":"dex2smali","mode":"convert","purpose":"DEX to Smali representation."},
+ {"id":"smali2dex","mode":"convert","purpose":"Smali to DEX representation."},
+ {"id":"dex2java","mode":"reconstruct","purpose":"DEX to reconstructed Java source."},
+ {"id":"smali2java","mode":"reconstruct","purpose":"Smali to reconstructed Java source."},
+ {"id":"androidconvert","mode":"reference","purpose":"Android format conversion matrix."},
  {"id":"dex","mode":"static","purpose":"DEX header/table evidence."},
  {"id":"class","mode":"static","purpose":"Java class header/constant-pool evidence."},
  {"id":"jar","mode":"static","purpose":"JAR package inventory."},
@@ -55,6 +60,7 @@ MODULES=[
 ]
 
 ALIASES={
+ "/dex2smali":"dex2smali","/smali2dex":"smali2dex","/dex2java":"dex2java","/smali2java":"smali2java","/androidconvert":"androidconvert",
  "/*.dex":"dex","/*.class":"class","/*.jar":"jar","/*.apk":"apk","/*.aab":"aab","/*.wasm":"wasm",
  "/*.db":"sqlite","/*.sqlite":"sqlite","/*.sqlite3":"sqlite","/*.json":"json","/*.pb":"protobuf","/*.protobuf":"protobuf",
  "/*.pak":"pak","/*.img":"img","/*.iso":"iso",
