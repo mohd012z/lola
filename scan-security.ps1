@@ -7,14 +7,35 @@ param(
   [string]$UrlReport="url-report.json",
   [string]$ModeReport="scan-modes.json",
   [string]$CodeReport="code-analysis.json",
-  [ValidateSet("360","stepview","protocol","protocal","hidden","deep-dive","deepdive","securitycheck","anonymous","anonymus","extraction","codesummary","codeview","codepassword","codestring","codetransparent","codemodification","codefallback","codeurls","codeencryption","hiddenmode","deep-code","deep-dive-code","deep-dive code","/360","/stepview","/protocol","/protocal","/hidden","/deep-dive","/deepdive","/securitycheck","/anonymous","/anonymus","/extraction","/codesummary","/codeview","/codepassword","/codestring","/codetransparent","/codemodification","/codefallback","/codeurls","/codeencryption","/hiddenmode","/deep-code","/deep-dive-code","/deep-dive code")]
+  [string]$NetworkReport="network-analysis.json",
+  [string]$EventReport="scan-events.json",
+  [ValidateSet("360","stepview","protocol","protocal","hidden","deep-dive","deepdive","securitycheck","anonymous","anonymus","extraction","codesummary","codeview","codepassword","codestring","codetransparent","codemodification","codefallback","codeurls","codeencryption","hiddenmode","deep-code","deep-dive-code","deep-dive code","deep-network","trace","route","map","visible","realip","cctv","normal","/360","/stepview","/protocol","/protocal","/hidden","/deep-dive","/deepdive","/securitycheck","/anonymous","/anonymus","/extraction","/codesummary","/codeview","/codepassword","/codestring","/codetransparent","/codemodification","/codefallback","/codeurls","/codeencryption","/hiddenmode","/deep-code","/deep-dive-code","/deep-dive code","/deep-network","/trace","/route","/map","/visible","/realip","/cctv","/normal")]
   [string]$Mode="/360",
   [switch]$ResolveUrls,
+  [switch]$LiveMonitor,
+  [int]$MonitorPort=8765,
   [switch]$Strict,
   [switch]$NoOpen
 )
 
 $ErrorActionPreference = "Stop"
+$script:ScanEvents = @()
+$script:MonitorProcess = $null
+
+function Write-ScanEvent([string]$Stage,[string]$Message,[string]$Level="info",[string]$Status="running") {
+  $script:ScanEvents += [PSCustomObject]@{
+    time = [DateTime]::UtcNow.ToString("o")
+    stage = $Stage
+    message = $Message
+    level = $Level
+  }
+  [PSCustomObject]@{
+    status = $Status
+    currentStage = $Stage
+    updatedUtc = [DateTime]::UtcNow.ToString("o")
+    events = $script:ScanEvents
+  } | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $EventReport -Encoding UTF8
+}
 
 function Fail([string]$Message) {
   Write-Host "[ERROR] $Message" -ForegroundColor Red
@@ -23,6 +44,8 @@ function Fail([string]$Message) {
 
 if (-not (Test-Path -LiteralPath $Target)) { Fail "Target does not exist: $Target" }
 if (-not (Test-Path -LiteralPath $Config)) { Fail "Config does not exist: $Config" }
+
+Write-ScanEvent "start" "Scan requested in mode $Mode" "info" "running"
 
 $Semgrep = Get-Command semgrep -ErrorAction SilentlyContinue
 if (-not $Semgrep) { Fail "Install Semgrep with: python -m pip install semgrep" }
@@ -69,6 +92,7 @@ Write-Host "Codex Security - Target Discovery" -ForegroundColor Cyan
 Write-Host "Target : $TargetPath"
 Write-Host "Config : $ConfigPath"
 Write-Host "Files  : $($Files.Count) candidate source/config files"
+Write-ScanEvent "target-discovery" "Discovered $($Files.Count) candidate source/config files" "info" "running"
 
 if ($Files.Count -gt 0) {
   Write-Host ""
@@ -113,8 +137,22 @@ $ManifestObject = [PSCustomObject]@{
 }
 $ManifestObject | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Manifest -Encoding UTF8
 Write-Host "MANIFEST: $((Resolve-Path -LiteralPath $Manifest).Path)" -ForegroundColor DarkCyan
+Write-ScanEvent "manifest" "Target manifest created with $($ManifestRows.Count) files" "info" "running"
 
 $Python = Get-Command python -ErrorAction SilentlyContinue
+
+if ($Mode -in @("cctv","/cctv")) { $LiveMonitor = $true }
+if ($LiveMonitor -and $Python -and (Test-Path -LiteralPath "network-monitor.html")) {
+  try {
+    $script:MonitorProcess = Start-Process -FilePath $Python.Source -ArgumentList @("-m","http.server",$MonitorPort,"--bind","127.0.0.1") -WorkingDirectory (Get-Location).Path -WindowStyle Hidden -PassThru
+    Start-Sleep -Milliseconds 700
+    Start-Process "http://127.0.0.1:$MonitorPort/network-monitor.html"
+    Write-ScanEvent "start" "Live network monitor opened on localhost:$MonitorPort" "info" "running"
+  } catch {
+    Write-Host "Live monitor could not start: $($_.Exception.Message)" -ForegroundColor Yellow
+  }
+}
+
 if ($Python -and (Test-Path -LiteralPath "resolve-urls.py")) {
   $UrlArgs = @("resolve-urls.py","--manifest",$Manifest,"--output",$UrlReport)
   if ($ResolveUrls) { $UrlArgs += "--probe" }
@@ -124,6 +162,7 @@ if ($Python -and (Test-Path -LiteralPath "resolve-urls.py")) {
     if (-not $ResolveUrls) {
       Write-Host "          Static URL inventory only. Add -ResolveUrls for live final-URL/redirect verification." -ForegroundColor DarkGray
     }
+    Write-ScanEvent "url-map" "URL inventory generated$(if ($ResolveUrls) { ' with live public resolution' } else { '' })" "info" "running"
   }
 }
 
@@ -131,6 +170,7 @@ if ($Python -and (Test-Path -LiteralPath "analyze-code.py")) {
   & $Python.Source "analyze-code.py" --manifest $Manifest --urls $UrlReport --output $CodeReport
   if (Test-Path -LiteralPath $CodeReport) {
     Write-Host "CODE    : $((Resolve-Path -LiteralPath $CodeReport).Path)" -ForegroundColor DarkCyan
+    Write-ScanEvent "code-analysis" "Deep code analysis generated" "info" "running"
   }
 }
 
@@ -140,8 +180,10 @@ $argsList += $TargetPath
 
 Write-Host ""
 Write-Host "Running Semgrep..." -ForegroundColor Cyan
+Write-ScanEvent "semgrep" "Semgrep security scan running" "info" "running"
 & $Semgrep.Source @argsList
 $ExitCode = $LASTEXITCODE
+Write-ScanEvent "semgrep" "Semgrep completed with exit code $ExitCode" $(if ($ExitCode -eq 0) { "info" } else { "warning" }) "running"
 
 if (Test-Path -LiteralPath $Report) {
   try {
@@ -164,22 +206,38 @@ if (Test-Path -LiteralPath $Report) {
       & $Python.Source "build-modes.py" --input $Report --manifest $Manifest --urls $UrlReport --output $ModeReport
       if (Test-Path -LiteralPath $ModeReport) {
         Write-Host "MODES   : $((Resolve-Path -LiteralPath $ModeReport).Path)" -ForegroundColor DarkCyan
+        Write-ScanEvent "mode-analysis" "Security/privacy mode data generated" "info" "running"
+      }
+    }
+
+    if ($Python -and (Test-Path -LiteralPath "analyze-network.py")) {
+      & $Python.Source "analyze-network.py" --urls $UrlReport --semgrep $Report --code $CodeReport --manifest $Manifest --output $NetworkReport
+      if (Test-Path -LiteralPath $NetworkReport) {
+        Write-Host "NETWORK : $((Resolve-Path -LiteralPath $NetworkReport).Path)" -ForegroundColor DarkCyan
+        Write-ScanEvent "network-analysis" "Network trace, route, map, visibility and real-IP analysis generated" "info" "running"
       }
     }
 
     if ($Python -and (Test-Path -LiteralPath "build-report.py")) {
-      & $Python.Source "build-report.py" --input $Report --manifest $Manifest --urls $UrlReport --modes $ModeReport --code $CodeReport --mode $Mode --output $HtmlReport --target $TargetPath
+      & $Python.Source "build-report.py" --input $Report --manifest $Manifest --urls $UrlReport --modes $ModeReport --code $CodeReport --network $NetworkReport --mode $Mode --output $HtmlReport --target $TargetPath
       if (Test-Path -LiteralPath $HtmlReport) {
         $HtmlPath = (Resolve-Path -LiteralPath $HtmlReport).Path
         Write-Host "VISUAL  : $HtmlPath" -ForegroundColor Green
-        if (-not $NoOpen) { Start-Process $HtmlPath }
+        Write-ScanEvent "report" "Visual report generated" "info" "running"
+        if (-not $NoOpen -and -not $LiveMonitor) { Start-Process $HtmlPath }
       }
     } else {
       Write-Host "Visual report skipped: python or build-report.py was not found." -ForegroundColor Yellow
     }
   } catch {
     Write-Host "Could not summarize/build report: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-ScanEvent "report" "Report generation failed: $($_.Exception.Message)" "error" "error"
   }
 }
 
+Write-ScanEvent "complete" "Scan completed. Open semgrep-report.html for final analysis." "info" "complete"
+if ($script:MonitorProcess -and -not $script:MonitorProcess.HasExited) {
+  Start-Sleep -Milliseconds 1200
+  Stop-Process -Id $script:MonitorProcess.Id -Force -ErrorAction SilentlyContinue
+}
 exit $ExitCode
