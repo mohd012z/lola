@@ -1890,3 +1890,42 @@ Store JADX source in Library   -> decompiled/
 ```
 
 The lightweight target record and scan history are saved independently from these larger optional artifacts.
+## Deep Android Code Reader modes
+
+The Android mobile reader now exposes these target-focused buttons:
+
+```text
+/deep-dive main
+/code360
+/codestring
+/codeview
+/coderemove
+/codetransparent
+/trace
+/routes
+/map
+/codebrains
+/targetcodes
+```
+
+`/deep-dive main` is the master view for the selected target: identity, code counts, strings, permissions, components, URLs/APIs, WebView/crypto signals, findings, routes and flow counts.
+
+`/code360` combines reader summary and Code Brains architecture metrics.
+
+`/codestring` shows redacted strings collected from DEX, APK text resources and JADX/source previews.
+
+`/codeview` shows bounded redacted JADX/source previews and falls back to resource previews if decompiled source is unavailable.
+
+`/codetransparent` shows the static logical relationship graph from APK entries to URLs, APIs, WebView and crypto signals. It does not execute target code.
+
+`/trace` shows entry/source -> URL/API/host/signal relationships from the static APK evidence.
+
+`/routes` combines Android manifest components with URL/API destination routes. This is an application/static route view, not an external network traceroute.
+
+`/map` displays the logical target/component/entry/URL/API/host graph.
+
+`/codebrains` is a heuristic architecture summary containing source-file/class/method counts, Android API/reference counts, extensions, source prefixes, hosts, WebView/crypto signals and risk severity counts. It does not execute or emulate the APK.
+
+`/targetcodes` is the selected APK's code inventory: source files/classes/methods, resources, DEX files, native libraries and available analysis sections.
+
+`/coderemove` requires confirmation and removes only Lola-generated Android Code Reader/JADX artifacts for the selected target. It does not remove the original APK, analysis/report history, application/device/browser/security logs, or unrelated target data.
