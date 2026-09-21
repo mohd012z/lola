@@ -38,6 +38,7 @@ def main():
     p.add_argument("--urls", default="url-report.json")
     p.add_argument("--modes", default="scan-modes.json")
     p.add_argument("--code", default="code-analysis.json")
+    p.add_argument("--network", default="network-analysis.json")
     p.add_argument("--mode", default="/360")
     args = p.parse_args()
 
@@ -100,6 +101,17 @@ def main():
         except Exception:
             pass
 
+    network_data = {
+        "summary": {}, "trace": {"items":[]}, "route": {"items":[]},
+        "map": {"nodes":[],"edges":[]}, "visible": {}, "realip": {}, "normal": {}
+    }
+    network_path = Path(args.network)
+    if network_path.exists():
+        try:
+            network_data = json.loads(network_path.read_text(encoding="utf-8-sig"))
+        except Exception:
+            pass
+
     sev = Counter(x["severity"] for x in findings)
     cats = Counter(x["category"] for x in findings)
     surfaces = Counter(x["surface"] for x in findings)
@@ -128,6 +140,7 @@ def main():
         "urlData": url_data,
         "modeData": mode_data,
         "codeData": code_data,
+        "networkData": network_data,
         "initialMode": args.mode,
         "findings": findings,
     }
@@ -181,6 +194,27 @@ details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{displa
     <button class="modebtn" data-mode="/protocol">/protocol</button>
     <button class="modebtn" data-mode="/hidden">/hidden</button>
     <button class="modebtn" data-mode="/360">/360</button>
+  </div>
+
+  <div class="card" style="margin-top:10px">
+    <div class="section-head"><h2>Network analysis commands</h2><span class="sub">Application-layer trace; no external port scan</span></div>
+    <div class="modebar" style="margin:0">
+      <button class="modebtn" data-mode="/deep-network">/deep-dive network</button>
+      <button class="modebtn" data-mode="/trace">/trace</button>
+      <button class="modebtn" data-mode="/route">/route</button>
+      <button class="modebtn" data-mode="/map">/map</button>
+      <button class="modebtn" data-mode="/visible">/visible</button>
+      <button class="modebtn" data-mode="/realip">/realip</button>
+      <button class="modebtn" data-mode="/cctv">/cctv</button>
+      <button class="modebtn" data-mode="/normal">/normal</button>
+    </div>
+  </div>
+
+  <div class="section card modepanel" id="networkModePanel">
+    <div class="section-head"><h2 id="networkModeTitle">Network analysis</h2><span class="sub" id="networkModeSubtitle"></span></div>
+    <div class="url-summary" id="networkModeSummary"></div>
+    <div class="mode-list" id="networkModeList"></div>
+    <div class="note" id="networkModeNote"></div>
   </div>
 
   <div class="card" style="margin-top:10px">
@@ -329,12 +363,83 @@ const DATA=JSON.parse(document.getElementById('semgrep-data').textContent);
 const $=id=>document.getElementById(id);
 const MODEDATA=DATA.modeData||{stepview:{},protocol:{},hidden:{},360:{}};
 const CODEDATA=DATA.codeData||{};
+const NETDATA=DATA.networkData||{};
 
 function miniMetric(parent,label,value){
   const d=document.createElement('div');d.className='detail';
   const b=document.createElement('b');b.textContent=label;
   const s=document.createElement('span');s.textContent=String(value??'-');
   d.append(b,s);parent.appendChild(d);
+}
+
+
+const NETWORK_MODES=new Set(['/deep-network','/trace','/route','/map','/visible','/realip','/cctv','/normal']);
+let CURRENT_NETWORK_MODE='/normal';
+
+function netItem(parent,title,meta,body){
+  const d=document.createElement('div');d.className='mode-item';
+  if(title){const h=document.createElement('strong');h.textContent=title;d.appendChild(h)}
+  if(meta){const m=document.createElement('div');m.className='meta';m.textContent=meta;d.appendChild(m)}
+  if(body){const b=document.createElement('div');b.textContent=body;d.appendChild(b)}
+  parent.appendChild(d);
+}
+function renderNetworkMode(mode=CURRENT_NETWORK_MODE){
+  CURRENT_NETWORK_MODE=mode;
+  const titleMap={
+    '/deep-network':'/deep-dive network — Combined network analysis',
+    '/trace':'/trace — URL/DNS/redirect/TLS trace',
+    '/route':'/route — Application route map',
+    '/map':'/map — Logical network graph',
+    '/visible':'/visible — Publicly visible source/resolution surface',
+    '/realip':'/realip — Resolved public IPs and discovery references',
+    '/cctv':'/cctv — Live process monitor',
+    '/normal':'/normal — Compact network view'
+  };
+  $('networkModeTitle').textContent=titleMap[mode]||'Network analysis';
+  $('networkModeSubtitle').textContent='network-analysis.json';
+  const sum=$('networkModeSummary');sum.replaceChildren();
+  const list=$('networkModeList');list.replaceChildren();
+  const s=NETDATA.summary||{};
+  miniMetric(sum,'URLs',s.urls||0);miniMetric(sum,'Domains',s.domains||0);
+  miniMetric(sum,'Public IPs',s.publicIps||0);miniMetric(sum,'Non-public IPs',s.nonPublicIps||0);
+  miniMetric(sum,'Redirect hops',s.redirectHops||0);miniMetric(sum,'TLS endpoints',s.tlsEndpoints||0);
+  miniMetric(sum,'App routes',s.appRoutes||0);miniMetric(sum,'Network findings',s.networkFindings||0);
+
+  if(mode==='/trace'){
+    (NETDATA.trace?.items||[]).forEach(x=>{
+      const chain=[x.sourceUrl,...(x.redirects||[]).map(r=>r.to),x.finalUrl&&x.finalUrl!==x.sourceUrl?x.finalUrl:null].filter(Boolean);
+      netItem(list,x.host||'URL',(x.destinationClass||'')+' · status '+(x.status||'-')+' · TLS '+(x.tls?.version||'-'),
+        chain.join(' → ')+' · IPs '+((x.resolvedIps||[]).join(', ')||'-'));
+    });
+  } else if(mode==='/route'){
+    (NETDATA.route?.items||[]).forEach(x=>netItem(list,(x.method||'')+' '+(x.route||''),(x.path||'')+':'+(x.line||'?'),''));
+  } else if(mode==='/map'){
+    (NETDATA.map?.nodes||[]).slice(0,350).forEach(x=>netItem(list,'Node · '+(x.kind||''),x.id||'',x.label||''));
+    (NETDATA.map?.edges||[]).slice(0,500).forEach(x=>netItem(list,'Edge · '+(x.label||'link'),(x.from||'')+' → '+(x.to||''),''));
+  } else if(mode==='/visible'){
+    (NETDATA.visible?.publicHosts||[]).forEach(x=>netItem(list,'Host '+x.host,'references '+x.references,''));
+    (NETDATA.visible?.publicIps||[]).forEach(x=>netItem(list,'Public IP '+x.ip,'references '+x.references,''));
+    (NETDATA.visible?.networkFindings||[]).forEach(x=>netItem(list,(x.severity||'INFO')+' · '+(x.surface||''),(x.path||'')+':'+(x.line||'?'),x.message||x.rule||''));
+  } else if(mode==='/realip'){
+    (NETDATA.realip?.resolvedPublicIps||[]).forEach(x=>netItem(list,'Resolved public IP '+x.ip,'references '+x.references,''));
+    (NETDATA.realip?.publicIpDiscoveryReferences||[]).forEach(x=>netItem(list,'Public-IP discovery service',x.host||'',x.sourceUrl||''));
+  } else if(mode==='/cctv'){
+    netItem(list,'Live monitor','network-monitor.html','Run the scanner with -LiveMonitor or -Mode /cctv to watch scan-events.json during the process.');
+    netItem(list,'Safety','No camera recording','The CCTV-style view shows scan stages and network evidence only.');
+  } else if(mode==='/deep-network'){
+    (NETDATA.trace?.items||[]).slice(0,80).forEach(x=>netItem(list,'Trace · '+(x.host||'URL'),'status '+(x.status||'-')+' · '+((x.resolvedIps||[]).join(', ')||'-'),x.sourceUrl||''));
+    (NETDATA.route?.items||[]).slice(0,80).forEach(x=>netItem(list,'Route · '+(x.method||'')+' '+(x.route||''),(x.path||'')+':'+(x.line||'?'),''));
+    (NETDATA.visible?.networkFindings||[]).slice(0,120).forEach(x=>netItem(list,'Finding · '+(x.surface||''),(x.path||'')+':'+(x.line||'?'),x.message||x.rule||''));
+  } else {
+    (NETDATA.trace?.items||[]).slice(0,20).forEach(x=>netItem(list,x.host||'URL','status '+(x.status||'-')+' · '+((x.resolvedIps||[]).join(', ')||'-'),x.sourceUrl||''));
+    (NETDATA.visible?.publicHosts||[]).slice(0,20).forEach(x=>netItem(list,'Host '+x.host,'references '+x.references,''));
+  }
+  $('networkModeNote').textContent =
+    mode==='/realip' ? (NETDATA.realip?.note||'') :
+    mode==='/visible' ? (NETDATA.visible?.note||'') :
+    mode==='/cctv' ? 'For a live view during scanning, use network-monitor.html through the localhost monitor.' :
+    'Network trace is application-layer: source → URL/route → DNS IP → redirect → final URL/TLS. It is not raw ICMP traceroute.';
+  if(!list.children.length) list.innerHTML='<div class="empty">No matching network data.</div>';
 }
 
 const CODE_MODES=new Set(['/deep-code','/extraction','/codesummary','/codeview','/codepassword','/codestring','/codetransparent','/codemodification','/codefallback','/codeurls','/codeencryption','/hiddenmode']);
@@ -537,6 +642,7 @@ function setMode(mode){
   if(normalized==='/deepdive') normalized='/deep-dive';
   if(normalized==='/anonymous') normalized='/anonymus';
   if(normalized==='/deep-dive code'||normalized==='/deep-dive-code') normalized='/deep-code';
+  if(normalized==='/deep-dive network'||normalized==='/deep-dive-network') normalized='/deep-network';
   document.querySelectorAll('.modebtn').forEach(b=>b.classList.toggle('active',b.dataset.mode===normalized));
   const map={
     '/deep-dive':'deepDivePanel','/securitycheck':'securityCheckPanel','/anonymus':'anonymousPanel',
@@ -544,11 +650,15 @@ function setMode(mode){
     '/deep-code':'codeModePanel','/extraction':'codeModePanel','/codesummary':'codeModePanel','/codeview':'codeModePanel',
     '/codepassword':'codeModePanel','/codestring':'codeModePanel','/codetransparent':'codeModePanel',
     '/codemodification':'codeModePanel','/codefallback':'codeModePanel','/codeurls':'codeModePanel',
-    '/codeencryption':'codeModePanel','/hiddenmode':'codeModePanel'
+    '/codeencryption':'codeModePanel','/hiddenmode':'codeModePanel',
+    '/deep-network':'networkModePanel','/trace':'networkModePanel','/route':'networkModePanel',
+    '/map':'networkModePanel','/visible':'networkModePanel','/realip':'networkModePanel',
+    '/cctv':'networkModePanel','/normal':'networkModePanel'
   };
   document.querySelectorAll('.modepanel').forEach(p=>p.classList.remove('active'));
   const panel=$(map[normalized]||'view360Panel');if(panel)panel.classList.add('active');
   if(CODE_MODES.has(normalized)){renderCodeMode(normalized)}
+  if(NETWORK_MODES.has(normalized)){renderNetworkMode(normalized)}
   if(normalized==='/protocol'){$('category').value='protocol';render()}
   else if(normalized==='/hidden'){$('category').value='hidden';render()}
   else if(normalized==='/anonymus'){$('category').value='privacy';render()}
