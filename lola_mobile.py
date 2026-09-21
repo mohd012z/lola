@@ -24,7 +24,7 @@ import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from lola_library import catalog, register_target, set_plan, complete_scan, list_targets, load_target, archive_artifacts, artifact_paths
+from lola_library import catalog, register_target, set_plan, complete_scan, list_targets, load_target, archive_artifacts, artifact_paths, remove_generated_code
 from android_code_reader import build_reader, search_reader
 
 ROOT = Path(__file__).resolve().parent
@@ -320,12 +320,19 @@ button,.btn,select,input[type=text]{border:1px solid var(--line);background:#132
   <div class="sub">Search manifest/permissions/components, DEX strings, APK resources and retained JADX source from the current target.</div>
   <input class="search" id="readerSearch" type="text" placeholder="Search class, method, URL, API, string, permission, WebView...">
   <div class="presetbar">
-    <button class="ghost" onclick="loadReader('overview')">Overview</button>
-    <button class="ghost" onclick="loadReader('source')">Source</button>
+    <button class="ghost" onclick="loadReader('main')">Deep-Dive Main</button>
+    <button class="ghost" onclick="loadReader('code360')">Code 360</button>
+    <button class="ghost" onclick="loadReader('strings')">Code Strings</button>
+    <button class="ghost" onclick="loadReader('codeview')">Code View</button>
+    <button class="ghost" onclick="loadReader('transparent')">Transparent</button>
+    <button class="ghost" onclick="loadReader('trace')">Trace</button>
+    <button class="ghost" onclick="loadReader('routes')">Routes</button>
+    <button class="ghost" onclick="loadReader('map')">Map</button>
+    <button class="ghost" onclick="loadReader('codebrains')">Code Brains</button>
+    <button class="ghost" onclick="loadReader('targetcodes')">Target Codes</button>
     <button class="ghost" onclick="loadReader('resources')">Resources</button>
-    <button class="ghost" onclick="loadReader('dex')">DEX Strings</button>
-    <button class="ghost" onclick="loadReader('urls')">URLs/API</button>
     <button class="ghost" onclick="loadReader('risk')">Findings</button>
+    <button class="danger" onclick="removeGeneratedCode()">Remove Generated</button>
   </div>
   <div class="libgrid" id="readerResults" style="margin-top:10px"></div>
 </div>
@@ -399,6 +406,19 @@ function renderCommandLibrary(){
     if(x.id.startsWith('/apk')){
       d.onclick=()=>{selectedMode=x.id;renderModes();window.scrollTo({top:0,behavior:'smooth'})};
       d.style.cursor='pointer';
+    } else {
+      const readerMap={
+        '/deep-dive main':'main','/code360':'code360','/codestring':'strings','/codeview':'codeview',
+        '/codetransparent':'transparent','/trace':'trace','/routes':'routes','/map':'map',
+        '/codebrains':'codebrains','/targetcodes':'targetcodes','/androidreader':'main',
+        '/readersource':'codeview','/readerresources':'resources','/readerdex':'dex'
+      };
+      if(readerMap[x.id]){
+        d.onclick=()=>{loadReader(readerMap[x.id]);$('readerCard').scrollIntoView({behavior:'smooth',block:'start'})};
+        d.style.cursor='pointer';
+      } else if(x.id==='/coderemove'){
+        d.onclick=removeGeneratedCode;d.style.cursor='pointer';
+      }
     }
     root.appendChild(d);
   });
@@ -478,12 +498,53 @@ function readerItem(root,title,meta,body){
   if(body){const x=document.createElement('div');x.style.whiteSpace='pre-wrap';x.style.wordBreak='break-word';x.textContent=body;d.appendChild(x)}
   root.appendChild(d);
 }
-async function loadReader(view='overview'){
+async function loadReader(view='main'){
   const data=await fetchReader(),root=$('readerResults');root.replaceChildren();
   if(!data){root.innerHTML='<div class="libitem sub">Reader not built for this target yet. Tick "Build Android Code Reader" and scan.</div>';return}
-  const s=data.summary||{};
-  $('readerSummary').textContent=(s.sourceFiles||0)+' source · '+(s.resourcePreviews||0)+' resources · '+(s.dexStrings||0)+' DEX strings';
-  if(view==='overview'){
+  const s=data.summary||{},sections=data.sections||{};
+  $('readerSummary').textContent=(s.sourceFiles||0)+' source · '+(s.resourcePreviews||0)+' resources · '+(s.dexStrings||0)+' DEX · '+(s.traceEdges||0)+' links';
+  if(view==='main'){
+    [
+      ['Target',s.package||'-','SHA-256 '+(s.sha256||'-')],
+      ['Code',String(s.sourceFiles||0)+' source files',(s.sourceClasses||0)+' classes · '+(s.sourceMethods||0)+' methods'],
+      ['Strings',String(s.codeStrings||0)+' indexed','DEX '+(s.dexStrings||0)+' · resources '+(s.resourcePreviews||0)],
+      ['Flow',String(s.traceEdges||0)+' links',String(s.routes||0)+' routes'],
+      ['Permissions',String(sections.permissions?.items?.length||0),'Sensitive '+String(sections.permissions?.sensitive?.length||0)],
+      ['Components',String(sections.components?.items?.length||0),'Exported '+String(sections.components?.exported?.length||0)],
+      ['Network',String(sections.urls?.items?.length||0)+' URLs',String(sections.api?.items?.length||0)+' API refs'],
+      ['Signals',String(sections.webview?.items?.length||0)+' WebView',String(sections.crypto?.items?.length||0)+' crypto'],
+      ['Findings',String(sections.risk?.items?.length||0),'Static review signals']
+    ].forEach(x=>readerItem(root,x[0],x[1],x[2]));
+  }else if(view==='code360'){
+    const brain=data.codeBrains||{};
+    Object.entries({...s,...brain}).forEach(([k,v])=>readerItem(root,k,'',typeof v==='object'?JSON.stringify(v,null,2):String(v)));
+  }else if(view==='strings'){
+    (data.codeStrings||[]).slice(0,250).forEach(x=>readerItem(root,x.value||'string',x.kind+' · '+(x.location||''),''));
+  }else if(view==='codeview'){
+    (data.sourceFiles||[]).slice(0,160).forEach(x=>readerItem(root,x.path,(x.lines||'?')+' lines · '+(x.extension||''),x.preview||'[JADX/source preview unavailable]'));
+    if(!root.children.length)(data.resources||[]).slice(0,120).forEach(x=>readerItem(root,x.path,(x.bytes||0)+' bytes',x.preview||''));
+  }else if(view==='transparent'){
+    const t=data.transparent||{};
+    (t.edges||[]).slice(0,250).forEach(x=>readerItem(root,x.relation||'link',(x.from||'')+' → '+(x.to||''),x.evidence||''));
+  }else if(view==='trace'){
+    (data.trace||[]).slice(0,250).forEach(x=>readerItem(root,x.relation||'trace',(x.from||'')+' → '+(x.to||''),x.evidence||''));
+  }else if(view==='routes'){
+    (data.routes||[]).slice(0,250).forEach(x=>readerItem(root,x.kind||'route',x.source||'',JSON.stringify(x,null,2)));
+  }else if(view==='map'){
+    const m=data.map||{};
+    readerItem(root,'Map summary',(m.nodes?.length||0)+' nodes · '+(m.edges?.length||0)+' edges','Logical static map; no target code is executed.');
+    (m.edges||[]).slice(0,250).forEach(x=>readerItem(root,x.relation||'edge',(x.from||'')+' → '+(x.to||''),x.evidence||''));
+  }else if(view==='codebrains'){
+    const b=data.codeBrains||{};
+    Object.entries(b).forEach(([k,v])=>readerItem(root,k,'',typeof v==='object'?JSON.stringify(v,null,2):String(v)));
+  }else if(view==='targetcodes'){
+    const t=data.targetCodes||{};
+    readerItem(root,'Source files',String(t.source?.length||0),JSON.stringify((t.source||[]).slice(0,120),null,2));
+    readerItem(root,'Resources',String(t.resources?.length||0),JSON.stringify((t.resources||[]).slice(0,120),null,2));
+    readerItem(root,'DEX files',String(t.dexFiles?.length||0),JSON.stringify(t.dexFiles||[],null,2));
+    readerItem(root,'Native libraries','',JSON.stringify(t.native||{},null,2));
+    readerItem(root,'Analysis sections','',JSON.stringify(t.analysisSections||[],null,2));
+  }else if(view==='overview'){
     Object.entries(s).forEach(([k,v])=>readerItem(root,k,'',typeof v==='object'?JSON.stringify(v):String(v)));
   }else if(view==='source'){
     (data.sourceFiles||[]).slice(0,120).forEach(x=>readerItem(root,x.path,(x.lines||'?')+' lines · '+(x.extension||''),x.preview||'[preview unavailable]'));
@@ -492,13 +553,21 @@ async function loadReader(view='overview'){
   }else if(view==='dex'){
     (data.dexStrings||[]).slice(0,180).forEach(x=>readerItem(root,x.value||'DEX string',(x.dex||'')+' @ '+(x.offset||0),''));
   }else if(view==='urls'){
-    const sections=data.sections||{};
     [...(sections.urls?.items||[]),...(sections.api?.items||[])].slice(0,180).forEach(x=>readerItem(root,x.url||x.preview||'URL/API',x.entry||'',JSON.stringify(x)));
   }else if(view==='risk'){
-    const sections=data.sections||{};
     (sections.risk?.items||[]).slice(0,180).forEach(x=>readerItem(root,(x.severity||'INFO')+' · '+(x.area||'finding'),x.message||'',typeof x.detail==='string'?x.detail:JSON.stringify(x.detail||{})));
   }
   if(!root.children.length)root.innerHTML='<div class="libitem sub">No entries for this reader view.</div>';
+}
+async function removeGeneratedCode(){
+  if(!targetId){alert('Select a target first.');return}
+  if(!confirm('Remove Lola-generated Android Code Reader and retained/generated JADX source for this target? The original APK, analysis/report history and external logs will not be deleted.'))return;
+  const r=await fetch('/api/reader/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetId})});
+  const j=await r.json();
+  if(!r.ok){alert(j.error||'Could not remove generated code');return}
+  $('readerResults').innerHTML='<div class="libitem sub">Generated reader/JADX artifacts removed for this target.</div>';
+  $('readerSummary').textContent='Generated code removed';
+  refreshTargets();
 }
 async function searchReader(){
   const q=$('readerSearch').value.trim(),root=$('readerResults');root.replaceChildren();
@@ -733,6 +802,27 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 th.start()
                 return self.send_json({"ok":True})
+            except Exception as exc:
+                return self.send_json({"error":str(exc)},500)
+
+        if path == "/api/reader/remove":
+            try:
+                length=int(self.headers.get("Content-Length","0"))
+                req=json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+                tid=str(req.get("targetId") or STATE.get("targetId") or "")
+                if not tid or not load_target(tid):
+                    return self.send_json({"error":"Target not found"},404)
+                result=remove_generated_code(tid)
+                working_reader=ROOT/"android-code-reader.json"
+                if working_reader.exists():
+                    try: working_reader.unlink()
+                    except Exception: pass
+                working_src=ROOT/".lola-apk"/"decompiled"
+                if working_src.exists():
+                    shutil.rmtree(working_src,ignore_errors=True)
+                set_state(reader="")
+                log("Removed Lola-generated reader/JADX artifacts for target "+tid)
+                return self.send_json({"ok":True,**result})
             except Exception as exc:
                 return self.send_json({"error":str(exc)},500)
 
