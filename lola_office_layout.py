@@ -1,7 +1,6 @@
 """Document-order Word renderer and richer Excel layout metadata for Lola."""
 from __future__ import annotations
 import html
-from lola_office_html_styles import data_uri if False else None
 
 def _tag(el):return el.tag.rsplit("}",1)[-1]
 
