@@ -125,6 +125,7 @@ FUNCTIONS = [
     {"id":"set_plan","group":"Library Function","label":"Save Target Plan","purpose":"Persist selected pre-scan checks, report mode and options","module":"lola_library.py","outputs":["target.json"]},
     {"id":"complete_scan","group":"Library Function","label":"Complete Scan","purpose":"Append scan history and summarize APK results","module":"lola_library.py","outputs":["target.json"]},
     {"id":"archive_artifacts","group":"Library Function","label":"Archive Artifacts","purpose":"Copy selected APK/analysis/report/reader/decompiled artifacts into the target folder","module":"lola_library.py","outputs":["target artifact folder"]},
+    {"id":"remove_generated_code","group":"Library Function","label":"Remove Generated Code","purpose":"Delete Lola-generated reader/JADX artifacts for one target without deleting the original APK, analysis/report history or external logs","module":"lola_library.py","outputs":[]},
     {"id":"analyze-apk.py","group":"Analyzer Function","label":"APK Analyzer","purpose":"Perform selected APK package/static-analysis checks with secret redaction","module":"analyze-apk.py","outputs":["apk-analysis.json"]},
     {"id":"build-apk-report.py","group":"Report Function","label":"APK Report Builder","purpose":"Create interactive APK HTML report","module":"build-apk-report.py","outputs":["apk-report.html"]},
     {"id":"android_code_reader.py","group":"Reader Function","label":"Android Code Reader Indexer","purpose":"Build searchable redacted Android code/resource/DEX library","module":"android_code_reader.py","outputs":["android-code-reader.json"]},
@@ -319,6 +320,28 @@ def archive_artifacts(
     rec["lastSeen"]=_now()
     save_target(rec)
     return stored
+
+def remove_generated_code(target_id: str) -> dict[str,Any]:
+    import shutil
+    rec=load_target(target_id)
+    if not rec:return {"removed":[],"missing":True}
+    removed=[]
+    paths=artifact_paths(target_id)
+    reader=Path(paths["reader"])
+    decompiled=Path(paths["decompiled"])
+    if reader.exists() and reader.is_file():
+        reader.unlink()
+        removed.append(str(reader))
+    if decompiled.exists() and decompiled.is_dir():
+        shutil.rmtree(decompiled,ignore_errors=True)
+        removed.append(str(decompiled))
+    outputs=rec.get("outputs",{})
+    for k in ["android-code-reader.json","reader","decompiled"]:
+        outputs.pop(k,None)
+    rec["outputs"]=outputs
+    rec["lastSeen"]=_now()
+    save_target(rec)
+    return {"removed":removed,"targetId":target_id}
 
 def list_targets() -> list[dict[str,Any]]:
     _ensure()
