@@ -720,3 +720,67 @@ rules:
           - pattern: location.href = $SINK
           - pattern: window.location.assign($SINK)
           - pattern: window.location.replace($SINK)
+# ========================= GENERIC CROSS-LANGUAGE SURFACE =========================
+
+  - id: extract-cleartext-http-url
+    languages: [generic]
+    severity: INFO
+    message: "Cleartext HTTP URL/reference found; review whether transport encryption is required"
+    metadata: {category: network, surface: cleartext-http, confidence: MEDIUM}
+    pattern-regex: "http://[A-Za-z0-9._~:/?#@!$&'()*+,;=%-]+"
+
+  - id: extract-file-uri
+    languages: [generic]
+    severity: INFO
+    message: "file:// URI found"
+    metadata: {category: paths, surface: filesystem, confidence: HIGH}
+    pattern-regex: "file://[^\\s\\"'<>]+"
+
+  - id: extract-content-uri
+    languages: [generic]
+    severity: INFO
+    message: "Android/content URI found"
+    metadata: {category: paths, surface: app-content, confidence: HIGH}
+    pattern-regex: "content://[^\\s\\"'<>]+"
+
+  - id: extract-windows-absolute-path
+    languages: [generic]
+    severity: INFO
+    message: "Windows absolute path literal found"
+    metadata: {category: paths, surface: filesystem, confidence: MEDIUM}
+    pattern-regex: "[A-Za-z]:\\\\[^\\r\\n\\"']+"
+
+  - id: extract-common-unix-android-path
+    languages: [generic]
+    severity: INFO
+    message: "Unix/Android absolute path literal found"
+    metadata: {category: paths, surface: filesystem, confidence: MEDIUM}
+    pattern-regex: "/(?:etc|var|home|usr|opt|tmp|data|app|srv|mnt|storage|sdcard)/(?:[A-Za-z0-9._@+,:= -]+/)*[A-Za-z0-9._@+,:= -]*"
+
+  - id: extract-client-ip-header-string
+    languages: [generic]
+    severity: INFO
+    message: "Client/proxy IP header name found"
+    metadata: {category: ip, surface: client-ip, confidence: MEDIUM}
+    pattern-regex: "(?i)\\b(x-forwarded-for|x-real-ip|cf-connecting-ip|true-client-ip|forwarded|fastly-client-ip|x-client-ip)\\b"
+
+  - id: extract-crypto-algorithm-reference
+    languages: [generic]
+    severity: INFO
+    message: "Cryptographic algorithm/reference found"
+    metadata: {category: crypto, surface: crypto-reference, confidence: MEDIUM}
+    pattern-regex: "(?i)\\b(AES(?:-?(?:128|192|256))?(?:-?(?:GCM|CBC|CTR|CCM|ECB))?|ChaCha20(?:-Poly1305)?|RSA(?:-OAEP|-PSS)?|ECDSA|Ed25519|X25519|PBKDF2|HKDF|scrypt|bcrypt|argon2)\\b"
+
+  - id: extract-weak-crypto-reference
+    languages: [generic]
+    severity: INFO
+    message: "Legacy/weak cryptographic algorithm reference found; verify it is not used for security-sensitive protection"
+    metadata: {category: crypto, surface: crypto-reference, confidence: LOW}
+    pattern-regex: "(?i)\\b(MD5|SHA-?1|DES|3DES|RC4|RC2)\\b"
+
+  - id: audit-generic-tls-verification-disabled
+    languages: [generic]
+    severity: WARNING
+    message: "Configuration appears to disable TLS/certificate verification. Confirm this is not used in production."
+    metadata: {category: crypto, surface: tls, cwe: "CWE-295", confidence: MEDIUM}
+    pattern-regex: "(?i)(NODE_TLS_REJECT_UNAUTHORIZED\\s*[=:]\\s*[\\"']?0|rejectUnauthorized\\s*[:=]\\s*false|ssl[_-]?verify\\s*[:=]\\s*false|verify[_-]?ssl\\s*[:=]\\s*false)"
