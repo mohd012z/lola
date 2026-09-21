@@ -68,6 +68,10 @@ jobs:
               raise SystemExit(1)
           PY
 
+      - name: Deep inspect Python paths and process launches
+        if: success() || failure()
+        run: python lola_python_path_doctor.py . --output python-path-report.json
+
       - name: Run multi-format Code Doctor
         if: success() || failure()
         run: python lola_code_doctor.py . --output code-doctor-report.json
@@ -102,4 +106,5 @@ jobs:
           path: |
             code-doctor-report.json
             code-doctor-after-fix.json\n            code-specialists.json
+            python-path-report.json
           if-no-files-found: warn
