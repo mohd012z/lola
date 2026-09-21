@@ -1,0 +1,58 @@
+# Dependencies
+node_modules/
+vendor/
+
+# Build/generated
+dist/
+build/
+out/
+.next/
+.nuxt/
+coverage/
+.cache/
+tmp/
+.tmp/
+generated/
+.generated/
+
+# VCS / IDE
+.git/
+.vscode/
+.idea/
+
+# Minified/bundled/generated files
+*.min.js
+*.min.css
+*.bundle.js
+*.map
+
+# Binary / archives / media
+*.apk
+*.aab
+*.ipa
+*.exe
+*.dll
+*.so
+*.jar
+*.class
+*.zip
+*.7z
+*.rar
+*.pdf
+*.png
+*.jpg
+*.jpeg
+*.gif
+*.webp
+*.mp3
+*.mp4
+*.mov
+*.avi
+
+# Generated dependency locks
+package-lock.json
+pnpm-lock.yaml
+yarn.lock
+
+# Scanner output
+semgrep-results.json
