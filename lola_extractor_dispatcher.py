@@ -19,12 +19,19 @@ from lola_ex_problem_router import diagnose as ex_diagnose
 from lola_ex_fallback_bots import fallback_plan as ex_fallback_plan, run_fallback as ex_run_fallback
 from lola_python_path_doctor import analyze as py_path_analyze
 from lola_python_capabilities import capability as py_capability, host as py_host, converter as py_converter, inverter as py_inverter, header as py_header, trace as py_trace, links as py_links, urls as py_urls, codec as py_codec, layers as py_layers, pylist as py_list, tools as py_tools, update_plan as py_update_plan
+from lola_workflow_inspector import workflow as inspect_workflow, head as inspect_head, skeleton as inspect_skeleton, troubleshooting as inspect_troubleshooting
 
 def run(command,target=None,arg=None):
     cmd=(command or "").strip().lower()
     mod=resolve(cmd)
     if not mod:return {"ok":False,"error":"unknown command","command":command}
     if cmd=="/codecli":return {"ok":True,"modules":catalog()}
+    if cmd in ("/workflow","/head","/skeleton","/troubleshooting"):
+        root=Path(target or ".")
+        if not root.exists():return {"ok":False,"error":"inspection target does not exist"}
+        base=root if root.is_dir() else root.parent
+        fn={"/workflow":inspect_workflow,"/head":inspect_head,"/skeleton":inspect_skeleton,"/troubleshooting":inspect_troubleshooting}[cmd]
+        return {"ok":True,"mode":cmd[1:],"inspection":fn(base)}
     pycmds={"/python","/linux","/host","/pyconverter","/pyinverter","/pyheader","/pytrace","/pylink","/pyurls","/pydecorder","/pyencorder","/pylayer","/pylist","/pyghidra","/pyfrida","/pynano","/pyupdate","/pyupgrade"}
     if cmd in pycmds:
         root=Path(target or ".")
