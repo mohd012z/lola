@@ -550,6 +550,8 @@ async function loadTargetRecord(id){
     ['Report',j.storage?.report||'-'],
     ['Android reader',j.storage?.reader||'-'],
     ['Decompiled source',j.storage?.decompiled||'-'],
+    ['Runtime analysis',j.storage?.runtimeAnalysis||j.outputs?.['runtime-analysis.json']||'-'],
+    ['Runtime events',j.storage?.runtimeEvents||j.outputs?.['runtime-events.jsonl']||'-'],
     ['Scan history',String((j.scans||[]).length)]
   ];
   rows.forEach(x=>readerItem(root,x[0],'',x[1]));
@@ -782,7 +784,7 @@ async function poll(){
   }catch{}
   setTimeout(poll,700);
 }
-renderModes();initLibrary();poll();
+renderModes();initLibrary();poll();pollRuntime();
 </script>
 </body></html>
 """.replace("__MODES__", json.dumps(APK_MODES))
