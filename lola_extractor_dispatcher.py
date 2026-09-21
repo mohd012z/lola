@@ -12,12 +12,24 @@ from lola_office_engine import capabilities as office_capabilities, convert as o
 from lola_office_html import convert as html_convert, matrix as html_matrix
 from lola_pdf_html_rich import pdf_rich, batch_convert
 from lola_pdf_ocr import capabilities as ocr_capabilities, readiness as ocr_readiness, ocr_pages, searchable_pdf\nfrom lola_code_inspector import run_mode as code_inspect
+from lola_code_integration import task as integration_task, merge_plan
 
 def run(command,target=None,arg=None):
     cmd=(command or "").strip().lower()
     mod=resolve(cmd)
     if not mod:return {"ok":False,"error":"unknown command","command":command}
-    if cmd=="/codecli":return {"ok":True,"modules":catalog()}\n    inspect_cmds={"/codecheckall","/codetarget","/codeidentify","/codemethode","/codemethod","/codeexpanding","/codeextra","/codecodecodelayer","/codelayer","/skeleton","/troubleshooting","/codesummary","/codecheck","/pycheck"}\n    if cmd in inspect_cmds:\n        root=Path(target or ".")\n        if not root.exists():return {"ok":False,"error":"inspection target does not exist"}\n        # arg narrows file/definition matching for target/method modes.\n        return {"ok":True,"mode":cmd[1:],"inspection":code_inspect(root,cmd,arg)}
+    if cmd=="/codecli":return {"ok":True,"modules":catalog()}
+    integration_cmds={"/codeidea","/codeintelligent","/codewrap","/codescriptidea","/codecompile","/compilecode","/codeextract","/extractcode","/codeconvert","/convertcode","/codeencrypt","/codedecrypt"}
+    if cmd in integration_cmds:
+        if not target:return {"ok":False,"error":"target required"}
+        p=Path(target)
+        if not p.is_file():return {"ok":False,"error":"target is not a readable file"}
+        return {"ok":True,"mode":cmd[1:],"integration":integration_task(cmd,p,arg)}
+    if cmd in ("/mergecode","/combineidea"):
+        if not target:return {"ok":False,"error":"comma-separated input paths required"}
+        paths=[Path(x.strip()) for x in str(target).split(",") if x.strip()]
+        if not paths or any(not p.is_file() for p in paths):return {"ok":False,"error":"every merge input must be a readable file"}
+        return {"ok":True,"mode":cmd[1:],"integration":merge_plan(paths)}\n    inspect_cmds={"/codecheckall","/codetarget","/codeidentify","/codemethode","/codemethod","/codeexpanding","/codeextra","/codecodecodelayer","/codelayer","/skeleton","/troubleshooting","/codesummary","/codecheck","/pycheck"}\n    if cmd in inspect_cmds:\n        root=Path(target or ".")\n        if not root.exists():return {"ok":False,"error":"inspection target does not exist"}\n        # arg narrows file/definition matching for target/method modes.\n        return {"ok":True,"mode":cmd[1:],"inspection":code_inspect(root,cmd,arg)}
     if cmd=="/officecapabilities":return {"ok":True,"office":office_capabilities(),"ocr":ocr_capabilities()}
     if cmd=="/documentconvert" and target is None:
         return {"ok":True,"module":mod,"matrix":document_matrix(),"tools":available_tools()}
