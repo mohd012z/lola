@@ -158,10 +158,34 @@ details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{displa
   </div>
 
   <div class="modebar" id="modebar">
+    <button class="modebtn" data-mode="/deep-dive">/deep-dive · All Details</button>
+    <button class="modebtn" data-mode="/securitycheck">/securitycheck</button>
+    <button class="modebtn" data-mode="/anonymus">/anonymus</button>
     <button class="modebtn" data-mode="/stepview">/stepview</button>
     <button class="modebtn" data-mode="/protocol">/protocol</button>
     <button class="modebtn" data-mode="/hidden">/hidden</button>
     <button class="modebtn" data-mode="/360">/360</button>
+  </div>
+
+  <div class="section card modepanel" id="deepDivePanel">
+    <div class="section-head"><h2>/deep-dive — All detection detail</h2><span class="sub">Evidence • confidence • file/line • rule • surface</span></div>
+    <div class="url-summary" id="deepDiveSummary"></div>
+    <div class="mode-list" id="deepDiveEvidence"></div>
+  </div>
+
+  <div class="section card modepanel" id="securityCheckPanel">
+    <div class="section-head"><h2>/securitycheck — Security control review</h2><span class="sub">Priority review areas, not a pass/fail certificate</span></div>
+    <div class="url-summary" id="securitySummary"></div>
+    <div class="mode-list" id="securityControls"></div>
+    <div class="note" id="securityNote"></div>
+  </div>
+
+  <div class="section card modepanel" id="anonymousPanel">
+    <div class="section-head"><h2>/anonymus — Privacy & identity exposure</h2><span class="sub">Alias: /anonymous</span></div>
+    <div class="url-summary" id="anonymousSummary"></div>
+    <div class="surface-grid" id="anonymousCards"></div>
+    <div class="mode-list" id="anonymousEvidence" style="margin-top:10px"></div>
+    <div class="note" id="anonymousNote"></div>
   </div>
 
   <div class="section card modepanel" id="stepviewPanel">
@@ -184,7 +208,7 @@ details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{displa
   <div class="section card modepanel" id="view360Panel">
     <div class="section-head"><h2>/360 — Full scan view</h2><span class="sub">All discovered surfaces combined</span></div>
     <div class="url-summary" id="view360Summary"></div>
-    <div class="note">360 view combines file/path inventory, URLs, IP/network, device/privacy/account, encryption/TLS, protocols, hidden surfaces, database/routes and security findings.</div>
+    <div class="note">360 view combines file/path inventory, URLs, IP/network, device/privacy/account, encryption/TLS, protocols, hidden surfaces, database/routes and security findings. Use <b>/deep-dive</b> when you want every detection and evidence row.</div>
   </div>
 
   <div class="section card">
@@ -266,6 +290,54 @@ function miniMetric(parent,label,value){
   d.append(b,s);parent.appendChild(d);
 }
 function renderModes(){
+  const dd=MODEDATA['deep-dive']||{};
+  const ds=$('deepDiveSummary');ds.replaceChildren();
+  const dsm=dd.summary||{};
+  miniMetric(ds,'Detections',dsm.total||0);miniMetric(ds,'Errors',dsm.errors||0);miniMetric(ds,'Warnings',dsm.warnings||0);miniMetric(ds,'Rules',dsm.rules||0);
+  miniMetric(ds,'Files',dsm.affectedFiles||0);miniMetric(ds,'Surfaces',dsm.surfaces||0);
+  const de=$('deepDiveEvidence');de.replaceChildren();
+  (dd.detections||[]).forEach(x=>{
+    const d=document.createElement('div');d.className='mode-item';
+    const head=document.createElement('strong');head.textContent=(x.severity||'INFO')+' · '+(x.surface||x.category||'other')+' · '+(x.rule||'');
+    const loc=document.createElement('div');loc.className='meta';loc.textContent=(x.path||'[unknown]')+(x.line?':'+x.line+(x.col?':'+x.col:''):'')+(x.confidence?' · confidence '+x.confidence:'')+(x.cwe?' · '+x.cwe:'');
+    const msg=document.createElement('div');msg.textContent=x.message||'';
+    d.append(head,loc,msg);
+    if(x.lines){const pre=document.createElement('pre');pre.textContent=x.lines;d.appendChild(pre)}
+    de.appendChild(d);
+  });
+  if(!de.children.length) de.innerHTML='<div class="empty">No detections.</div>';
+
+  const sc=MODEDATA.securitycheck||{};
+  const ss=$('securitySummary');ss.replaceChildren();
+  const sm=sc.summary||{};
+  miniMetric(ss,'Control groups',sm.controls||0);miniMetric(ss,'Priority review',sm.priorityReview||0);miniMetric(ss,'Review',sm.review||0);miniMetric(ss,'No detection',sm.noDetection||0);
+  miniMetric(ss,'Errors',sm.errors||0);miniMetric(ss,'Warnings',sm.warnings||0);
+  const ctr=$('securityControls');ctr.replaceChildren();
+  (sc.controls||[]).forEach(x=>{
+    const d=document.createElement('div');d.className='mode-item';
+    const title=document.createElement('strong');title.textContent=(x.state==='priority-review'?'🔴 ':x.state==='review'?'🟠 ':'⚪ ')+x.name+' — '+x.total+' findings';
+    const counts=document.createElement('div');counts.className='meta';counts.textContent='Errors '+x.errors+' · Warnings '+x.warnings+' · Info '+x.info;
+    const rev=document.createElement('div');rev.textContent=x.review||'';
+    d.append(title,counts,rev);ctr.appendChild(d);
+  });
+  $('securityNote').textContent=sc.note||'';
+
+  const an=MODEDATA.anonymous||{};
+  const as=$('anonymousSummary');as.replaceChildren();
+  const am=an.summary||{};
+  miniMetric(as,'Exposure findings',am.exposureFindings||0);miniMetric(as,'IP/tracking URLs',am.publicIpOrTrackingUrls||0);miniMetric(as,'Fingerprinting',am.fingerprinting||0);miniMetric(as,'Telemetry',am.telemetry||0);
+  miniMetric(as,'Persistent IDs',am.persistentIds||0);miniMetric(as,'Network exposure',am.networkExposure||0);miniMetric(as,'Account linkage',am.accountLinkage||0);
+  const ac=$('anonymousCards');ac.replaceChildren();
+  Object.entries(an.counts||{}).sort((a,b)=>b[1]-a[1]).forEach(([name,count])=>{
+    const d=document.createElement('div');d.className='surface';const t=document.createElement('div');t.className='surface-top';
+    const n=document.createElement('div');n.className='surface-name';n.textContent='🕶️ '+name;const v=document.createElement('div');v.className='surface-count';v.textContent=count;t.append(n,v);d.appendChild(t);ac.appendChild(d);
+  });
+  if(!ac.children.length) ac.innerHTML='<div class="empty">No privacy/identity exposure detections.</div>';
+  const ae=$('anonymousEvidence');ae.replaceChildren();
+  (an.findings||[]).slice(0,150).forEach(x=>{const d=document.createElement('div');d.className='mode-item';d.textContent=(x.surface||x.category||'privacy')+' · '+(x.path||'')+(x.line?':'+x.line:'')+' — '+(x.message||x.rule||'');ae.appendChild(d)});
+  (an.urls||[]).slice(0,100).forEach(x=>{const d=document.createElement('div');d.className='mode-item';d.textContent='URL · '+(x.sourceUrl||'')+(x.finalUrl&&x.finalUrl!==x.sourceUrl?' → '+x.finalUrl:'');ae.appendChild(d)});
+  $('anonymousNote').textContent=an.note||'';
+
   const tl=$('stepTimeline');tl.replaceChildren();
   for(const key of ['before','during','after']){
     const p=MODEDATA.stepview?.[key]||{title:key,items:[]};
@@ -281,9 +353,8 @@ function renderModes(){
     const n=document.createElement('div');n.className='surface-name';n.textContent='🔌 '+name;const v=document.createElement('div');v.className='surface-count';v.textContent=count;t.append(n,v);d.appendChild(t);pc.appendChild(d);
   });
   if(!pc.children.length) pc.innerHTML='<div class="empty">No protocol surfaces detected.</div>';
-
   const pe=$('protocolEvidence');pe.replaceChildren();
-  (MODEDATA.protocol?.findings||[]).slice(0,80).forEach(x=>{const d=document.createElement('div');d.className='mode-item';d.textContent=(x.surface||x.category||'protocol')+' • '+(x.path||'')+(x.line?':'+x.line:'')+' — '+(x.message||x.rule||'');pe.appendChild(d)});
+  (MODEDATA.protocol?.findings||[]).slice(0,100).forEach(x=>{const d=document.createElement('div');d.className='mode-item';d.textContent=(x.surface||x.category||'protocol')+' • '+(x.path||'')+(x.line?':'+x.line:'')+' — '+(x.message||x.rule||'');pe.appendChild(d)});
 
   const hs=$('hiddenSummary');hs.replaceChildren();
   const hc=MODEDATA.hidden?.counts||{};
@@ -293,19 +364,28 @@ function renderModes(){
   (MODEDATA.hidden?.findings||[]).slice(0,100).forEach(x=>{const d=document.createElement('div');d.className='mode-item';d.textContent=(x.surface||'hidden')+' • '+(x.path||'')+(x.line?':'+x.line:'')+' — '+(x.message||x.rule||'');he.appendChild(d)});
 
   const vs=$('view360Summary');vs.replaceChildren();
-  const sm=MODEDATA['360']?.summary||{};
-  miniMetric(vs,'Files',sm.files||0);miniMetric(vs,'URLs',sm.urls||0);miniMetric(vs,'Findings',sm.findings||0);miniMetric(vs,'Errors',sm.errors||0);
-  miniMetric(vs,'Warnings',sm.warnings||0);miniMetric(vs,'Protocols',sm.protocolSurfaces||0);miniMetric(vs,'Hidden files',sm.hiddenFiles||0);miniMetric(vs,'Info',sm.info||0);
+  const vsm=MODEDATA['360']?.summary||{};
+  miniMetric(vs,'Files',vsm.files||0);miniMetric(vs,'URLs',vsm.urls||0);miniMetric(vs,'Findings',vsm.findings||0);miniMetric(vs,'Errors',vsm.errors||0);
+  miniMetric(vs,'Warnings',vsm.warnings||0);miniMetric(vs,'Protocols',vsm.protocolSurfaces||0);miniMetric(vs,'Hidden files',vsm.hiddenFiles||0);miniMetric(vs,'Privacy exposures',vsm.privacyExposures||0);
+  miniMetric(vs,'Control groups review',vsm.controlGroupsReview||0);miniMetric(vs,'Info',vsm.info||0);
 }
 function setMode(mode){
   let normalized=mode.startsWith('/')?mode:'/'+mode;
   if(normalized==='/protocal') normalized='/protocol';
+  if(normalized==='/deepdive') normalized='/deep-dive';
+  if(normalized==='/anonymous') normalized='/anonymus';
   document.querySelectorAll('.modebtn').forEach(b=>b.classList.toggle('active',b.dataset.mode===normalized));
-  const map={'/stepview':'stepviewPanel','/protocol':'protocolPanel','/hidden':'hiddenPanel','/360':'view360Panel'};
+  const map={
+    '/deep-dive':'deepDivePanel','/securitycheck':'securityCheckPanel','/anonymus':'anonymousPanel',
+    '/stepview':'stepviewPanel','/protocol':'protocolPanel','/hidden':'hiddenPanel','/360':'view360Panel'
+  };
   document.querySelectorAll('.modepanel').forEach(p=>p.classList.remove('active'));
   const panel=$(map[normalized]||'view360Panel');if(panel)panel.classList.add('active');
   if(normalized==='/protocol'){$('category').value='protocol';render()}
   else if(normalized==='/hidden'){$('category').value='hidden';render()}
+  else if(normalized==='/anonymus'){$('category').value='privacy';render()}
+  else if(normalized==='/securitycheck'){$('category').value='';render()}
+  else if(normalized==='/deep-dive'){$('category').value='';$('surface').value='';$('search').value='';render()}
   else if(normalized==='/360'){$('category').value='';$('surface').value='';$('search').value='';render()}
   panel?.scrollIntoView({behavior:'smooth',block:'start'});
 }
@@ -318,7 +398,9 @@ const ICONS={
   'device-permissions':'✅','device-clipboard':'📋','device-power':'🔋','device-network':'📶',
   'device-storage':'💽','device-local-network':'🛜','device-host':'🖥️','android-device':'🤖',
   'ios-device':'','device-identifiers':'🪪','device-capabilities':'🧰','device-bridge':'🌉',
-  'device-files':'🗃️','account-auth':'👤','personal-data':'👥','device-biometric':'🔐','device-notifications':'🔔'
+  'device-files':'🗃️','account-auth':'👤','personal-data':'👥','device-biometric':'🔐','device-notifications':'🔔',
+  'privacy-ip-exposure':'🌐','privacy-telemetry':'📡','privacy-persistent-id':'🪪','privacy-fingerprinting':'🕵️',
+  'privacy-network-exposure':'🛜','privacy-advertising-id':'🎯','privacy-cookie':'🍪'
 };
 const icon=s=>ICONS[s]||'•';
 $('target').textContent=DATA.target ? 'Target: '+DATA.target : 'Target not recorded';
