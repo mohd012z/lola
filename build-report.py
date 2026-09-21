@@ -39,6 +39,7 @@ def main():
     p.add_argument("--modes", default="scan-modes.json")
     p.add_argument("--code", default="code-analysis.json")
     p.add_argument("--network", default="network-analysis.json")
+    p.add_argument("--preflight", default="preflight-analysis.json")
     p.add_argument("--mode", default="/360")
     args = p.parse_args()
 
@@ -112,6 +113,19 @@ def main():
         except Exception:
             pass
 
+    preflight_data = {
+        "summary": {}, "viewextraction": {}, "viewurls": {"items":[]}, "map": {"nodes":[],"edges":[]},
+        "routes": {"items":[]}, "api": {"items":[]}, "keys": {"items":[]},
+        "hiddentraces": {"items":[]}, "hidemodes": {"items":[]}, "hidelog": {"items":[]},
+        "ipmirror": {"items":[]}, "certs": {"items":[],"copies":[]}, "capture": {}
+    }
+    preflight_path = Path(args.preflight)
+    if preflight_path.exists():
+        try:
+            preflight_data = json.loads(preflight_path.read_text(encoding="utf-8-sig"))
+        except Exception:
+            pass
+
     sev = Counter(x["severity"] for x in findings)
     cats = Counter(x["category"] for x in findings)
     surfaces = Counter(x["surface"] for x in findings)
@@ -141,6 +155,7 @@ def main():
         "modeData": mode_data,
         "codeData": code_data,
         "networkData": network_data,
+        "preflightData": preflight_data,
         "initialMode": args.mode,
         "findings": findings,
     }
@@ -194,6 +209,31 @@ details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{displa
     <button class="modebtn" data-mode="/protocol">/protocol</button>
     <button class="modebtn" data-mode="/hidden">/hidden</button>
     <button class="modebtn" data-mode="/360">/360</button>
+  </div>
+
+  <div class="card" style="margin-top:10px">
+    <div class="section-head"><h2>Pre-scan target commands</h2><span class="sub">Generated before Semgrep</span></div>
+    <div class="modebar" style="margin:0">
+      <button class="modebtn" data-mode="/preflight">/preflight</button>
+      <button class="modebtn" data-mode="/viewextraction">/viewextraction</button>
+      <button class="modebtn" data-mode="/viewurls">/viewurls</button>
+      <button class="modebtn" data-mode="/map">/map</button>
+      <button class="modebtn" data-mode="/routes">/routes</button>
+      <button class="modebtn" data-mode="/api">/api</button>
+      <button class="modebtn" data-mode="/keys">/keys</button>
+      <button class="modebtn" data-mode="/hiddentraces">/hiddentraces</button>
+      <button class="modebtn" data-mode="/hidemodes">/hidemodes</button>
+      <button class="modebtn" data-mode="/hidelog">/hidelog</button>
+      <button class="modebtn" data-mode="/ipmirror">/ipmirror</button>
+      <button class="modebtn" data-mode="/certs">/certs</button>
+    </div>
+  </div>
+
+  <div class="section card modepanel" id="preflightModePanel">
+    <div class="section-head"><h2 id="preflightModeTitle">Pre-scan target analysis</h2><span class="sub" id="preflightModeSubtitle"></span></div>
+    <div class="url-summary" id="preflightModeSummary"></div>
+    <div class="mode-list" id="preflightModeList"></div>
+    <div class="note" id="preflightModeNote"></div>
   </div>
 
   <div class="card" style="margin-top:10px">
@@ -364,6 +404,7 @@ const $=id=>document.getElementById(id);
 const MODEDATA=DATA.modeData||{stepview:{},protocol:{},hidden:{},360:{}};
 const CODEDATA=DATA.codeData||{};
 const NETDATA=DATA.networkData||{};
+const PREFLIGHT=DATA.preflightData||{};
 
 function miniMetric(parent,label,value){
   const d=document.createElement('div');d.className='detail';
@@ -372,6 +413,84 @@ function miniMetric(parent,label,value){
   d.append(b,s);parent.appendChild(d);
 }
 
+
+
+const PREFLIGHT_MODES=new Set(['/preflight','/viewextraction','/viewurls','/routes','/api','/keys','/hiddentraces','/hidemodes','/hidelog','/ipmirror','/certs']);
+let CURRENT_PREFLIGHT_MODE='/preflight';
+
+function preItem(parent,title,meta,body){
+  const d=document.createElement('div');d.className='mode-item';
+  if(title){const h=document.createElement('strong');h.textContent=title;d.appendChild(h)}
+  if(meta){const m=document.createElement('div');m.className='meta';m.textContent=meta;d.appendChild(m)}
+  if(body){const b=document.createElement('div');b.textContent=body;d.appendChild(b)}
+  parent.appendChild(d);
+}
+function renderPreflightMode(mode=CURRENT_PREFLIGHT_MODE){
+  CURRENT_PREFLIGHT_MODE=mode;
+  const titleMap={
+    '/preflight':'/preflight — Before-Semgrep target analysis',
+    '/viewextraction':'/viewextraction — Imports/functions/classes/config/routes',
+    '/viewurls':'/viewurls — Source/final URLs and DNS evidence',
+    '/routes':'/routes — Application route declarations',
+    '/api':'/api — API/client usage references',
+    '/keys':'/keys — Redacted key/password/token references',
+    '/hiddentraces':'/hiddentraces — Hidden/stealth-like code detection',
+    '/hidemodes':'/hidemodes — Hidden/private/silent mode detection',
+    '/hidelog':'/hidelog — Logging suppression/clearing detection',
+    '/ipmirror':'/ipmirror — App destination IP mirror',
+    '/certs':'/certs — Certificate inventory/public-cert copies'
+  };
+  $('preflightModeTitle').textContent=titleMap[mode]||'Pre-scan target analysis';
+  $('preflightModeSubtitle').textContent=(PREFLIGHT.phase||'before-semgrep')+' · preflight-analysis.json';
+  const sum=$('preflightModeSummary');sum.replaceChildren();
+  const list=$('preflightModeList');list.replaceChildren();
+  const s=PREFLIGHT.summary||{};
+  miniMetric(sum,'Files',s.files||0);miniMetric(sum,'URLs',s.urls||0);miniMetric(sum,'Routes',s.routes||0);
+  miniMetric(sum,'API refs',s.apiRefs||0);miniMetric(sum,'Key refs',s.keyRefs||0);miniMetric(sum,'Certs',s.certs||0);
+  miniMetric(sum,'Hidden traces',s.hiddenTraces||0);miniMetric(sum,'Hide-log refs',s.hideLogRefs||0);
+
+  if(mode==='/viewextraction'){
+    const x=PREFLIGHT.viewextraction||{};
+    (x.imports||[]).slice(0,1000).forEach(v=>preItem(list,'Import '+(v.module||''),(v.path||'')+':'+(v.line||'?'),''));
+    (x.functions||[]).slice(0,1000).forEach(v=>preItem(list,'Function '+(v.name||''),(v.path||'')+':'+(v.line||'?'),''));
+    (x.classes||[]).slice(0,1000).forEach(v=>preItem(list,'Class '+(v.name||''),(v.path||'')+':'+(v.line||'?'),''));
+    (x.environment||[]).slice(0,1000).forEach(v=>preItem(list,'Environment/config',(v.path||'')+':'+(v.line||'?'),v.preview||''));
+    (x.routes||[]).slice(0,1000).forEach(v=>preItem(list,(v.method||'')+' '+(v.route||''),(v.path||'')+':'+(v.line||'?'),''));
+  } else if(mode==='/viewurls'){
+    (PREFLIGHT.viewurls?.items||[]).forEach(v=>preItem(list,v.sourceUrl||'URL',(v.host||'')+' · '+(v.destinationClass||'')+' · status '+(v.status||'-'),v.finalUrl&&v.finalUrl!==v.sourceUrl?'Final: '+v.finalUrl:''));
+  } else if(mode==='/routes'){
+    (PREFLIGHT.routes?.items||[]).forEach(v=>preItem(list,(v.method||'')+' '+(v.route||''),(v.path||'')+':'+(v.line||'?'),''));
+  } else if(mode==='/api'){
+    (PREFLIGHT.api?.items||[]).forEach(v=>preItem(list,v.kind||'api',(v.path||'')+':'+(v.line||'?'),v.preview||''));
+  } else if(mode==='/keys'){
+    (PREFLIGHT.keys?.items||[]).forEach(v=>preItem(list,v.name||v.kind||'key',(v.path||'')+':'+(v.line||'?'),'Masked: '+(v.masked||'<redacted>')));
+  } else if(mode==='/hiddentraces'){
+    (PREFLIGHT.hiddentraces?.items||[]).forEach(v=>preItem(list,v.kind||'hidden-trace',(v.path||'')+':'+(v.line||'?'),v.preview||''));
+  } else if(mode==='/hidemodes'){
+    (PREFLIGHT.hidemodes?.items||[]).forEach(v=>preItem(list,v.kind||'hidden-mode',(v.path||'')+':'+(v.line||'?'),v.preview||''));
+  } else if(mode==='/hidelog'){
+    (PREFLIGHT.hidelog?.items||[]).forEach(v=>preItem(list,v.kind||'log-suppression',(v.path||'')+':'+(v.line||'?'),v.preview||''));
+  } else if(mode==='/ipmirror'){
+    (PREFLIGHT.ipmirror?.items||[]).forEach(v=>preItem(list,v.host||'destination',(v.destinationClass||'')+' · '+((v.resolvedIps||[]).join(', ')||'-'),(v.sourceUrl||'')+(v.finalUrl&&v.finalUrl!==v.sourceUrl?' → '+v.finalUrl:'')));
+  } else if(mode==='/certs'){
+    (PREFLIGHT.certs?.items||[]).forEach(v=>preItem(list,v.kind||'certificate',v.path||'',(v.sha256||'')+' · '+(v.bytes||0)+' bytes'));
+    (PREFLIGHT.certs?.copies||[]).forEach(v=>preItem(list,'Copied public certificate',v.source||'',v.copy||v.error||''));
+  } else {
+    Object.entries(s).forEach(([k,v])=>preItem(list,k,'',String(v)));
+    if(PREFLIGHT.capture?.enabled)preItem(list,'Redacted source snapshot','Files '+(PREFLIGHT.capture.files||[]).length,'Stored under .lola-preflight/code');
+    if((PREFLIGHT.certs?.copies||[]).length)preItem(list,'Public certificate copies','Count '+PREFLIGHT.certs.copies.length,'Stored under .lola-preflight/certs');
+  }
+  const notes={
+    '/keys':'Secret/key values are masked or not collected.',
+    '/hiddentraces':'Detection-only: identifies hidden/stealth-like patterns; it does not enable concealment.',
+    '/hidemodes':'Detection-only: identifies hidden/private/silent mode references.',
+    '/hidelog':'Detection-only: identifies logging suppression or clearing code. Lola does not erase application, OS, browser, or security logs.',
+    '/ipmirror':'Mirrors application destination DNS/IP resolution; it is not a device-geolocation feature.',
+    '/certs':'Only public certificate material may be copied. Private key containers are never copied.'
+  };
+  $('preflightModeNote').textContent=notes[mode]||'This data is generated before the main Semgrep scan.';
+  if(!list.children.length)list.innerHTML='<div class="empty">No matching pre-scan evidence.</div>';
+}
 
 const NETWORK_MODES=new Set(['/deep-network','/trace','/route','/map','/visible','/realip','/cctv','/normal']);
 let CURRENT_NETWORK_MODE='/normal';
@@ -653,12 +772,17 @@ function setMode(mode){
     '/codeencryption':'codeModePanel','/hiddenmode':'codeModePanel',
     '/deep-network':'networkModePanel','/trace':'networkModePanel','/route':'networkModePanel',
     '/map':'networkModePanel','/visible':'networkModePanel','/realip':'networkModePanel',
-    '/cctv':'networkModePanel','/normal':'networkModePanel'
+    '/cctv':'networkModePanel','/normal':'networkModePanel',
+    '/preflight':'preflightModePanel','/viewextraction':'preflightModePanel','/viewurls':'preflightModePanel',
+    '/routes':'preflightModePanel','/api':'preflightModePanel','/keys':'preflightModePanel',
+    '/hiddentraces':'preflightModePanel','/hidemodes':'preflightModePanel','/hidelog':'preflightModePanel',
+    '/ipmirror':'preflightModePanel','/certs':'preflightModePanel'
   };
   document.querySelectorAll('.modepanel').forEach(p=>p.classList.remove('active'));
   const panel=$(map[normalized]||'view360Panel');if(panel)panel.classList.add('active');
   if(CODE_MODES.has(normalized)){renderCodeMode(normalized)}
   if(NETWORK_MODES.has(normalized)){renderNetworkMode(normalized)}
+  if(PREFLIGHT_MODES.has(normalized)){renderPreflightMode(normalized)}
   if(normalized==='/protocol'){$('category').value='protocol';render()}
   else if(normalized==='/hidden'){$('category').value='hidden';render()}
   else if(normalized==='/anonymus'){$('category').value='privacy';render()}
