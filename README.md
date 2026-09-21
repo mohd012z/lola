@@ -9,10 +9,11 @@ python -m pip install semgrep
 .\scan-security.ps1 "C:\Projects\my-app"
 ~~~
 
-The scan now creates three evidence files:
+The scan now creates four evidence files:
 
 ~~~text
 target-manifest.json    every candidate source/config path + size + modified UTC + SHA-256
+url-report.json         source URLs, hosts, DNS/IP classification, optional live final URLs
 semgrep-results.json    raw Semgrep findings
 semgrep-report.html     interactive visual dashboard
 ~~~
@@ -166,6 +167,33 @@ nginx.conf / httpd.conf
 
 Deep AST/taint coverage is strongest for JavaScript/TypeScript. Generic URL/IP/path/secret/crypto-reference rules provide additional cross-language visibility.
 
+## Real / final URL tracing
+
+Every scan performs a static URL inventory from the discovered source/config files. This records:
+- exact source URL
+- source file and line
+- scheme, host, port and path
+- DNS-resolved IP addresses when available
+- public vs private/loopback/link-local/reserved classification
+
+To verify the real public destination and redirects:
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\NovaStream" -ResolveUrls
+~~~
+
+For public HTTP/HTTPS URLs, live verification adds:
+- HTTP status
+- final URL after redirects
+- complete redirect chain
+- resolved IP address(es)
+- TLS version
+- TLS cipher
+
+The resolver deliberately refuses live requests to localhost, private IP ranges, link-local, multicast, reserved and other non-public destinations. Those remain visible in inventory but are not probed.
+
+A URL can be dynamic (for example, assembled from environment variables or runtime data). Static analysis can show the construction site, but a final runtime URL may only be knowable when the application executes.
+
 ## Examples
 
 Scan a complete project:
@@ -195,7 +223,7 @@ Strict/CI mode:
 Rebuild the visual report from existing output:
 
 ~~~powershell
-python build-report.py --input semgrep-results.json --manifest target-manifest.json --output semgrep-report.html --target "C:\Projects\NovaStream"
+python build-report.py --input semgrep-results.json --manifest target-manifest.json --urls url-report.json --output semgrep-report.html --target "C:\Projects\NovaStream"
 ~~~
 
 Static analysis findings are review signals, not automatic proof that a vulnerability is exploitable. A clean scan is not proof of complete security.
