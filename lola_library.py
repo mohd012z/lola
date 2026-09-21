@@ -138,7 +138,7 @@ def _now() -> int:
 
 def _ensure():
     TARGET_DIR.mkdir(parents=True, exist_ok=True)
-    data={"version":1,"commands":COMMANDS,"apkPlan":APK_PLAN,"targets":[]}
+    data={"version":2,"commands":COMMANDS,"functions":FUNCTIONS,"apkPlan":APK_PLAN,"storage":STORAGE,"targets":[]}
     if INDEX_FILE.exists():
         try:
             old=json.loads(INDEX_FILE.read_text(encoding="utf-8"))
