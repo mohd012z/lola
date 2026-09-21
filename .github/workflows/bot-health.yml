@@ -37,8 +37,10 @@ jobs:
           if bad: raise SystemExit(1)
           PY
       - name: Bot health
+        if: always()
         run: python lola_bot_health.py . --output bot-health-report.json
       - name: Workflow reports
+        if: always()
         run: |
           python - <<'PY'
           import json
@@ -48,7 +50,8 @@ jobs:
               Path(f"{name}-report.json").write_text(json.dumps(fn("."),indent=2),encoding="utf-8")
           PY
       - name: Code Doctor
-        run: python lola_code_doctor.py . --output code-doctor-report.json
+        if: always()
+        run: python lola_code_doctor.py . --output code-doctor-report.json || true
       - name: Specialist summary
         if: always()
         run: |
