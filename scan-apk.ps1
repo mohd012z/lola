@@ -2,6 +2,7 @@ param(
   [Parameter(Position=0,Mandatory=$true)][string]$Apk,
   [string]$Analysis="apk-analysis.json",
   [string]$HtmlReport="apk-report.html",
+  [string]$Checks="",
   [ValidateSet("apk360","apkmanifest","apkpermissions","apkcomponents","apkurls","apkapi","apkkeys","apkcerts","apknative","apkwebview","apkcrypto","apkfiles","apkcode","apkrisk","apktools","/apk360","/apkmanifest","/apkpermissions","/apkcomponents","/apkurls","/apkapi","/apkkeys","/apkcerts","/apknative","/apkwebview","/apkcrypto","/apkfiles","/apkcode","/apkrisk","/apktools")]
   [string]$Mode="/apk360",
   [switch]$Decompile,
@@ -34,6 +35,7 @@ Write-Host "APK     : $ApkPath"
 Write-Host "Mode    : $Mode"
 
 $Args=@($Analyzer,$ApkPath,"--output",$Analysis)
+if ($Checks) { $Args += @("--checks",$Checks) }
 if ($Decompile) { $Args += "--decompile" }
 if ($KeepDecompiled) { $Args += "--keep-extracted" }
 
