@@ -1014,4 +1014,123 @@ rules:
     message: "Flutter device information/capability package reference found"
     metadata: {category: device, surface: device-bridge, confidence: MEDIUM}
     pattern-regex: "(?i)(device_info_plus|permission_handler|geolocator|camera|connectivity_plus|network_info_plus|package_info_plus)"
+# ========================= CAMERA / PERSONAL DATA / ACCOUNT SURFACE =========================
 
+  - id: extract-browser-camera-microphone
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Camera/microphone capture request found"
+    metadata: {category: privacy, surface: device-media, confidence: HIGH}
+    pattern-either:
+      - pattern: navigator.mediaDevices.getUserMedia($CONSTRAINTS)
+      - pattern: navigator.mediaDevices.getDisplayMedia($CONSTRAINTS)
+
+  - id: extract-browser-file-picker
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "User file/photo picker access found"
+    metadata: {category: privacy, surface: device-files, confidence: HIGH}
+    pattern-either:
+      - pattern: showOpenFilePicker(...)
+      - pattern: showSaveFilePicker(...)
+      - pattern: showDirectoryPicker(...)
+      - pattern: $INPUT.files
+      - pattern: new FileReader(...)
+
+  - id: extract-browser-credentials
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Browser credential/account authentication API used"
+    metadata: {category: account, surface: account-auth, confidence: HIGH}
+    pattern-either:
+      - pattern: navigator.credentials.get(...)
+      - pattern: navigator.credentials.create(...)
+      - pattern: navigator.credentials.store(...)
+      - pattern: navigator.credentials.preventSilentAccess(...)
+      - pattern: new PasswordCredential(...)
+      - pattern: new FederatedCredential(...)
+      - pattern: PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable(...)
+
+  - id: extract-oauth-oidc-surface
+    languages: [generic]
+    severity: INFO
+    message: "OAuth/OIDC/account authentication surface found"
+    metadata: {category: account, surface: account-auth, confidence: MEDIUM}
+    pattern-regex: "(?i)\\b(oauth2?|openid|oidc|authorization_endpoint|token_endpoint|client_id|redirect_uri|response_type|code_challenge|pkce|googleSignIn|signInWithApple|msal|auth0|firebase\\.auth|supabase\\.auth)\\b"
+
+  - id: audit-account-secret-in-client
+    languages: [generic]
+    severity: ERROR
+    message: "Possible account/auth client secret in client-accessible source. Public clients should not embed confidential client secrets."
+    metadata: {category: account, surface: account-auth, cwe: "CWE-798", confidence: MEDIUM}
+    pattern-regex: "(?i)\\b(client[_-]?secret|oauth[_-]?secret)\\b[\\"'\\s:=]{1,8}[\\"'][A-Za-z0-9_./+\\-=]{12,}[\\"']"
+
+  - id: extract-android-camera-gallery-files
+    languages: [generic]
+    severity: INFO
+    message: "Android camera/photo/file access API or intent reference found"
+    metadata: {category: privacy, surface: device-media, confidence: MEDIUM}
+    pattern-regex: "(CameraX|Camera2|CameraManager|MediaStore\\.(Images|Video|Audio)|ACTION_IMAGE_CAPTURE|ACTION_VIDEO_CAPTURE|ACTION_OPEN_DOCUMENT|ACTION_GET_CONTENT|ACTION_PICK|PhotoPicker|PickVisualMedia|ActivityResultContracts\\.(TakePicture|GetContent|OpenDocument|PickVisualMedia))"
+
+  - id: extract-android-contacts-calendar
+    languages: [generic]
+    severity: INFO
+    message: "Android contacts/calendar personal-data API reference found"
+    metadata: {category: privacy, surface: personal-data, confidence: MEDIUM}
+    pattern-regex: "(ContactsContract|CalendarContract|READ_CONTACTS|WRITE_CONTACTS|READ_CALENDAR|WRITE_CALENDAR)"
+
+  - id: extract-android-account-manager
+    languages: [generic]
+    severity: INFO
+    message: "Android account/credential API reference found"
+    metadata: {category: account, surface: account-auth, confidence: MEDIUM}
+    pattern-regex: "(AccountManager|android\\.accounts\\.Account|CredentialManager|GetCredentialRequest|CreatePasswordRequest|GetGoogleIdOption|GoogleSignIn|GoogleSignInClient|FirebaseAuth)"
+
+  - id: extract-android-biometric-auth
+    languages: [generic]
+    severity: INFO
+    message: "Android biometric/device authentication API reference found"
+    metadata: {category: account, surface: device-biometric, confidence: MEDIUM}
+    pattern-regex: "(BiometricPrompt|BiometricManager|KeyguardManager|USE_BIOMETRIC|USE_FINGERPRINT)"
+
+  - id: extract-ios-camera-photos-files
+    languages: [generic]
+    severity: INFO
+    message: "Apple camera/photo/file access API reference found"
+    metadata: {category: privacy, surface: device-media, confidence: MEDIUM}
+    pattern-regex: "(AVCaptureSession|AVCaptureDevice|UIImagePickerController|PHPickerViewController|PhotosPicker|PHPhotoLibrary|UIDocumentPickerViewController|FileDocument)"
+
+  - id: extract-ios-contacts-calendar
+    languages: [generic]
+    severity: INFO
+    message: "Apple contacts/calendar personal-data API reference found"
+    metadata: {category: privacy, surface: personal-data, confidence: MEDIUM}
+    pattern-regex: "(CNContactStore|ContactsUI|EKEventStore|EventKit|NSContactsUsageDescription|NSCalendarsUsageDescription|NSRemindersUsageDescription)"
+
+  - id: extract-ios-account-auth
+    languages: [generic]
+    severity: INFO
+    message: "Apple account/sign-in/keychain authentication surface found"
+    metadata: {category: account, surface: account-auth, confidence: MEDIUM}
+    pattern-regex: "(ASAuthorizationAppleIDProvider|ASAuthorizationController|SignInWithApple|AuthenticationServices|SecItemAdd|SecItemCopyMatching|SecItemUpdate|Keychain|LocalAuthentication|LAContext)"
+
+  - id: extract-ios-biometric-auth
+    languages: [generic]
+    severity: INFO
+    message: "Apple biometric/device authentication API reference found"
+    metadata: {category: account, surface: device-biometric, confidence: MEDIUM}
+    pattern-regex: "(LAContext|LAPolicy|NSFaceIDUsageDescription)"
+
+  - id: extract-notification-permissions
+    languages: [generic]
+    severity: INFO
+    message: "Notification permission/push registration surface found"
+    metadata: {category: privacy, surface: device-notifications, confidence: MEDIUM}
+    pattern-regex: "(Notification\\.requestPermission|PushManager|serviceWorker\\.pushManager|POST_NOTIFICATIONS|UNUserNotificationCenter|registerForRemoteNotifications|FirebaseMessaging|messaging\\(\\)\\.getToken)"
+
+  - id: extract-personal-data-permissions
+    languages: [generic]
+    severity: INFO
+    message: "Sensitive personal-data permission/reference found"
+    metadata: {category: privacy, surface: personal-data, confidence: MEDIUM}
+    pattern-regex: "(READ_CONTACTS|WRITE_CONTACTS|READ_CALENDAR|WRITE_CALENDAR|READ_SMS|READ_CALL_LOG|WRITE_CALL_LOG|READ_PHONE_NUMBERS|READ_PHONE_STATE|NSContactsUsageDescription|NSCalendarsUsageDescription|NSRemindersUsageDescription)"
