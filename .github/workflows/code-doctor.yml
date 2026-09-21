@@ -12,6 +12,7 @@ on:
       - "**.tsx"
       - "**.java"
       - "**.kt"
+      - "**.kts"
       - "**.c"
       - "**.h"
       - "**.cpp"
@@ -48,6 +49,7 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+
       - name: Compile every Python file
         run: |
           python - <<'PY'
@@ -57,21 +59,47 @@ jobs:
               if ".git" in p.parts:
                   continue
               try:
-                  py_compile.compile(str(p),doraise=True)
+                  py_compile.compile(str(p), doraise=True)
               except Exception as e:
-                  bad.append((str(p),str(e)))
+                  bad.append((str(p), str(e)))
           for p,e in bad:
-              print("FAIL",p,e)
+              print("FAIL", p, e)
           if bad:
               raise SystemExit(1)
           PY
+
       - name: Run multi-format Code Doctor
         if: success() || failure()
         run: python lola_code_doctor.py . --output code-doctor-report.json
-      - name: Apply conservative hygiene repairs\n        if: always() && github.ref == 'refs/heads/main'\n        run: python lola_code_doctor.py . --fix --output code-doctor-after-fix.json || true\n      - name: Propose safe repairs as pull request\n        if: always() && github.ref == 'refs/heads/main'\n        env:\n          GH_TOKEN: ${{ github.token }}\n        run: |\n          if git diff --quiet; then\n            echo 'No safe automatic repair required.'\n            exit 0\n          fi\n          branch=code-doctor/autofix-${{ github.run_id }}\n          git config user.name 'lola-code-doctor[bot]'\n          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'\n          git checkout -b \"$branch\"\n          git add -u\n          git commit -m 'Code Doctor: conservative source hygiene repair'\n          git push origin \"$branch\"\n          gh pr create --base main --head \"$branch\" --title 'Code Doctor: safe automatic repairs' --body 'Automated conservative text-hygiene repairs only. Semantic/compiler failures remain reported for review.'\n      - name: Upload diagnostic report
+
+      - name: Apply conservative hygiene repairs
+        if: always() && github.ref == 'refs/heads/main'
+        run: python lola_code_doctor.py . --fix --output code-doctor-after-fix.json || true
+
+      - name: Propose safe repairs as pull request
+        if: always() && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if git diff --quiet; then
+            echo "No safe automatic repair required."
+            exit 0
+          fi
+          branch="code-doctor/autofix-${{ github.run_id }}"
+          git config user.name "lola-code-doctor[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -b "$branch"
+          git add -u
+          git commit -m "Code Doctor: conservative source hygiene repair"
+          git push origin "$branch"
+          gh pr create --base main --head "$branch" --title "Code Doctor: safe automatic repairs" --body "Automated conservative text-hygiene repairs only. Semantic/compiler failures remain reported for review."
+
+      - name: Upload diagnostic report
         if: always()
         uses: actions/upload-artifact@v6
         with:
           name: lola-code-doctor-report
-          path: |\n            code-doctor-report.json\n            code-doctor-after-fix.json
+          path: |
+            code-doctor-report.json
+            code-doctor-after-fix.json
           if-no-files-found: warn
