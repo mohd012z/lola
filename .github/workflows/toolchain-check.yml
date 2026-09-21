@@ -1,0 +1,40 @@
+name: Toolchain smoke check
+
+on:
+  push:
+    paths:
+      - "toolchain.json"
+      - "lola_toolchain.py"
+      - "analyze-apk.py"
+      - "lola_mobile.py"
+      - "lola_library.py"
+      - "frida_library.py"
+      - "frida_runtime.py"
+      - ".github/workflows/toolchain-check.yml"
+  pull_request:
+    paths:
+      - "toolchain.json"
+      - "lola_toolchain.py"
+      - "analyze-apk.py"
+      - "lola_mobile.py"
+      - "lola_library.py"
+      - "frida_library.py"
+      - "frida_runtime.py"
+      - ".github/workflows/toolchain-check.yml"
+  workflow_dispatch:
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Validate JSON manifest
+        run: python -m json.tool toolchain.json > /dev/null
+      - name: Compile Lola Python modules
+        run: |
+          python -m py_compile             lola_toolchain.py             analyze-apk.py             lola_mobile.py             lola_library.py             android_code_reader.py             frida_library.py             frida_runtime.py             apk_runtime_monitor.py
+      - name: Toolchain status smoke test
+        run: python lola_toolchain.py status
