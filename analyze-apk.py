@@ -3,6 +3,10 @@ import argparse, hashlib, json, os, re, shutil, subprocess, tempfile, zipfile
 from collections import Counter, defaultdict
 from pathlib import Path
 from urllib.parse import urlsplit
+try:
+    from lola_toolchain import command_for
+except Exception:
+    command_for=lambda _name: None
 
 MAX_ENTRY_TEXT=4*1024*1024
 MAX_STRINGS_PER_ENTRY=5000
@@ -59,6 +63,13 @@ def run(cmd,timeout=45):
 
 def tool(name): return shutil.which(name)
 
+def tool_cmd(name):
+    managed=command_for(name)
+    if managed:
+        return managed
+    found=shutil.which(name)
+    return [found] if found else None
+
 def decode_manifest(apk):
     attempts=[]
     if tool("apkanalyzer"):
@@ -71,10 +82,11 @@ def decode_manifest(apk):
     if tool("aapt"):
         r=run(["aapt","dump","xmltree",str(apk),"AndroidManifest.xml"])
         attempts.append(("aapt",r))
-    if tool("apktool"):
+    apktool_cmd=tool_cmd("apktool")
+    if apktool_cmd:
         td=Path(tempfile.mkdtemp(prefix="lola_apktool_manifest_"))
         try:
-            r=run(["apktool","d","-f","-s","-o",str(td),str(apk)],120)
+            r=run(apktool_cmd+["d","-f","-s","-o",str(td),str(apk)],120)
             attempts.append(("apktool",r))
             mp=td/"AndroidManifest.xml"
             if mp.exists():
@@ -234,7 +246,8 @@ def main():
         if any(re.search(r"(?i)AES/ECB|MD5|SHA-?1",x["preview"]) for x in crypto):risk.append({"severity":"WARNING","area":"crypto","message":"Legacy/weak crypto reference found","detail":"Review crypto findings"})
         if secret_refs:risk.append({"severity":"WARNING","area":"secrets","message":"Secret-like references found in APK strings/resources","detail":f"{len(secret_refs)} references; values redacted"})
 
-    tools={n:bool(tool(n)) for n in ["apkanalyzer","aapt2","aapt","apksigner","keytool","jadx","apktool"]}
+    tools={n:bool(tool(n)) for n in ["apkanalyzer","aapt2","aapt","apksigner","keytool","jadx"]}
+    tools["apktool"]=bool(tool_cmd("apktool"))
     summary={
         "apk":str(apk),"sha256":sha256_file(apk),"bytes":apk.stat().st_size,
         "entries":entry_count,"uncompressedBytes":total_uncompressed,"package":package,
