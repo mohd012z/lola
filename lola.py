@@ -11,10 +11,12 @@ Examples:
 from __future__ import annotations
 
 import argparse
+import json
 import shutil
 import subprocess
 import sys
 from pathlib import Path
+from lola_library import register_target, set_plan, complete_scan, catalog
 
 
 ROOT = Path(__file__).resolve().parent
@@ -47,6 +49,16 @@ def run_apk(args: argparse.Namespace, target: Path) -> int:
         raise SystemExit(f"Missing APK report builder: {report_builder}")
 
     mode = normalize_mode(args.mode, True)
+    allowed_checks={x["id"] for x in catalog()["apkPlan"]}
+    checks=[x.strip() for x in (args.checks or "").split(",") if x.strip() in allowed_checks]
+    if not checks:
+        checks=[x["id"] for x in catalog()["apkPlan"] if x.get("default")]
+    if args.decompile and "decompile" not in checks:
+        checks.append("decompile")
+    target_record=register_target(target,target.name)
+    set_plan(target_record["id"],checks,mode,{
+        "decompile":args.decompile,"keepDecompiled":args.keep_decompiled,"cleanup":args.cleanup
+    })
     analysis = Path(args.apk_analysis).resolve()
     html_report = Path(args.apk_report).resolve()
 
@@ -56,6 +68,8 @@ def run_apk(args: argparse.Namespace, target: Path) -> int:
         str(target),
         "--output",
         str(analysis),
+        "--checks",
+        ",".join(checks),
     ]
     if args.decompile:
         cmd.append("--decompile")
@@ -83,6 +97,14 @@ def run_apk(args: argparse.Namespace, target: Path) -> int:
 
     print("APK ANALYSIS:", analysis)
     print("APK VISUAL  :", html_report)
+    try:
+        analysis_data=json.loads(analysis.read_text(encoding="utf-8-sig"))
+    except Exception:
+        analysis_data={}
+    complete_scan(
+        target_record["id"],"complete",mode,checks,analysis_data,
+        {"analysis":str(analysis),"report":str(html_report)}
+    )
 
     if not args.no_open:
         try:
@@ -181,6 +203,7 @@ def build_parser() -> argparse.ArgumentParser:
     p.add_argument("--keep-decompiled", action="store_true")
     p.add_argument("--apk-analysis", default="apk-analysis.json")
     p.add_argument("--apk-report", default="apk-report.html")
+    p.add_argument("--checks", default="", help="Comma-separated APK target-plan checks from the built-in library.")
 
     # Shared output behavior
     p.add_argument("--cleanup", action="store_true")
