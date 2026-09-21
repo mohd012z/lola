@@ -24,6 +24,7 @@ import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from lola_library import catalog, register_target, set_plan, complete_scan, list_targets, load_target
 
 ROOT = Path(__file__).resolve().parent
 UPLOAD_DIR = ROOT / ".lola-mobile" / "uploads"
@@ -39,6 +40,8 @@ STATE = {
     "status": "idle",
     "stage": "ready",
     "target": "",
+    "targetId": "",
+    "checks": [],
     "mode": "/apk360",
     "progress": 0,
     "message": "Ready",
@@ -124,16 +127,17 @@ def run_cmd_stream(cmd: list[str], stage: str, progress_start: int, progress_end
     set_state(progress=progress_end)
     return rc
 
-def scan_worker(target: Path, mode: str, decompile: bool, keep_decompiled: bool, cleanup: bool):
+def scan_worker(target: Path, target_id: str, mode: str, checks: list[str], decompile: bool, keep_decompiled: bool, cleanup: bool):
     analysis = ROOT / "apk-analysis.json"
     report = ROOT / "apk-report.html"
     try:
         set_state(
-            status="running", stage="validate", target=str(target), mode=mode,
+            status="running", stage="validate", target=str(target), targetId=target_id, checks=checks, mode=mode,
             progress=3, started=time.time(), finished=None, exitCode=None,
             report="", analysis=str(analysis)
         )
         log("Validating APK target")
+        set_plan(target_id, checks, mode, {"decompile":decompile,"keepDecompiled":keep_decompiled,"cleanup":cleanup})
         if not ANALYZER.exists():
             raise RuntimeError(f"Missing analyzer: {ANALYZER}")
         if not REPORTER.exists():
@@ -166,12 +170,26 @@ def scan_worker(target: Path, mode: str, decompile: bool, keep_decompiled: bool,
                 shutil.rmtree(tmp, ignore_errors=True)
                 log("Removed Lola temporary decompiled output")
 
+        finished=time.time()
+        try:
+            analysis_data=json.loads(analysis.read_text(encoding="utf-8-sig")) if analysis.exists() else {}
+        except Exception:
+            analysis_data={}
+        complete_scan(
+            target_id, "complete", mode, checks, analysis_data,
+            {"analysis":str(analysis),"report":str(report)},
+            started=STATE.get("started"), finished=finished
+        )
         set_state(
-            status="complete", stage="complete", progress=100, finished=time.time(),
+            status="complete", stage="complete", progress=100, finished=finished,
             exitCode=0, report=str(report)
         )
         log("APK scan complete")
     except Exception as exc:
+        try:
+            complete_scan(target_id, "error", mode, checks, None, {}, started=STATE.get("started"), finished=time.time())
+        except Exception:
+            pass
         log("ERROR: " + str(exc))
         log(traceback.format_exc(limit=3))
         set_state(status="error", stage="error", finished=time.time(), exitCode=1)
@@ -191,7 +209,7 @@ header{position:sticky;top:0;z-index:20;background:rgba(7,16,28,.94);backdrop-fi
 button,.btn,select,input[type=text]{border:1px solid var(--line);background:#13223c;color:var(--text);border-radius:12px;padding:11px 13px;font:inherit}button{cursor:pointer;font-weight:700}.primary{background:#285fc5}.danger{background:#57202d}.ghost{background:#0b1526}
 .filebtn{display:block;text-align:center;border:2px dashed #35517d;background:#0b1629;border-radius:15px;padding:20px;cursor:pointer}.filebtn input{display:none}.fileName{font-weight:800;word-break:break-all;margin-top:7px}
 .grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.mode{min-height:92px;text-align:left}.mode.active{outline:2px solid var(--accent);background:#1a2b49}.mode b{display:block}.mode small{display:block;color:var(--muted);margin-top:4px}
-.opts{display:grid;grid-template-columns:1fr;gap:8px}.check{display:flex;gap:10px;align-items:center;background:#0b1526;border:1px solid var(--line);border-radius:12px;padding:11px}.check input{width:20px;height:20px}
+.opts{display:grid;grid-template-columns:1fr;gap:8px}.check{display:flex;gap:10px;align-items:flex-start;background:#0b1526;border:1px solid var(--line);border-radius:12px;padding:11px}.check input{width:20px;height:20px;flex:0 0 auto}.presetbar{display:flex;gap:7px;flex-wrap:wrap;margin-top:10px}.libgrid{display:grid;gap:8px}.libitem{background:#0b1526;border:1px solid var(--line);border-radius:12px;padding:10px}.libitem b{display:block}.search{width:100%;margin-top:9px}
 .progress{height:14px;background:#07101d;border:1px solid var(--line);border-radius:999px;overflow:hidden}.bar{height:100%;width:0;background:linear-gradient(90deg,#4b83eb,#5ad4ae);transition:width .25s}.metrics{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-top:10px}.metric{background:#0b1526;border:1px solid var(--line);border-radius:12px;padding:10px}.metric b{font-size:20px;display:block}.metric span{font-size:11px;color:var(--muted)}
 .log{background:#050a12;border:1px solid var(--line);border-radius:12px;padding:10px;white-space:pre-wrap;word-break:break-word;max-height:300px;overflow:auto;font:12px/1.4 ui-monospace,Consolas,monospace}
 .bottom{position:fixed;left:0;right:0;bottom:0;background:rgba(7,16,28,.96);backdrop-filter:blur(16px);border-top:1px solid var(--line);padding:9px 12px env(safe-area-inset-bottom)}.bottom .inner{max-width:1000px;margin:auto;display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px}.bottom button{width:100%}
@@ -214,12 +232,25 @@ button,.btn,select,input[type=text]{border:1px solid var(--line);background:#132
 </div>
 
 <div class="card">
-  <b>2. Choose scan view</b>
+  <b>2. What should Lola do with this target?</b>
+  <div class="sub">Tick the checks before scanning. The plan is saved into the Target Library.</div>
+  <div class="presetbar">
+    <button class="ghost" onclick="applyPreset('light')">Light</button>
+    <button class="ghost" onclick="applyPreset('recommended')">Recommended</button>
+    <button class="ghost" onclick="applyPreset('deep')">Deep</button>
+    <button class="ghost" onclick="applyPreset('none')">Clear</button>
+  </div>
+  <div class="opts" id="planChecks" style="margin-top:10px"></div>
+  <div class="sub" id="planSummary" style="margin-top:8px"></div>
+</div>
+
+<div class="card">
+  <b>3. Choose report view</b>
   <div class="grid" id="modes" style="margin-top:10px"></div>
 </div>
 
 <div class="card">
-  <b>3. Options</b>
+  <b>4. Run options</b>
   <div class="opts" style="margin-top:10px">
     <label class="check"><input id="decompile" type="checkbox"><span><b>JADX decompile</b><small class="sub">Use only if JADX is installed</small></span></label>
     <label class="check"><input id="keep" type="checkbox"><span><b>Keep decompiled code</b><small class="sub">Stores generated source locally</small></span></label>
@@ -247,6 +278,17 @@ button,.btn,select,input[type=text]{border:1px solid var(--line);background:#132
   <b>Local tools</b>
   <div id="toolList" class="sub" style="margin-top:8px">Checking…</div>
 </div>
+<div class="card">
+  <div class="row" style="justify-content:space-between"><b>📚 Built-in /library</b><span class="sub" id="libraryCount"></span></div>
+  <input class="search" id="librarySearch" type="text" placeholder="Search command, function, output, tool...">
+  <div class="libgrid" id="commandLibrary" style="margin-top:10px"></div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between"><b>🎯 Target Library</b><button class="ghost" onclick="refreshTargets()">Refresh</button></div>
+  <div class="sub">Stored details: .lola-library/targets/&lt;target-id&gt;.json</div>
+  <div class="libgrid" id="targetLibrary" style="margin-top:10px"></div>
+</div>
 </div>
 
 <div class="bottom"><div class="inner">
@@ -257,8 +299,86 @@ button,.btn,select,input[type=text]{border:1px solid var(--line);background:#132
 
 <script>
 const MODES=__MODES__;
-let selectedMode='/apk360', uploadedPath='', lastStatus='idle', opened=false;
+let selectedMode='/apk360', uploadedPath='', targetId='', lastStatus='idle', opened=false;
+let LIB={commands:[],apkPlan:[]};
+let selectedChecks=new Set();
 const $=id=>document.getElementById(id);
+
+
+function renderPlan(){
+  const root=$('planChecks');root.replaceChildren();
+  (LIB.apkPlan||[]).forEach(x=>{
+    const lab=document.createElement('label');lab.className='check';
+    const cb=document.createElement('input');cb.type='checkbox';cb.checked=selectedChecks.has(x.id);
+    cb.onchange=()=>{if(cb.checked)selectedChecks.add(x.id);else selectedChecks.delete(x.id);renderPlanSummary()};
+    const span=document.createElement('span');
+    span.innerHTML='<b>'+x.label+'</b><small class="sub">'+x.description+' · cost '+x.cost+'</small>';
+    lab.append(cb,span);root.appendChild(lab);
+  });
+  renderPlanSummary();
+}
+function renderPlanSummary(){
+  const labels=(LIB.apkPlan||[]).filter(x=>selectedChecks.has(x.id)).map(x=>x.label);
+  $('planSummary').textContent=labels.length?labels.length+' selected · '+labels.join(' · '):'No checks selected';
+  $('decompile').checked=selectedChecks.has('decompile');
+}
+function applyPreset(name){
+  selectedChecks.clear();
+  const plan=LIB.apkPlan||[];
+  if(name==='light'){
+    ['identity','manifest','permissions','components','files','risk','store_target'].forEach(x=>selectedChecks.add(x));
+  }else if(name==='recommended'){
+    plan.filter(x=>x.default).forEach(x=>selectedChecks.add(x.id));
+  }else if(name==='deep'){
+    plan.forEach(x=>selectedChecks.add(x.id));
+  }
+  renderPlan();
+}
+function renderCommandLibrary(){
+  const q=$('librarySearch').value.trim().toLowerCase();
+  const root=$('commandLibrary');root.replaceChildren();
+  const items=(LIB.commands||[]).filter(x=>!q||JSON.stringify(x).toLowerCase().includes(q));
+  $('libraryCount').textContent=items.length+' commands/functions';
+  items.slice(0,120).forEach(x=>{
+    const d=document.createElement('div');d.className='libitem';
+    d.innerHTML='<b>'+x.label+' <span class="sub">'+x.id+'</span></b>'+
+      '<div>'+x.purpose+'</div>'+
+      '<div class="sub">'+x.group+' · cost '+x.cost+' · tools '+((x.tools||[]).join(', ')||'none')+' · outputs '+((x.outputs||[]).join(', ')||'none')+'</div>';
+    if(x.id.startsWith('/apk')){
+      d.onclick=()=>{selectedMode=x.id;renderModes();window.scrollTo({top:0,behavior:'smooth'})};
+      d.style.cursor='pointer';
+    }
+    root.appendChild(d);
+  });
+  if(!root.children.length)root.innerHTML='<div class="libitem sub">No matching library command.</div>';
+}
+async function refreshTargets(){
+  try{
+    const r=await fetch('/api/targets?t='+Date.now(),{cache:'no-store'});const j=await r.json();
+    const root=$('targetLibrary');root.replaceChildren();
+    (j.targets||[]).forEach(x=>{
+      const d=document.createElement('div');d.className='libitem';
+      d.innerHTML='<b>'+x.name+'</b><div class="sub">'+x.id+' · '+Math.round((x.size||0)/1024/1024)+' MB · scans '+(x.scanCount||0)+'</div>'+
+        '<div>Package: '+(x.package||'-')+' · Risk: '+(x.riskFindings||0)+' · Last: '+(x.lastStatus||'-')+'</div>';
+      d.onclick=()=>loadTargetRecord(x.id);d.style.cursor='pointer';root.appendChild(d);
+    });
+    if(!root.children.length)root.innerHTML='<div class="libitem sub">No saved targets yet.</div>';
+  }catch{}
+}
+async function loadTargetRecord(id){
+  const r=await fetch('/api/target?id='+encodeURIComponent(id));const j=await r.json();
+  if(!r.ok)return;
+  targetId=j.id||targetId;
+  if(j.lastPlan?.length){selectedChecks=new Set(j.lastPlan);renderPlan()}
+  selectedMode=j.lastMode||selectedMode;renderModes();
+  alert('Loaded library plan for '+(j.name||id)+'\\nSHA-256: '+(j.sha256||''));
+}
+async function initLibrary(){
+  try{
+    const r=await fetch('/api/library',{cache:'no-store'});LIB=await r.json();
+    applyPreset('recommended');renderCommandLibrary();refreshTargets();
+  }catch{}
+}
 
 function renderModes(){
   const root=$('modes');root.replaceChildren();
@@ -280,15 +400,21 @@ $('apk').onchange=async e=>{
   });
   const j=await r.json();
   if(!r.ok){$('uploadStatus').textContent='Upload failed: '+(j.error||r.status);return}
-  uploadedPath=j.path;$('uploadStatus').textContent='Ready: '+j.name;
+  uploadedPath=j.path;targetId=j.targetId||'';$('uploadStatus').textContent='Ready: '+j.name+' · Library ID '+(targetId||'-');
+  if(j.lastPlan?.length){selectedChecks=new Set(j.lastPlan);renderPlan()}
 };
 async function runScan(){
   if(!uploadedPath){alert('Choose and upload an APK first.');return}
   opened=false;
-  const body={target:uploadedPath,mode:selectedMode,decompile:$('decompile').checked,keepDecompiled:$('keep').checked,cleanup:$('cleanup').checked};
+  const checks=[...selectedChecks];
+  if(!checks.length){alert('Select at least one target check, or choose Light/Recommended/Deep.');return}
+  if($('decompile').checked&&!selectedChecks.has('decompile'))selectedChecks.add('decompile');
+  const body={target:uploadedPath,targetId,mode:selectedMode,checks:[...selectedChecks],decompile:$('decompile').checked,keepDecompiled:$('keep').checked,cleanup:$('cleanup').checked};
   const r=await fetch('/api/scan',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)});
   const j=await r.json();if(!r.ok)alert(j.error||'Could not start scan');
 }
+$('decompile').onchange=()=>{if($('decompile').checked)selectedChecks.add('decompile');else selectedChecks.delete('decompile');renderPlan()};
+$('librarySearch').oninput=renderCommandLibrary;
 async function stopScan(){await fetch('/api/stop',{method:'POST'})}
 function openReport(){location.href='/apk-report.html?t='+Date.now()}
 function clearLog(){$('log').textContent=''}
@@ -305,7 +431,7 @@ async function poll(){
   }catch{}
   setTimeout(poll,700);
 }
-renderModes();poll();
+renderModes();initLibrary();poll();
 </script>
 </body></html>
 """.replace("__MODES__", json.dumps(APK_MODES))
@@ -341,6 +467,15 @@ class Handler(BaseHTTPRequestHandler):
             s = state_copy()
             s["tools"] = detect_tools()
             return self.send_json(s)
+        if path == "/api/library":
+            return self.send_json(catalog())
+        if path == "/api/targets":
+            return self.send_json({"targets":list_targets()})
+        if path == "/api/target":
+            qs=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            tid=(qs.get("id") or [""])[0]
+            rec=load_target(tid)
+            return self.send_json(rec if rec else {"error":"Target not found"},200 if rec else 404)
         if path == "/apk-report.html":
             p = ROOT / "apk-report.html"
             if not p.exists():
@@ -380,9 +515,10 @@ class Handler(BaseHTTPRequestHandler):
                 if remaining != 0:
                     dest.unlink(missing_ok=True)
                     return self.send_json({"error":"Upload incomplete"},400)
-                log(f"APK uploaded: {name}")
-                set_state(target=str(dest), status="idle", stage="uploaded", progress=0)
-                return self.send_json({"ok":True,"name":name,"path":str(dest)})
+                rec=register_target(dest, name)
+                log(f"APK uploaded: {name} · library {rec['id']}")
+                set_state(target=str(dest), targetId=rec["id"], checks=rec.get("lastPlan",[]), status="idle", stage="uploaded", progress=0)
+                return self.send_json({"ok":True,"name":name,"path":str(dest),"targetId":rec["id"],"sha256":rec["sha256"],"lastPlan":rec.get("lastPlan",[])})
             except Exception as exc:
                 return self.send_json({"error":str(exc)},500)
 
@@ -398,6 +534,14 @@ class Handler(BaseHTTPRequestHandler):
                 if not target.is_relative_to(upload_root):
                     return self.send_json({"error":"Invalid target location"},400)
                 mode = str(req.get("mode","/apk360"))
+                target_id=str(req.get("targetId") or "")
+                checks=[str(x) for x in (req.get("checks") or [])]
+                if not target_id:
+                    rec=register_target(target,target.name);target_id=rec["id"]
+                allowed_checks={x["id"] for x in catalog()["apkPlan"]}
+                checks=[x for x in checks if x in allowed_checks]
+                if not checks:
+                    return self.send_json({"error":"Select at least one target check"},400)
                 valid = {x[0] for x in APK_MODES}
                 if mode not in valid:
                     return self.send_json({"error":"Invalid APK mode"},400)
@@ -405,7 +549,7 @@ class Handler(BaseHTTPRequestHandler):
                     STATE["log"] = []
                 th = threading.Thread(
                     target=scan_worker,
-                    args=(target,mode,bool(req.get("decompile")),bool(req.get("keepDecompiled")),bool(req.get("cleanup"))),
+                    args=(target,target_id,mode,checks,bool(req.get("decompile") or ("decompile" in checks)),bool(req.get("keepDecompiled")),bool(req.get("cleanup"))),
                     daemon=True,
                 )
                 th.start()
