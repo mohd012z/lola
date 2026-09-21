@@ -34,6 +34,7 @@ def main():
     p.add_argument("--input", default="semgrep-results.json")
     p.add_argument("--output", default="semgrep-report.html")
     p.add_argument("--target", default="")
+    p.add_argument("--manifest", default="target-manifest.json")
     args = p.parse_args()
 
     src = Path(args.input)
@@ -43,6 +44,27 @@ def main():
     raw = json.loads(src.read_text(encoding="utf-8"))
     findings = [normalize(r) for r in raw.get("results", [])]
     findings.sort(key=lambda x: (SEV_ORDER.get(x["severity"], 9), x["surface"], x["path"], x["line"]))
+
+    target_files = []
+    manifest_path = Path(args.manifest)
+    if manifest_path.exists():
+        try:
+            manifest = json.loads(manifest_path.read_text(encoding="utf-8-sig"))
+            target_files = manifest.get("files", []) or []
+        except Exception:
+            target_files = []
+
+    def finding_count_for(full_path):
+        mp = str(full_path or "").replace("\\", "/").lower()
+        count = 0
+        for item in findings:
+            fp = str(item.get("path") or "").replace("\\", "/").lower()
+            if fp and (mp.endswith(fp) or fp.endswith(mp)):
+                count += 1
+        return count
+
+    for item in target_files:
+        item["findingCount"] = finding_count_for(item.get("path"))
 
     sev = Counter(x["severity"] for x in findings)
     cats = Counter(x["category"] for x in findings)
@@ -68,6 +90,7 @@ def main():
         "surfaceSeverity": dict(surface_severity),
         "topRules": rules.most_common(12),
         "topFiles": files.most_common(12),
+        "targetFiles": target_files,
         "findings": findings,
     }
 
@@ -91,7 +114,7 @@ def main():
 .findings{display:grid;gap:10px}.finding{background:var(--panel);border:1px solid var(--line);border-left-width:4px;border-radius:13px;padding:14px}.finding.ERROR{border-left-color:var(--error)}.finding.WARNING{border-left-color:var(--warn)}.finding.INFO{border-left-color:var(--info)}
 .row{display:flex;gap:12px;align-items:flex-start;justify-content:space-between}.left{min-width:0}.msg{font-weight:750;margin-bottom:5px}.meta{color:var(--muted);font-size:12px;word-break:break-all}.pill{display:inline-flex;align-items:center;border:1px solid var(--line);border-radius:99px;padding:3px 8px;font-size:11px;margin:0 0 5px 5px}.sev.ERROR{color:var(--error)}.sev.WARNING{color:var(--warn)}.sev.INFO{color:var(--info)}
 details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:10px}.detail{background:#0b1426;border:1px solid #22304e;border-radius:9px;padding:9px;min-width:0;overflow-wrap:anywhere}.detail b{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;margin-bottom:3px}pre{white-space:pre-wrap;overflow:auto;background:#070d19;border:1px solid #22304e;border-radius:9px;padding:11px;color:#dce7ff}
-.note{margin-top:12px;padding:11px 13px;border-radius:11px;background:#0c172b;border:1px solid #233a63;color:#b9c9e7}.empty{padding:34px;text-align:center;color:var(--muted)}.footer{color:var(--muted);font-size:12px;margin:18px 0}
+.note{margin-top:12px;padding:11px 13px;border-radius:11px;background:#0c172b;border:1px solid #233a63;color:#b9c9e7}.manifest-tools{display:flex;gap:10px;align-items:center;margin-bottom:10px}.manifest-tools input{flex:1;background:#0b1426;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px 11px}.manifest{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:12px}.mf{display:grid;grid-template-columns:minmax(280px,1fr) 90px 90px 110px minmax(180px,.7fr);gap:10px;padding:10px 12px;border-bottom:1px solid #1d2d4b;align-items:center}.mf:last-child{border-bottom:0}.mfpath{word-break:break-all}.mf small{color:var(--muted)}.hash{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;word-break:break-all;color:#b8caef}.empty{padding:34px;text-align:center;color:var(--muted)}.footer{color:var(--muted);font-size:12px;margin:18px 0}
 @media(max-width:1100px){.controls{grid-template-columns:1fr 1fr 1fr}.detail-grid{grid-template-columns:repeat(3,1fr)}}
 @media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}.hero{display:block}}
 @media(max-width:600px){.wrap{padding:13px}.grid,.controls,.detail-grid{grid-template-columns:1fr}.row{display:block}.bar-row{grid-template-columns:100px 1fr 38px}}
@@ -116,6 +139,13 @@ details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{displa
     <div class="section-head"><h2>Attack-surface map</h2><span class="sub">Click a surface to filter findings</span></div>
     <div class="surface-grid" id="surfaces"></div>
     <div class="note">Client-IP findings show where the application reads peer/proxy IP information such as <b>req.ip</b>, <b>X-Forwarded-For</b>, <b>X-Real-IP</b>, or similar headers. They do not independently discover a person's physical location. Forwarded headers are trustworthy only when the proxy chain is correctly controlled/configured.</div>
+  </div>
+
+  <div class="section card">
+    <div class="section-head"><h2>Target file manifest</h2><span class="sub" id="manifestCount"></span></div>
+    <div class="manifest-tools"><input id="manifestSearch" placeholder="Search every scanned path, extension, hash..."></div>
+    <div class="manifest" id="manifest"></div>
+    <div class="note">The manifest records candidate source/config files with full path, size, modified time, SHA-256, and how many findings map to that file. The complete machine-readable list is also saved as <b>target-manifest.json</b>.</div>
   </div>
 
   <div class="two section">
@@ -184,6 +214,25 @@ function renderBars(rootId,items){
   items.forEach(([name,count])=>{const row=document.createElement('div');row.className='bar-row';const n=document.createElement('div');n.className='bar-name';n.textContent=name;n.title=name;const bg=document.createElement('div');bg.className='bar-bg';const fill=document.createElement('div');fill.className='bar-fill';fill.style.width=(count/max*100)+'%';bg.appendChild(fill);const c=document.createElement('div');c.textContent=count;row.append(n,bg,c);root.appendChild(row)})
 }
 renderBars('ruleBars',DATA.topRules||[]);renderBars('fileBars',DATA.topFiles||[]);
+
+function fmtBytes(n){n=Number(n||0);if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';return (n/1048576).toFixed(1)+' MB'}
+function renderManifest(){
+  const q=$('manifestSearch').value.trim().toLowerCase();
+  const all=(DATA.targetFiles||[]).filter(x=>[x.path,x.name,x.extension,x.sha256].join(' ').toLowerCase().includes(q));
+  $('manifestCount').textContent=all.length+' of '+(DATA.targetFiles||[]).length+' files';
+  const root=$('manifest');root.replaceChildren();
+  if(!all.length){root.innerHTML='<div class="empty">No target paths match.</div>';return}
+  all.forEach(x=>{
+    const row=document.createElement('div');row.className='mf';
+    const p=document.createElement('div');p.className='mfpath';p.textContent=x.path||x.name||'';row.appendChild(p);
+    const e=document.createElement('div');e.textContent=x.extension||'[none]';row.appendChild(e);
+    const s=document.createElement('div');s.textContent=fmtBytes(x.bytes);row.appendChild(s);
+    const f=document.createElement('div');f.textContent=(x.findingCount||0)+' finding'+((x.findingCount||0)===1?'':'s');row.appendChild(f);
+    const h=document.createElement('div');h.className='hash';h.textContent=x.sha256||'hash unavailable';h.title=(x.modifiedUtc?'Modified UTC: '+x.modifiedUtc:'');row.appendChild(h);
+    root.appendChild(row);
+  });
+}
+$('manifestSearch').addEventListener('input',renderManifest);renderManifest();
 
 function addText(parent,tag,text,cls){const el=document.createElement(tag);if(cls)el.className=cls;el.textContent=text;parent.appendChild(el);return el}
 function detailBox(parent,label,value){const d=document.createElement('div');d.className='detail';addText(d,'b',label);addText(d,'span',value||'-');parent.appendChild(d)}
