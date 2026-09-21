@@ -16,12 +16,20 @@ from lola_code_integration import task as integration_task, merge_plan
 from lola_metatrader_bot import capabilities as mt_capabilities, bot as mt_bot, help_packet as mt_help
 from lola_mt5_mcp_bridge import configuration as mt5_mcp_configuration, discover as mt5_mcp_discover, ask as mt5_ai_ask
 from lola_ex_problem_router import diagnose as ex_diagnose
+from lola_ex_fallback_bots import fallback_plan as ex_fallback_plan, run_fallback as ex_run_fallback
 
 def run(command,target=None,arg=None):
     cmd=(command or "").strip().lower()
     mod=resolve(cmd)
     if not mod:return {"ok":False,"error":"unknown command","command":command}
     if cmd=="/codecli":return {"ok":True,"modules":catalog()}
+    if cmd in ("/exfallback","/exbots","/autofallback","/exevidence","/giveevidence"):
+        if not target:return {"ok":False,"error":"EX4/EX5 target required","help":mt_help(reason="missing fallback target")}
+        p=Path(target)
+        if not p.is_file():return {"ok":False,"error":"target is not a readable file","help":mt_help(target,"target unavailable")}
+        plan=ex_fallback_plan(p,arg)
+        if cmd in ("/exevidence","/giveevidence"):return {"ok":True,"evidence":plan.get("evidence_request"),"plan":plan}
+        return ex_run_fallback(p,arg,use_mt5=True)
     if cmd in ("/exproblem","/ex4problem","/ex5problem","/exdiagnose","/exaskmt5"):
         if not target:return {"ok":False,"error":"EX4/EX5 target required","help":mt_help(reason="missing compiled MetaTrader target")}
         p=Path(target)
