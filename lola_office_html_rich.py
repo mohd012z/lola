@@ -2,13 +2,14 @@
 from __future__ import annotations
 import base64, html, io
 from pathlib import Path
+from lola_office_html_styles import xlsx_style, xlsx_images, docx_headers_footers, hyperlink_map
 
 def data_uri(blob,mime):
     return "data:"+mime+";base64,"+base64.b64encode(blob).decode("ascii")
 
 def docx_rich(src):
     from docx import Document
-    doc=Document(src);parts=[]
+    doc=Document(src);parts=[docx_headers_footers(doc)]
     for p in doc.paragraphs:
         style=(p.style.name if p.style else "")
         level=None
@@ -23,6 +24,9 @@ def docx_rich(src):
             if r.underline:t="<u>"+t+"</u>"
             runs.append(t)
         text="".join(runs)
+        for label,url in hyperlink_map(p):
+            safe_url=html.escape(url,quote=True)
+            text=text.replace(html.escape(label),"<a href='"+safe_url+"' rel='noopener noreferrer'>"+html.escape(label)+"</a>",1)
         if text:parts.append(("<h%d>%s</h%d>"%(level,text,level)) if level else "<p>"+text+"</p>")
     # Embedded images are exported as data URIs.
     for rel in doc.part.rels.values():
@@ -50,9 +54,10 @@ def xlsx_rich(src):
                         break
                 attrs=(" rowspan='%d'"%rs if rs>1 else "")+(" colspan='%d'"%cs if cs>1 else "")
                 v="" if cell.value is None else str(cell.value)
-                cells.append("<td"+attrs+" data-cell='"+cell.coordinate+"'>"+html.escape(v)+"</td>")
+                style=xlsx_style(cell)
+                cells.append("<td"+attrs+" data-cell='"+cell.coordinate+"' style='"+html.escape(style,quote=True)+"'>"+html.escape(v)+"</td>")
             rows.append("<tr>"+"".join(cells)+"</tr>")
-        parts.append("<section class='sheet' data-sheet='"+html.escape(ws.title,quote=True)+"'><h2>"+html.escape(ws.title)+"</h2><div class='table-wrap'><table>"+"".join(rows)+"</table></div></section>")
+        parts.append("<section class='sheet' data-sheet='"+html.escape(ws.title,quote=True)+"'><h2>"+html.escape(ws.title)+"</h2><div class='table-wrap'><table>"+"".join(rows)+"</table></div>"+xlsx_images(ws)+"</section>")
     return "".join(parts)
 
 def interactive_shell(title,body):
