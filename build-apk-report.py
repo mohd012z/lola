@@ -42,6 +42,13 @@ table{width:100%;border-collapse:collapse}td,th{padding:7px;border-bottom:1px so
     <div class="card"><div class="label">URLs</div><div class="metric" id="urls">0</div></div>
     <div class="card"><div class="label">Native libs</div><div class="metric" id="native">0</div></div>
     <div class="card"><div class="label">Risk findings</div><div class="metric" id="risks">0</div></div>
+    <div class="card"><div class="label">Checks run</div><div class="metric" id="checksRun">0</div></div>
+  </div>
+
+  <div class="card">
+    <div class="label">Target Plan</div>
+    <div id="planPills" style="margin-top:8px"></div>
+    <div class="muted" id="planNote" style="margin-top:6px"></div>
   </div>
 
   <div class="modebar">
@@ -80,6 +87,10 @@ const $=id=>document.getElementById(id);
 $('apkPath').textContent=D.summary?.apk||'';
 $('sha').textContent='SHA-256 '+(D.summary?.sha256||'-');
 $('pkg').textContent=D.summary?.package||'-';$('entries').textContent=D.summary?.entries||0;$('permissions').textContent=D.summary?.permissions||0;$('exported').textContent=D.summary?.exportedComponents||0;$('urls').textContent=D.summary?.urls||0;$('native').textContent=D.summary?.nativeLibraries||0;$('risks').textContent=D.summary?.riskFindings||0;
+const requested=D.plan?.requested||[];
+$('checksRun').textContent=requested.length;
+requested.forEach(x=>{const s=document.createElement('span');s.className='pill ok';s.textContent=x;$('planPills').appendChild(s)});
+$('planNote').textContent=requested.length?'Only selected target-plan categories were requested for this run.':'Legacy/full scan without a stored target plan.';
 let MODE=__MODE__;
 
 function add(title,meta='',body='',tags=[]){
@@ -162,7 +173,7 @@ function render(){
   }else{
     title='/apk360 — APK full surface';
     const s=D.summary||{};
-    [['Package',s.package],['SHA-256',s.sha256],['Size',s.bytes+' bytes'],['SDK','min '+(s.minSdk||'-')+' / target '+(s.targetSdk||'-')],['DEX files',s.dexFiles],['ABIs',JSON.stringify(s.abis||{})],['Permissions',s.permissions],['Exported components',s.exportedComponents],['URLs',s.urls],['API refs',s.apiRefs],['Secret refs',s.secretRefs],['WebView refs',s.webViewRefs],['Crypto refs',s.cryptoRefs],['Native libs',s.nativeLibraries],['Risk findings',s.riskFindings]].forEach(x=>add(x[0],'',String(x[1]??'-')));
+    [['Package',s.package],['SHA-256',s.sha256],['Size',s.bytes+' bytes'],['Target plan',requested.join(', ')||'full core'],['SDK','min '+(s.minSdk||'-')+' / target '+(s.targetSdk||'-')],['DEX files',s.dexFiles],['ABIs',JSON.stringify(s.abis||{})],['Permissions',s.permissions],['Exported components',s.exportedComponents],['URLs',s.urls],['API refs',s.apiRefs],['Secret refs',s.secretRefs],['WebView refs',s.webViewRefs],['Crypto refs',s.cryptoRefs],['Native libs',s.nativeLibraries],['Risk findings',s.riskFindings]].forEach(x=>add(x[0],'',String(x[1]??'-')));
     (D.risk?.items||[]).slice(0,50).forEach(x=>add('Risk · '+x.area,x.message,typeof x.detail==='string'?x.detail:JSON.stringify(x.detail),[{text:x.severity,cls:x.severity==='ERROR'?'bad':x.severity==='WARNING'?'warn':'ok'}]));
   }
   $('title').textContent=title;fillFilter(filters);
