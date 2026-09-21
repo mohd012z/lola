@@ -11,6 +11,13 @@ LOG_HINT=re.compile(r"(?i)(console\.(log|warn|error|debug)|logger\.|logging\.|lo
 LOG_HIDE_HINT=re.compile(r"(?i)(disable(?:d)?[_ -]?log|suppress[_ -]?log|quiet[_ -]?mode|no[_ -]?log|clear(?:Logs?|History)|delete(?:Logs?|History)|truncate(?:Logs?|History)|logger\.disabled|logging\.disable|console\.log\s*=\s*(?:\(\)\s*=>|function\s*\(\)\s*\{\s*\}))")
 HIDDEN_TRACE_HINT=re.compile(r"(?i)(incognito|private[_ -]?mode|stealth|hidden[_ -]?mode|invisible|headless|background[_ -]?mode|display\s*:\s*none|visibility\s*:\s*hidden|aria-hidden)")
 HIDDEN_MODE_HINT=re.compile(r"(?i)(hiddenMode|hideMode|stealthMode|privateMode|incognitoMode|silentMode|backgroundMode)")
+ANON_HINTS={
+    "public-ip-discovery": re.compile(r"(?i)(api\.ipify\.org|ipinfo\.io|ifconfig\.me|icanhazip\.com|checkip\.amazonaws\.com|ipapi\.co|ip-api\.com|whatismyip)"),
+    "telemetry-tracking": re.compile(r"(?i)(google-analytics|googletagmanager|gtag\s*\(|mixpanel|segment\.|amplitude|appsflyer|adjust\.|sentry|datadog|newrelic|matomo|plausible|posthog|clarity|hotjar|fbq\s*\()"),
+    "fingerprinting": re.compile(r"(?i)(fingerprintjs|fingerprint2|clientjs|canvas\.toDataURL|getImageData\s*\(|WEBGL_debug_renderer_info|device fingerprint)"),
+    "device-account-id": re.compile(r"(?i)(ANDROID_ID|AdvertisingIdClient|advertisingIdentifier|identifierForVendor|device[_-]?id|user[_-]?id|client[_-]?id|visitor[_-]?id|anonymous[_-]?id|distinct[_-]?id)"),
+    "webrtc-local-network": re.compile(r"(?i)(RTCPeerConnection|icecandidate|candidate\.candidate|networkInterfaces\s*\()"),
+}
 ROUTE_RE=re.compile(r"""(?i)\b(?:app|router|server)\.(get|post|put|patch|delete|options|head|use)\s*\(\s*["']([^"']+)["']""")
 URL_RE=re.compile(r"""(?i)\b(?:https?|wss?|ftp|ftps|sftp|ssh|mqtts?|amqps?|grpc|grpcs)://[^\s"'<>]+""")
 SECRET_NAME=re.compile(r"(?i)(password|passwd|pwd|secret|api[_-]?key|access[_-]?token|auth[_-]?token|refresh[_-]?token|client[_-]?secret|private[_-]?key|credential)")
@@ -60,7 +67,7 @@ def main():
     extraction=(code.get("extraction") or {})
     files=manifest.get("files",[]) or []
 
-    apis=[]; hidden_traces=[]; hide_modes=[]; hide_logs=[]; keys=[]; certs=[]; ipmirror=[]
+    apis=[]; hidden_traces=[]; hide_modes=[]; hide_logs=[]; keys=[]; certs=[]; ipmirror=[]; anonymous=[]
     route_items=list(extraction.get("routes",[]) or [])
     url_items=list(urls.get("urls",[]) or [])
 
@@ -113,6 +120,12 @@ def main():
                 line=lines[ln-1] if 0<ln<=len(lines) else m.group(0)
                 bucket.append({"path":str(p),"line":ln,"kind":kind,"preview":redact(line.strip())[:1000]})
 
+        for kind,pat in ANON_HINTS.items():
+            for m in pat.finditer(text):
+                ln=line_no(text,m.start())
+                line=lines[ln-1] if 0<ln<=len(lines) else m.group(0)
+                anonymous.append({"path":str(p),"line":ln,"kind":kind,"preview":redact(line.strip())[:1000]})
+
         # route/API extraction not covered by analyze-code
         for m in ROUTE_RE.finditer(text):
             r={"path":str(p),"line":line_no(text,m.start()),"method":m.group(1).upper(),"route":m.group(2)}
@@ -163,6 +176,7 @@ def main():
             "files":len(files),"urls":len(url_items),"routes":len(route_items),"apiRefs":len(apis),
             "keyRefs":len(keys),"certs":len(certs),"hiddenTraces":len(hidden_traces),
             "hiddenModes":len(hide_modes),"hideLogRefs":len(hide_logs),"ipMirror":len(ipmirror),
+            "anonymousPrivacyRefs":len(anonymous),
             "capturedCodeFiles":len(snapshot_files),"copiedPublicCerts":len([x for x in copied_certs if x.get("copy")])
         },
         "viewextraction":{
@@ -175,6 +189,7 @@ def main():
         "routes":{"items":route_items},
         "api":{"items":apis},
         "keys":{"items":keys,"redacted":True,"note":"Values are masked or not collected."},
+        "anonymous":{"items":anonymous,"counts":dict(Counter(x["kind"] for x in anonymous)),"note":"Pre-Semgrep privacy/identity exposure inventory; it does not conceal identity or bypass tracking/security controls."},
         "hiddentraces":{"items":hidden_traces,"note":"Detection-only: this mode identifies hidden/stealth-like code patterns; it does not enable concealment."},
         "hidemodes":{"items":hide_modes,"note":"Detection-only: identifies hidden/private/silent mode references."},
         "hidelog":{"items":hide_logs,"note":"Detection-only: identifies logging suppression/clearing code. Lola does not erase application, OS, or security logs."},
