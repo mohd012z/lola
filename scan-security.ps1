@@ -6,7 +6,7 @@ param(
   [string]$Manifest="target-manifest.json",
   [string]$UrlReport="url-report.json",
   [string]$ModeReport="scan-modes.json",
-  [ValidateSet("360","stepview","protocol","hidden","/360","/stepview","/protocol","/hidden")]
+  [ValidateSet("360","stepview","protocol","protocal","hidden","/360","/stepview","/protocol","/protocal","/hidden")]
   [string]$Mode="/360",
   [switch]$ResolveUrls,
   [switch]$Strict,
