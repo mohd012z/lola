@@ -5,7 +5,7 @@ Uses ADB/logcat only. It does not install, patch, proxy, intercept TLS, automate
 alter subscriptions, or change app/device state.
 """
 from __future__ import annotations
-import argparse, json, os, re, shutil, signal, subprocess, sys, time
+import argparse, json, os, re, shutil, signal, subprocess, sys, time, queue, threading
 from collections import Counter
 from pathlib import Path
 
@@ -79,13 +79,23 @@ def main():
     cmd=["adb","logcat","--pid",pid,"-v","threadtime"]
     proc=subprocess.Popen(cmd,stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,bufsize=1,errors="ignore")
     deadline=time.time()+snapshot["durationRequested"]
+    q=queue.Queue()
+    def reader():
+        try:
+            if proc.stdout:
+                for line in proc.stdout:
+                    q.put(line)
+        finally:
+            q.put(None)
+    threading.Thread(target=reader,daemon=True).start()
     try:
         with events_path.open("w",encoding="utf-8") as ef:
             while time.time()<deadline:
-                line=proc.stdout.readline() if proc.stdout else ""
-                if not line:
+                try: line=q.get(timeout=.2)
+                except queue.Empty:
                     if proc.poll() is not None:break
-                    time.sleep(.05);continue
+                    continue
+                if line is None:break
                 safe=redact(line.rstrip())
                 cats=classify(safe)
                 if not cats:continue
