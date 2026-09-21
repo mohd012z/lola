@@ -5,6 +5,7 @@ static analysis when installed; Frida remains an explicitly authorized attach-on
 runtime evidence source and is never required for ordinary extraction.
 """
 MODULES=[
+ {"id":"pypath","mode":"static-python-graph","purpose":"Map Python paths, imports, entry points and subprocess launch sites without importing target code."},
  {"id":"exfallback","mode":"bot-coordinator","purpose":"Continue unresolved EX4/EX5 diagnosis across available evidence bots and request optional evidence."},
  {"id":"exevidence","mode":"evidence-request","purpose":"Show useful optional evidence for an unresolved EX4/EX5 case."},
  {"id":"exproblem","mode":"evidence-router","purpose":"Diagnose EX4/EX5 problems from bounded artifact, source-reference and local log evidence."},
@@ -102,6 +103,7 @@ MODULES=[
 ]
 
 ALIASES={
+ "/pypath":"pypath","/pyprocess":"pypath","/pyusage":"pypath","/pyscript":"pypath",
  "/exfallback":"exfallback","/exbots":"exfallback","/autofallback":"exfallback","/exevidence":"exevidence","/giveevidence":"exevidence",
  "/exproblem":"exproblem","/ex4problem":"exproblem","/ex5problem":"exproblem","/exdiagnose":"exproblem","/exaskmt5":"exaskmt5",
  "/mt5ai":"mt5ai","/askmt5":"mt5ai","/mt5mcp":"mt5mcp","/mt5aidiscover":"mt5mcp",
