@@ -201,6 +201,20 @@ The Semgrep rules identify where application code accesses or requests:
 
 The visual HTML report contains a dedicated **Device & Privacy Map** so these can be filtered separately.
 
+It also maps camera/gallery/files, contacts/calendar, notification, biometric, and account/authentication surfaces:
+- browser camera/microphone and file pickers
+- WebAuthn / browser Credential Management
+- OAuth/OIDC/PKCE references
+- Android AccountManager / CredentialManager / Google Sign-In / Firebase Auth
+- iOS Sign in with Apple / AuthenticationServices / Keychain
+- Android/iOS camera and photo APIs
+- contacts/calendar APIs and permissions
+- biometric APIs
+- push/notification permission APIs
+- possible confidential OAuth client secrets embedded in source
+
+The scanner reports where those APIs appear; it does not extract real passwords or enumerate a user's personal account list.
+
 ### Actual runtime device snapshot
 
 The repository also contains:
@@ -237,6 +251,16 @@ The page displays the actual runtime values the browser is allowed to expose, in
 - availability of geolocation, media devices, Bluetooth, USB, Serial, HID, NFC, WebAuthn, Web Crypto, WebRTC and related APIs
 
 It performs **no external network request**. You can copy or save the snapshot as JSON.
+
+The page also has explicit user-triggered tests for:
+- camera preview
+- microphone permission
+- photo/file picker
+- notification permission
+- WebAuthn/passkey platform-authenticator availability
+- geolocation permission
+
+Camera and microphone streams only start after the matching button is pressed and have Stop buttons.
 
 It intentionally does not attempt to obtain protected hardware identifiers such as IMEI, SIM identifiers, hardware serial, Android ID, advertising ID, or MAC address. Ordinary browsers also do not expose a complete network-interface list or guaranteed public IP.
 
