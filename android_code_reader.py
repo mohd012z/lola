@@ -7,6 +7,8 @@ import argparse
 import json
 import re
 import zipfile
+from collections import Counter
+from urllib.parse import urlsplit
 from pathlib import Path
 from typing import Any
 
@@ -25,6 +27,7 @@ PRIVATE_KEY_RE = re.compile(r"-----BEGIN [A-Z0-9 ]*PRIVATE KEY-----[\s\S]{0,5000
 CLASS_RE = re.compile(r"(?m)^\s*(?:public\s+|private\s+|protected\s+|internal\s+|abstract\s+|final\s+)*(?:class|interface|enum|object)\s+([A-Za-z_$][\w$]*)")
 METHOD_RE = re.compile(r"(?m)^\s*(?:public|private|protected|internal|static|final|synchronized|native|abstract|suspend|override|\s)+[\w<>,?.\[\]$]+\s+([A-Za-z_$][\w$]*)\s*\(")
 ANDROID_REF_RE = re.compile(r"(?i)\b(Activity|Service|BroadcastReceiver|ContentProvider|Intent|WebView|Context|SharedPreferences|RoomDatabase|SQLiteDatabase|Retrofit|OkHttpClient|WorkManager|Firebase|LocationManager|BiometricPrompt|KeyStore)\b")
+STRING_LITERAL_RE = re.compile(r'''(?s)(?:"([^"\n\r]{4,220})"|'([^'\n\r]{4,220})')''')
 
 TEXT_EXTS = {
     ".xml",".json",".txt",".html",".htm",".js",".css",".properties",".ini",".cfg",
@@ -62,6 +65,7 @@ def build_reader(apk: Path, analysis_path: Path, source_dir: Path | None, output
     resources: list[dict[str, Any]] = []
     dex_strings: list[dict[str, Any]] = []
     source_files: list[dict[str, Any]] = []
+    code_strings: list[dict[str, Any]] = []
 
     if apk.exists() and zipfile.is_zipfile(apk):
         with zipfile.ZipFile(apk, "r") as z:
@@ -80,6 +84,12 @@ def build_reader(apk: Path, analysis_path: Path, source_dir: Path | None, output
                             "bytes": zi.file_size,
                             "preview": preview(text, 18000),
                         })
+                        if len(code_strings) < 5000:
+                            for sm in STRING_LITERAL_RE.finditer(text[:MAX_TEXT_ENTRY]):
+                                val=(sm.group(1) or sm.group(2) or "").strip()
+                                if val:
+                                    code_strings.append({"kind":"resource","location":p,"value":redact(val)[:500]})
+                                    if len(code_strings) >= 5000: break
                 if re.fullmatch(r"classes(?:\d+)?\.dex", Path(p).name):
                     try:
                         data = z.read(zi)
@@ -90,11 +100,14 @@ def build_reader(apk: Path, analysis_path: Path, source_dir: Path | None, output
                         s = m.group(0).decode("utf-8", "ignore")
                         if not s:
                             continue
+                        red=redact(s[:900])
                         dex_strings.append({
                             "dex": p,
                             "offset": m.start(),
-                            "value": redact(s[:900]),
+                            "value": red,
                         })
+                        if len(code_strings) < 5000:
+                            code_strings.append({"kind":"dex","location":f"{p} @ {m.start()}","value":red[:500]})
                         count += 1
                         if count >= MAX_DEX_STRINGS_PER_DEX:
                             break
@@ -125,8 +138,9 @@ def build_reader(apk: Path, analysis_path: Path, source_dir: Path | None, output
             classes = CLASS_RE.findall(text)[:80]
             methods = METHOD_RE.findall(text)[:160]
             refs = sorted(set(ANDROID_REF_RE.findall(text)))[:80]
+            rel=str(p.relative_to(source_dir))
             source_files.append({
-                "path": str(p.relative_to(source_dir)),
+                "path": rel,
                 "extension": p.suffix.lower(),
                 "bytes": size,
                 "lines": text.count("\n") + 1,
@@ -136,6 +150,12 @@ def build_reader(apk: Path, analysis_path: Path, source_dir: Path | None, output
                 "methods": methods,
                 "androidRefs": refs,
             })
+            if len(code_strings) < 5000:
+                for sm in STRING_LITERAL_RE.finditer(text[:MAX_SOURCE_BYTES]):
+                    val=(sm.group(1) or sm.group(2) or "").strip()
+                    if val:
+                        code_strings.append({"kind":"source","location":rel,"value":redact(val)[:500]})
+                        if len(code_strings) >= 5000: break
 
     sections = {
         "manifest": analysis.get("manifest", {}),
@@ -151,6 +171,122 @@ def build_reader(apk: Path, analysis_path: Path, source_dir: Path | None, output
         "risk": analysis.get("risk", {}),
         "files": analysis.get("files", {}),
     }
+
+    url_items=(sections.get("urls") or {}).get("items",[]) if isinstance(sections.get("urls"),dict) else []
+    api_items=(sections.get("api") or {}).get("items",[]) if isinstance(sections.get("api"),dict) else []
+    web_items=(sections.get("webview") or {}).get("items",[]) if isinstance(sections.get("webview"),dict) else []
+    crypto_items=(sections.get("crypto") or {}).get("items",[]) if isinstance(sections.get("crypto"),dict) else []
+    component_items=(sections.get("components") or {}).get("items",[]) if isinstance(sections.get("components"),dict) else []
+    risk_items=(sections.get("risk") or {}).get("items",[]) if isinstance(sections.get("risk"),dict) else []
+
+    trace=[]
+    nodes={}
+    edges=[]
+    def node(nid,kind,label):
+        nodes[nid]={"id":nid,"kind":kind,"label":label}
+    def edge(src,dst,relation,evidence=""):
+        edges.append({"from":src,"to":dst,"relation":relation,"evidence":evidence})
+        trace.append({"from":src,"relation":relation,"to":dst,"evidence":evidence})
+
+    target_id="target"
+    node(target_id,"target",(analysis.get("summary") or {}).get("package") or apk.name)
+    for x in component_items[:1000]:
+        name=str(x.get("name") or x)
+        typ=str(x.get("type") or "component")
+        cid="component:"+typ+":"+name
+        node(cid,"component",f"{typ}: {name}")
+        edge(target_id,cid,"declares",str(x.get("exported","")))
+
+    host_counter=Counter()
+    for x in url_items[:3000]:
+        entry=str(x.get("entry") or "unknown")
+        raw=str(x.get("url") or "")
+        host=str(x.get("host") or "")
+        sid="entry:"+entry
+        node(sid,"entry",entry)
+        uid="url:"+raw[:300]
+        node(uid,"url",raw[:300])
+        edge(sid,uid,"contains-url",host)
+        if host:
+            hid="host:"+host
+            node(hid,"host",host)
+            edge(uid,hid,"targets-host",host)
+            host_counter[host]+=1
+
+    for x in api_items[:3000]:
+        entry=str(x.get("entry") or "unknown")
+        val=str(x.get("preview") or "")
+        sid="entry:"+entry
+        aid="api:"+val[:260]
+        node(sid,"entry",entry); node(aid,"api",val[:260])
+        edge(sid,aid,"contains-api",val[:260])
+
+    for x in web_items[:1500]:
+        entry=str(x.get("entry") or "unknown")
+        sid="entry:"+entry; wid="signal:webview"
+        node(sid,"entry",entry); node(wid,"signal","WebView")
+        edge(sid,wid,"webview-reference",str(x.get("preview") or "")[:300])
+
+    for x in crypto_items[:1500]:
+        entry=str(x.get("entry") or "unknown")
+        sid="entry:"+entry; cid="signal:crypto"
+        node(sid,"entry",entry); node(cid,"signal","Crypto")
+        edge(sid,cid,"crypto-reference",str(x.get("preview") or "")[:300])
+
+    routes=[]
+    for x in component_items[:1000]:
+        routes.append({"kind":"android-component","source":"AndroidManifest","type":x.get("type"),"name":x.get("name"),"exported":x.get("exported")})
+    for x in url_items[:2000]:
+        routes.append({"kind":"url","source":x.get("entry"),"destination":x.get("url"),"host":x.get("host"),"scheme":x.get("scheme")})
+    for x in api_items[:2000]:
+        routes.append({"kind":"api","source":x.get("entry"),"destination":x.get("preview")})
+
+    ref_counter=Counter()
+    ext_counter=Counter()
+    package_counter=Counter()
+    for x in source_files:
+        ext_counter[x.get("extension") or "[none]"]+=1
+        for ref in x.get("androidRefs",[]): ref_counter[ref]+=1
+        parts=Path(x.get("path","")).parts
+        if len(parts)>1: package_counter["/".join(parts[:min(4,len(parts)-1)])]+=1
+    for x in resources: ext_counter[x.get("extension") or "[none]"]+=1
+    severity_counter=Counter(str(x.get("severity") or "INFO") for x in risk_items)
+
+    code_brains={
+        "sourceFiles":len(source_files),
+        "classes":sum(len(x.get("classes",[])) for x in source_files),
+        "methods":sum(len(x.get("methods",[])) for x in source_files),
+        "resources":len(resources),
+        "dexStrings":len(dex_strings),
+        "codeStrings":len(code_strings),
+        "urls":len(url_items),
+        "apis":len(api_items),
+        "components":len(component_items),
+        "webviewSignals":len(web_items),
+        "cryptoSignals":len(crypto_items),
+        "riskSignals":len(risk_items),
+        "topAndroidRefs":ref_counter.most_common(25),
+        "topExtensions":ext_counter.most_common(25),
+        "topSourcePrefixes":package_counter.most_common(25),
+        "topHosts":host_counter.most_common(25),
+        "riskBySeverity":dict(severity_counter),
+        "note":"Heuristic architecture summary only; it does not execute or emulate target code."
+    }
+
+    target_codes={
+        "source":[{"path":x.get("path"),"extension":x.get("extension"),"classes":x.get("classes",[]),"methods":x.get("methods",[]),"androidRefs":x.get("androidRefs",[])} for x in source_files],
+        "resources":[{"path":x.get("path"),"extension":x.get("extension"),"bytes":x.get("bytes")} for x in resources],
+        "dexFiles":[x.get("path") for x in (sections.get("files") or {}).get("dex",[]) if isinstance(x,dict)],
+        "native":sections.get("native",{}),
+        "analysisSections":sorted(sections.keys())
+    }
+
+    transparent={
+        "nodes":list(nodes.values()),
+        "edges":edges,
+        "note":"Logical static relationship map. No target code is executed."
+    }
+
     summary = {
         "apk": str(apk),
         "package": (analysis.get("summary") or {}).get("package", ""),
@@ -161,6 +297,9 @@ def build_reader(apk: Path, analysis_path: Path, source_dir: Path | None, output
         "sourceClasses": sum(len(x.get("classes", [])) for x in source_files),
         "sourceMethods": sum(len(x.get("methods", [])) for x in source_files),
         "jadxSourceAvailable": bool(source_dir and source_dir.exists()),
+        "codeStrings": len(code_strings),
+        "traceEdges": len(edges),
+        "routes": len(routes),
         "redacted": True,
     }
     out = {
@@ -170,7 +309,15 @@ def build_reader(apk: Path, analysis_path: Path, source_dir: Path | None, output
         "resources": resources,
         "dexStrings": dex_strings,
         "sourceFiles": source_files,
+        "codeStrings": code_strings,
+        "trace": trace,
+        "routes": routes,
+        "map": {"nodes":list(nodes.values()),"edges":edges},
+        "transparent": transparent,
+        "codeBrains": code_brains,
+        "targetCodes": target_codes,
         "readerViews": [
+            "main","code360","strings","codeview","transparent","trace","routes","map","codebrains","targetcodes",
             "overview","manifest","permissions","components","source","resources","dex",
             "urls","api","keys","certs","native","webview","crypto","risk","files"
         ],
@@ -204,6 +351,12 @@ def search_reader(data: dict[str, Any], query: str, limit: int = 200) -> list[di
         add("resource", x.get("path",""), x.get("extension",""), x.get("preview",""))
     for x in data.get("dexStrings", []):
         add("dex", x.get("value","")[:120], f'{x.get("dex","")} @ {x.get("offset","")}', x.get("value",""))
+    for x in data.get("codeStrings", []):
+        add("string", x.get("value","")[:120], x.get("location",""), x.get("value",""))
+    for x in data.get("trace", []):
+        add("trace", str(x.get("relation","")), str(x.get("from",""))+" -> "+str(x.get("to","")), str(x.get("evidence","")))
+    for x in data.get("routes", []):
+        add("route", str(x.get("kind","route")), str(x.get("source","")), json.dumps(x,ensure_ascii=False))
 
     for section_name in ("urls","api","keys","webview","crypto","risk","components","permissions","native","certs"):
         sec = (data.get("sections") or {}).get(section_name, {})
