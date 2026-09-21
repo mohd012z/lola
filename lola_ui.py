@@ -19,6 +19,7 @@ import webbrowser
 from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
+from lola_library import catalog, register_target, set_plan, list_targets, load_target
 
 
 ROOT = Path(__file__).resolve().parent
@@ -148,6 +149,13 @@ class LolaUI(tk.Tk):
         self.target = tk.StringVar()
         self.target_type = tk.StringVar(value="No target selected")
         self.status = tk.StringVar(value="Ready")
+        self.library_data = catalog()
+        self.current_target_record = None
+        self.apk_plan_vars = {
+            item["id"]: tk.BooleanVar(value=bool(item.get("default")))
+            for item in self.library_data.get("apkPlan", [])
+        }
+        self.library_search = tk.StringVar()
 
         self.resolve_urls = tk.BooleanVar(value=False)
         self.live_monitor = tk.BooleanVar(value=False)
@@ -228,6 +236,8 @@ class LolaUI(tk.Tk):
         notebook.pack(fill="both", expand=True, padx=14, pady=8)
 
         self.quick_tab = ttk.Frame(notebook)
+        self.plan_tab = ScrollFrame(notebook)
+        self.library_tab = ScrollFrame(notebook)
         self.apk_tab = ScrollFrame(notebook)
         self.security_tab = ScrollFrame(notebook)
         self.code_tab = ScrollFrame(notebook)
@@ -238,6 +248,8 @@ class LolaUI(tk.Tk):
         self.log_tab = ttk.Frame(notebook)
 
         notebook.add(self.quick_tab, text="⭐ Quick")
+        notebook.add(self.plan_tab, text="✅ Target Plan")
+        notebook.add(self.library_tab, text="📚 Library")
         notebook.add(self.apk_tab, text="📦 APK")
         notebook.add(self.security_tab, text="🛡 Security")
         notebook.add(self.code_tab, text="💻 Code")
@@ -248,6 +260,8 @@ class LolaUI(tk.Tk):
         notebook.add(self.log_tab, text="📟 Live Log")
 
         self.build_quick()
+        self.build_target_plan()
+        self.build_library()
         self.build_mode_tab(self.apk_tab.inner, "APK Analysis", APK_MODES)
         self.build_mode_tab(self.security_tab.inner, "Security & Privacy", SECURITY_MODES)
         self.build_mode_tab(self.code_tab.inner, "Code Analysis", CODE_MODES)
@@ -289,6 +303,136 @@ class LolaUI(tk.Tk):
 
         grid.columnconfigure(0, weight=1)
         grid.columnconfigure(1, weight=1)
+
+
+    def build_target_plan(self):
+        p = self.plan_tab.inner
+        ttk.Label(p, text="What should Lola do with the target?", style="Header.TLabel").pack(anchor="w", padx=14, pady=(14, 6))
+        ttk.Label(
+            p,
+            text="For APK targets, these checks control which analysis categories run. The plan is also saved into the Target Library.",
+            style="Muted.TLabel",
+            wraplength=980,
+        ).pack(anchor="w", padx=14, pady=(0, 10))
+
+        presets = ttk.Frame(p)
+        presets.pack(fill="x", padx=14, pady=4)
+        ttk.Button(presets, text="Light", command=lambda: self.apply_plan_preset("light")).pack(side="left", padx=3)
+        ttk.Button(presets, text="Recommended", command=lambda: self.apply_plan_preset("recommended")).pack(side="left", padx=3)
+        ttk.Button(presets, text="Deep", command=lambda: self.apply_plan_preset("deep")).pack(side="left", padx=3)
+        ttk.Button(presets, text="Clear", command=lambda: self.apply_plan_preset("none")).pack(side="left", padx=3)
+
+        grid = ttk.Frame(p)
+        grid.pack(fill="x", padx=10, pady=8)
+        for i, item in enumerate(self.library_data.get("apkPlan", [])):
+            card = ttk.LabelFrame(grid, text=item["label"])
+            card.grid(row=i // 2, column=i % 2, sticky="nsew", padx=5, pady=5)
+            ttk.Checkbutton(card, text="Include", variable=self.apk_plan_vars[item["id"]]).pack(anchor="w", padx=9, pady=(7, 2))
+            ttk.Label(card, text=item["description"], wraplength=430).pack(anchor="w", padx=9, pady=2)
+            ttk.Label(card, text=f"Cost: {item['cost']}", style="Muted.TLabel").pack(anchor="w", padx=9, pady=(0, 8))
+        grid.columnconfigure(0, weight=1)
+        grid.columnconfigure(1, weight=1)
+
+        self.plan_summary = ttk.Label(p, text="", style="Muted.TLabel", wraplength=980)
+        self.plan_summary.pack(anchor="w", padx=14, pady=10)
+        self.refresh_plan_summary()
+        for var in self.apk_plan_vars.values():
+            var.trace_add("write", lambda *_: self.refresh_plan_summary())
+
+    def apply_plan_preset(self, name):
+        items = self.library_data.get("apkPlan", [])
+        chosen = set()
+        if name == "light":
+            chosen = {"identity","manifest","permissions","components","files","store_target"}
+        elif name == "recommended":
+            chosen = {x["id"] for x in items if x.get("default")}
+        elif name == "deep":
+            chosen = {x["id"] for x in items}
+        for item in items:
+            self.apk_plan_vars[item["id"]].set(item["id"] in chosen)
+
+    def selected_apk_checks(self):
+        return [k for k, v in self.apk_plan_vars.items() if v.get()]
+
+    def refresh_plan_summary(self):
+        if not hasattr(self, "plan_summary"):
+            return
+        checks = set(self.selected_apk_checks())
+        labels = [x["label"] for x in self.library_data.get("apkPlan", []) if x["id"] in checks]
+        self.plan_summary.configure(
+            text=(f"{len(labels)} selected: " + " · ".join(labels)) if labels else "No APK checks selected."
+        )
+        self.decompile.set("decompile" in checks)
+
+    def build_library(self):
+        p = self.library_tab.inner
+        ttk.Label(p, text="Built-in /library", style="Header.TLabel").pack(anchor="w", padx=14, pady=(14, 6))
+        ttk.Label(
+            p,
+            text="Search every command/function, its purpose, supported platform, cost, required tools, and output.",
+            style="Muted.TLabel",
+            wraplength=980,
+        ).pack(anchor="w", padx=14, pady=(0, 8))
+
+        search_row = ttk.Frame(p)
+        search_row.pack(fill="x", padx=14, pady=6)
+        ttk.Entry(search_row, textvariable=self.library_search).pack(side="left", fill="x", expand=True)
+        ttk.Button(search_row, text="Search", command=self.refresh_library_view).pack(side="left", padx=5)
+        ttk.Button(search_row, text="Refresh Targets", command=self.refresh_library_view).pack(side="left")
+
+        self.library_commands_frame = ttk.LabelFrame(p, text="Command / Function Library")
+        self.library_commands_frame.pack(fill="x", padx=14, pady=8)
+
+        self.target_library_frame = ttk.LabelFrame(p, text="Target Library")
+        self.target_library_frame.pack(fill="x", padx=14, pady=8)
+
+        self.library_search.trace_add("write", lambda *_: self.refresh_library_view())
+        self.refresh_library_view()
+
+    def refresh_library_view(self):
+        if not hasattr(self, "library_commands_frame"):
+            return
+        for child in self.library_commands_frame.winfo_children():
+            child.destroy()
+        q = self.library_search.get().strip().lower()
+        actual_modes = {x[0] for x in APK_MODES + SECURITY_MODES + CODE_MODES + NETWORK_MODES + PREFLIGHT_MODES}
+        commands = [
+            x for x in self.library_data.get("commands", [])
+            if not q or q in str(x).lower()
+        ]
+        for item in commands[:120]:
+            row = ttk.Frame(self.library_commands_frame)
+            row.pack(fill="x", padx=8, pady=4)
+            ttk.Label(row, text=f"{item['label']}  {item['id']}", width=30).pack(side="left", anchor="w")
+            ttk.Label(row, text=item["purpose"], style="Muted.TLabel", wraplength=560).pack(side="left", fill="x", expand=True)
+            if item["id"] in actual_modes:
+                ttk.Button(row, text="Use", command=lambda m=item["id"]: self.select_mode(m)).pack(side="right", padx=4)
+
+        for child in self.target_library_frame.winfo_children():
+            child.destroy()
+        ttk.Label(
+            self.target_library_frame,
+            text="Storage: .lola-library/targets/<SHA-based-id>.json",
+            style="Muted.TLabel",
+        ).pack(anchor="w", padx=8, pady=5)
+        for ref in list_targets()[:60]:
+            row = ttk.Frame(self.target_library_frame)
+            row.pack(fill="x", padx=8, pady=4)
+            ttk.Label(row, text=ref.get("name","target"), width=30).pack(side="left", anchor="w")
+            meta = f"{ref.get('id','')} · scans {ref.get('scanCount',0)} · package {ref.get('package') or '-'} · risk {ref.get('riskFindings',0)}"
+            ttk.Label(row, text=meta, style="Muted.TLabel").pack(side="left", fill="x", expand=True)
+            ttk.Button(row, text="Load Plan", command=lambda tid=ref.get("id",""): self.load_library_plan(tid)).pack(side="right")
+
+    def load_library_plan(self, target_id):
+        rec = load_target(target_id)
+        if not rec:
+            return
+        plan = set(rec.get("lastPlan", []))
+        for key, var in self.apk_plan_vars.items():
+            var.set(key in plan)
+        if rec.get("lastMode"):
+            self.selected_mode.set(rec["lastMode"])
+        self.status.set(f"Loaded library plan: {rec.get('name', target_id)}")
 
     def build_mode_tab(self, parent, title, modes):
         ttk.Label(parent, text=title, style="Header.TLabel").pack(anchor="w", padx=12, pady=(14, 8))
@@ -407,6 +551,16 @@ class LolaUI(tk.Tk):
             self.target_type.set("Target type: APK")
             if not self.selected_mode.get().startswith("/apk"):
                 self.selected_mode.set("/apk360")
+            try:
+                self.current_target_record = register_target(p, p.name)
+                if self.current_target_record.get("lastPlan"):
+                    plan=set(self.current_target_record["lastPlan"])
+                    for key,var in self.apk_plan_vars.items():
+                        var.set(key in plan)
+                self.target_type.set(f"Target type: APK · Library ID {self.current_target_record['id']}")
+                self.refresh_library_view()
+            except Exception as exc:
+                self.status.set(f"Library warning: {exc}")
         elif p.is_dir():
             self.target_type.set("Target type: Project / Folder")
             if self.selected_mode.get().startswith("/apk"):
@@ -445,6 +599,17 @@ class LolaUI(tk.Tk):
         is_apk = p.is_file() and p.suffix.lower() == ".apk"
         if is_apk and not mode.startswith("/apk"):
             raise ValueError("APK target selected. Choose a mode from the APK tab, such as /apk360.")
+        if is_apk:
+            checks=self.selected_apk_checks()
+            if not checks:
+                raise ValueError("Select at least one APK target check in the Target Plan tab.")
+            cmd_checks=",".join(checks)
+            if not self.current_target_record:
+                self.current_target_record=register_target(p,p.name)
+            set_plan(
+                self.current_target_record["id"], checks, mode,
+                {"decompile":self.decompile.get(),"keepDecompiled":self.keep_decompiled.get(),"cleanup":self.cleanup.get()}
+            )
         if not is_apk and mode.startswith("/apk"):
             raise ValueError("Project/source target selected. Choose a Security, Code, Network, or Pre-scan mode.")
 
@@ -457,6 +622,8 @@ class LolaUI(tk.Tk):
             mode,
         ]
 
+        if is_apk:
+            cmd.extend(["--checks", cmd_checks])
         if self.resolve_urls.get():
             cmd.append("--resolve-urls")
         if self.live_monitor.get():
@@ -544,6 +711,7 @@ class LolaUI(tk.Tk):
                 if item == "__LOLA_DONE__":
                     self.status.set("Finished")
                     self.refresh_outputs()
+                    self.refresh_library_view()
                     continue
                 self.log_text.insert("end", item)
                 self.log_text.see("end")
