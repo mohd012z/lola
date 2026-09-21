@@ -55,6 +55,11 @@ COMMANDS = [
     {"id":"/subscribes","group":"Android Reader","label":"Subscriptions","purpose":"Review subscription/base-plan/offer/renewal/entitlement integration references without modifying subscription state","platform":["Android","Windows","Linux"],"cost":"medium","tools":["python"],"outputs":["android-code-reader.json"]},
     {"id":"/payment","group":"Android Reader","label":"Payment","purpose":"Review Google Play Billing/payment integration references without automating or bypassing purchases","platform":["Android","Windows","Linux"],"cost":"medium","tools":["python"],"outputs":["android-code-reader.json"]},
     {"id":"/etc","group":"Android Reader","label":"Etc","purpose":"Combined miscellaneous target evidence: tools, risk, native, certs, files and unmatched reader sections","platform":["Android","Windows","Linux"],"cost":"low","tools":["python"],"outputs":["android-code-reader.json"]},
+    {"id":"/frida-library","group":"Frida","label":"Frida Library","purpose":"Internal Lola catalog of safe Frida modes, related tools and observation-only probes","platform":["Android","Windows","Linux"],"cost":"low","tools":["python"],"outputs":["frida-analysis.json","frida-events.jsonl"]},
+    {"id":"/frida-runtime","group":"Frida","label":"Frida Runtime","purpose":"Attach-only observation of an authorized running Android app","platform":["Android","Windows","Linux"],"cost":"medium","tools":["frida Python bindings"],"outputs":["frida-analysis.json","frida-events.jsonl"]},
+    {"id":"/frida-root","group":"Frida","label":"Frida Root Server","purpose":"Optional rooted-device backend using an already-running frida-server; Lola does not root the device or start/hide the server","platform":["Android","Windows","Linux"],"cost":"medium","tools":["frida","frida-server"],"outputs":["frida-analysis.json","frida-events.jsonl"]},
+    {"id":"/frida-gadget","group":"Frida","label":"Frida Gadget","purpose":"Non-root backend for Gadget already embedded in an app/test build you own or are authorized to instrument","platform":["Android","Windows","Linux"],"cost":"medium","tools":["frida","Frida Gadget","adb optional"],"outputs":["frida-analysis.json","frida-events.jsonl"]},
+    {"id":"/frida-probes","group":"Frida","label":"Frida Probes","purpose":"Safe probes for app classes/method names, lifecycle, URLs, DNS, intents, storage metadata, crypto metadata, billing signals, callbacks and timers","platform":["Android","Windows","Linux"],"cost":"medium","tools":["frida"],"outputs":["frida-analysis.json"]},
 
     # Security
     {"id":"/360","group":"Security","label":"360 Overview","purpose":"Whole source/security surface","platform":["Windows","Linux"],"cost":"medium","tools":["semgrep","python"],"outputs":["semgrep-report.html"]},
@@ -135,7 +140,9 @@ FUNCTIONS = [
     {"id":"build-apk-report.py","group":"Report Function","label":"APK Report Builder","purpose":"Create interactive APK HTML report","module":"build-apk-report.py","outputs":["apk-report.html"]},
     {"id":"android_code_reader.py","group":"Reader Function","label":"Android Code Reader Indexer","purpose":"Build searchable redacted Android code/resource/DEX library","module":"android_code_reader.py","outputs":["android-code-reader.json"]},
     {"id":"lola_mobile.py","group":"UI Function","label":"Lola Mobile Server","purpose":"Android localhost UI, upload, target plan, live scan, library and reader APIs","module":"lola_mobile.py","outputs":["localhost UI"]},
-    {"id":"apk_runtime_monitor.py","group":"Runtime Function","label":"APK Runtime Observer","purpose":"Read-only ADB/logcat observer for an authorized installed/running package; no billing state changes or network interception","module":"apk_runtime_monitor.py","outputs":["runtime-analysis.json","runtime-events.jsonl"]}
+    {"id":"apk_runtime_monitor.py","group":"Runtime Function","label":"APK Runtime Observer","purpose":"Read-only ADB/logcat observer for an authorized installed/running package; no billing state changes or network interception","module":"apk_runtime_monitor.py","outputs":["runtime-analysis.json","runtime-events.jsonl"]},
+    {"id":"frida_library.py","group":"Frida Function","label":"Frida Probe Library","purpose":"Built-in safe Frida modes, related-tool catalog and observation-only Java probes","module":"frida_library.py","outputs":[]},
+    {"id":"frida_runtime.py","group":"Frida Function","label":"Frida Runtime Runner","purpose":"Attach-only authorized Frida runner supporting root/frida-server and non-root Gadget backends","module":"frida_runtime.py","outputs":["frida-analysis.json","frida-events.jsonl"]}
 ]
 
 STORAGE = {
@@ -149,6 +156,8 @@ STORAGE = {
     "decompiled": ".lola-library/targets/<target-id>/decompiled/",
     "runtimeAnalysis": ".lola-library/targets/<target-id>/runtime-analysis.json",
     "runtimeEvents": ".lola-library/targets/<target-id>/runtime-events.jsonl",
+    "fridaAnalysis": ".lola-library/targets/<target-id>/frida-analysis.json",
+    "fridaEvents": ".lola-library/targets/<target-id>/frida-events.jsonl",
     "temporaryUpload": ".lola-mobile/uploads/",
     "targetId": "first 24 hex characters of the APK SHA-256"
 }
@@ -202,6 +211,8 @@ def artifact_paths(target_id: str) -> dict[str, str]:
         "decompiled":str(folder/"decompiled"),
         "runtimeAnalysis":str(folder/"runtime-analysis.json"),
         "runtimeEvents":str(folder/"runtime-events.jsonl"),
+        "fridaAnalysis":str(folder/"frida-analysis.json"),
+        "fridaEvents":str(folder/"frida-events.jsonl"),
     }
 
 def load_target(target_id: str) -> dict[str, Any] | None:
