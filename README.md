@@ -167,6 +167,79 @@ nginx.conf / httpd.conf
 
 Deep AST/taint coverage is strongest for JavaScript/TypeScript. Generic URL/IP/path/secret/crypto-reference rules provide additional cross-language visibility.
 
+## Device analysis
+
+There are two device layers.
+
+### Static device-surface scan
+
+The Semgrep rules identify where application code accesses or requests:
+
+- browser/OS hints: userAgent, platform, languages
+- hardware hints: logical processor count, device memory hint, touch points
+- screen size, available screen area, color depth and device-pixel ratio
+- high-entropy User-Agent Client Hints
+- camera/microphone/media-device APIs
+- geolocation APIs
+- permission-state APIs
+- clipboard
+- battery
+- browser network information
+- storage quota/persistence
+- WebRTC/network-candidate surfaces
+- Node/Electron host information and network interfaces
+- Android Build fields
+- Android stable-ID APIs such as ANDROID_ID / IMEI-style references
+- Android Wi-Fi/network APIs
+- Android sensitive permissions
+- iOS UIDevice characteristics
+- iOS identifierForVendor / advertising-ID references
+- iOS privacy usage-description keys
+- Capacitor/Cordova device plugins
+- React Native device/privacy packages
+- Flutter device/privacy packages
+
+The visual HTML report contains a dedicated **Device & Privacy Map** so these can be filtered separately.
+
+### Actual runtime device snapshot
+
+The repository also contains:
+
+~~~text
+device-check.html
+~~~
+
+For best browser support, serve the repository locally:
+
+~~~powershell
+python -m http.server 8080
+~~~
+
+Then open:
+
+~~~text
+http://localhost:8080/device-check.html
+~~~
+
+The page displays the actual runtime values the browser is allowed to expose, including:
+
+- browser and platform hints
+- User-Agent Client Hints where available
+- logical processor count
+- device-memory hint where supported
+- touch capability
+- screen dimensions and pixel ratio
+- timezone / locale
+- network effective type, downlink and RTT where supported
+- storage estimate
+- battery state where supported
+- permission states
+- availability of geolocation, media devices, Bluetooth, USB, Serial, HID, NFC, WebAuthn, Web Crypto, WebRTC and related APIs
+
+It performs **no external network request**. You can copy or save the snapshot as JSON.
+
+It intentionally does not attempt to obtain protected hardware identifiers such as IMEI, SIM identifiers, hardware serial, Android ID, advertising ID, or MAC address. Ordinary browsers also do not expose a complete network-interface list or guaranteed public IP.
+
 ## Real / final URL tracing
 
 Every scan performs a static URL inventory from the discovered source/config files. This records:
