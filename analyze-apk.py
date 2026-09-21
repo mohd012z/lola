@@ -118,7 +118,7 @@ def main():
     ap.add_argument("--keep-extracted",action="store_true")
     ap.add_argument("--checks",default="",help="Comma-separated target-plan checks. Empty means full core scan.")
     args=ap.parse_args()
-    all_checks={"identity","manifest","permissions","components","urls","api","keys","certs","native","webview","crypto","files","risk","decompile","store_target"}
+    all_checks={"identity","manifest","permissions","components","urls","api","keys","certs","native","webview","crypto","files","risk","decompile","android_reader","store_target","store_analysis","store_report","store_decompiled"}
     checks={x.strip() for x in args.checks.split(",") if x.strip()} if args.checks else set(all_checks)
     checks &= all_checks
     if not checks:
