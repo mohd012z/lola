@@ -1,0 +1,68 @@
+name: Lola Bot Health
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: lola-bot-health-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  bot-health:
+    name: Bot Health Gate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Compile Python
+        run: |
+          python - <<'PY'
+          import pathlib, py_compile
+          bad=[]
+          for p in pathlib.Path(".").rglob("*.py"):
+              if any(x in p.parts for x in (".git",".lola-tools","node_modules","build","dist","__pycache__")):
+                  continue
+              try: py_compile.compile(str(p), doraise=True)
+              except Exception as e: bad.append((str(p),str(e)))
+          for p,e in bad: print("FAIL",p,e)
+          if bad: raise SystemExit(1)
+          PY
+      - name: Bot health
+        run: python lola_bot_health.py . --output bot-health-report.json
+      - name: Workflow reports
+        run: |
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          from lola_workflow_inspector import workflow, head, skeleton, troubleshooting
+          for name,fn in (("workflow",workflow),("head",head),("skeleton",skeleton),("troubleshooting",troubleshooting)):
+              Path(f"{name}-report.json").write_text(json.dumps(fn("."),indent=2),encoding="utf-8")
+          PY
+      - name: Code Doctor
+        run: python lola_code_doctor.py . --output code-doctor-report.json
+      - name: Specialist summary
+        if: always()
+        run: python lola_code_specialists.py code-doctor-report.json code-specialists.json || true
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: lola-bot-health-${{ github.sha }}
+          path: |
+            bot-health-report.json
+            workflow-report.json
+            head-report.json
+            skeleton-report.json
+            troubleshooting-report.json
+            code-doctor-report.json
+            code-specialists.json
+          if-no-files-found: warn
