@@ -6,6 +6,7 @@ from lola_extractor_library import resolve, catalog
 from lola_deep_extractor import deep_extract, graph
 from lola_native_extractors import native_summary
 from lola_extended_extractors import extended_summary
+from lola_universal_converter import detect as detect_format, python_summary, plan as conversion_plan, available_tools
 
 def run(command,target=None,arg=None):
     mod=resolve(command)
@@ -21,6 +22,10 @@ def run(command,target=None,arg=None):
         return {"ok":True,"module":mod,"format":extended_summary(p),"evidence":extract(p)}
     if command in ("/*.exe","/*.dll","/*.so","/*.elf","/*.dat","/*.bin"):
         return {"ok":True,"module":mod,"native":native_summary(p),"evidence":extract(p)}
+    if command in ("/py","/*.py"):
+        return {"ok":True,"module":mod,"format":detect_format(p),"python":python_summary(p),"evidence":extract(p)}
+    if command in ("/**.***","/convertany","/anyformat"):
+        return {"ok":True,"module":mod,"format":detect_format(p),"conversion":conversion_plan(p,arg or "evidence360"),"tools":available_tools(),"evidence":extract(p)}
     if command=="/base64":
         return decode_base64(p.read_text(encoding="utf-8",errors="replace").strip())
     if command=="/base44":return decode_base44(p.read_text(encoding="utf-8",errors="replace").strip())
