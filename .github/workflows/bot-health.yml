@@ -51,7 +51,27 @@ jobs:
         run: python lola_code_doctor.py . --output code-doctor-report.json
       - name: Specialist summary
         if: always()
-        run: python lola_code_specialists.py code-doctor-report.json code-specialists.json || true
+        run: |
+          if [ -f code-doctor-report.json ]; then
+            python lola_code_specialists.py code-doctor-report.json code-specialists.json || true
+          else
+            echo '{"schema":"Lola-SpecialistCoordinator-1","final_gate":"blocked","reason":"Code Doctor report unavailable"}' > code-specialists.json
+          fi
+
+      - name: Final bot gate
+        if: always()
+        run: |
+          python lola_bot_health.py . --output bot-health-final.json
+          python - <<'PY'
+          import json
+          from pathlib import Path
+          health=json.loads(Path("bot-health-final.json").read_text())
+          spec=json.loads(Path("code-specialists.json").read_text()) if Path("code-specialists.json").exists() else {"final_gate":"blocked"}
+          summary={"bot_health":health.get("status"),"specialist_gate":spec.get("final_gate"),"green":health.get("status")=="GREEN" and spec.get("final_gate")=="pass"}
+          Path("bot-final-summary.json").write_text(json.dumps(summary,indent=2),encoding="utf-8")
+          print(json.dumps(summary,indent=2))
+          if not summary["green"]: raise SystemExit(1)
+          PY
       - name: Upload reports
         if: always()
         uses: actions/upload-artifact@v6
@@ -65,4 +85,6 @@ jobs:
             troubleshooting-report.json
             code-doctor-report.json
             code-specialists.json
+            bot-health-final.json
+            bot-final-summary.json
           if-no-files-found: warn
