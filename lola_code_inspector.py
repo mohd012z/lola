@@ -12,12 +12,13 @@ def inspect_file(path):
     try:tree=ast.parse(src)
     except SyntaxError as e:
         return {"file":str(p),"syntax_ok":False,"error":str(e),"line":e.lineno}
-    imports=[];defs=[];calls=[]
+    imports=[];defs=[];calls=[];methods=[]
     for n in ast.walk(tree):
         if isinstance(n,ast.Import):imports += [a.name for a in n.names]
         elif isinstance(n,ast.ImportFrom):imports.append(n.module or "")
         elif isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef,ast.ClassDef)):
             defs.append({"type":type(n).__name__,"name":n.name,"line":n.lineno})
+            if isinstance(n,(ast.FunctionDef,ast.AsyncFunctionDef)):methods.append({"name":n.name,"line":n.lineno,"async":isinstance(n,ast.AsyncFunctionDef)})
         elif isinstance(n,ast.Call):
             f=n.func
             name=f.id if isinstance(f,ast.Name) else f.attr if isinstance(f,ast.Attribute) else None
