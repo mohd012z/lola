@@ -27,6 +27,7 @@ from pathlib import Path
 from lola_library import catalog, register_target, set_plan, complete_scan, list_targets, load_target, archive_artifacts, artifact_paths, remove_generated_code
 from android_code_reader import build_reader, search_reader
 from frida_library import catalog as frida_catalog
+from lola_toolchain import status as toolchain_status, install as toolchain_install, remove as toolchain_remove
 
 ROOT = Path(__file__).resolve().parent
 UPLOAD_DIR = ROOT / ".lola-mobile" / "uploads"
@@ -72,6 +73,8 @@ RUNTIME_STATE = {"status":"idle","package":"","message":"Ready","started":None,"
 FRIDA_PROCESS: subprocess.Popen | None = None
 FRIDA_LOCK = threading.Lock()
 FRIDA_STATE = {"status":"idle","package":"","mode":"gadget","message":"Ready","started":None,"finished":None,"exitCode":None}
+TOOLCHAIN_LOCK = threading.Lock()
+TOOLCHAIN_STATE = {"status":"idle","tool":"","message":"Ready","started":None,"finished":None,"error":""}
 
 APK_MODES = [
     ["/apk360","APK 360","Complete APK overview"],
@@ -145,6 +148,23 @@ def run_cmd_stream(cmd: list[str], stage: str, progress_start: int, progress_end
     return rc
 
 
+
+
+def toolchain_state_copy():
+    with TOOLCHAIN_LOCK:
+        return dict(TOOLCHAIN_STATE)
+
+def set_toolchain_state(**kwargs):
+    with TOOLCHAIN_LOCK:
+        TOOLCHAIN_STATE.update(kwargs)
+
+def toolchain_install_worker(tool_id: str):
+    try:
+        set_toolchain_state(status="running",tool=tool_id,message="Installing "+tool_id,started=time.time(),finished=None,error="")
+        result=toolchain_install(tool_id)
+        set_toolchain_state(status="complete",tool=tool_id,message="Installed "+tool_id,finished=time.time(),error="",result=result)
+    except Exception as exc:
+        set_toolchain_state(status="error",tool=tool_id,message=str(exc),finished=time.time(),error=str(exc))
 
 def frida_state_copy():
     with FRIDA_LOCK:
@@ -421,6 +441,14 @@ button,.btn,select,input[type=text]{border:1px solid var(--line);background:#132
   <b>Local tools</b>
   <div id="toolList" class="sub" style="margin-top:8px">Checking…</div>
 </div>
+<div class="card" id="toolchainCard">
+  <div class="row" style="justify-content:space-between"><b>🧰 Built-in Toolchain</b><span class="sub" id="toolchainJob">Ready</span></div>
+  <div class="sub">Pinned/version-aware tool manager. Third-party binaries are cached under <code>.lola-tools/</code> and are not committed to Git.</div>
+  <div class="presetbar">
+    <button class="ghost" onclick="refreshToolchain()">Refresh</button>
+  </div>
+  <div class="libgrid" id="toolchainList" style="margin-top:10px"></div>
+</div>
 <div class="card" id="libraryCard">
   <div class="row" style="justify-content:space-between"><b>📚 Built-in /library</b><span class="sub" id="libraryCount"></span></div>
   <input class="search" id="librarySearch" type="text" placeholder="Search command, function, output, tool...">
@@ -598,6 +626,8 @@ function renderCommandLibrary(){
         d.onclick=()=>{$('runtimeCard').scrollIntoView({behavior:'smooth',block:'start'});startRuntime()};d.style.cursor='pointer';
       } else if(String(x.id||'').startsWith('/frida')){
         d.onclick=()=>{$('fridaCard').scrollIntoView({behavior:'smooth',block:'start'})};d.style.cursor='pointer';
+      } else if(['/toolchain','/apktool','/gradle','/ghidra','/hermes','/toolstatus'].includes(x.id)){
+        d.onclick=()=>{$('toolchainCard').scrollIntoView({behavior:'smooth',block:'start'});refreshToolchain()};d.style.cursor='pointer';
       }
     }
     root.appendChild(d);
@@ -792,6 +822,56 @@ $('readerSearch').oninput=()=>{clearTimeout(window.__readerTimer);window.__reade
 
 
 
+
+let toolchainCache={host:'',root:'',tools:[],job:{}};
+function renderToolchain(){
+  const root=$('toolchainList');root.replaceChildren();
+  const job=toolchainCache.job||{};
+  $('toolchainJob').textContent=(job.status||'idle')+(job.tool?' · '+job.tool:'')+(job.message?' · '+job.message:'');
+  (toolchainCache.tools||[]).forEach(t=>{
+    const d=document.createElement('div');d.className='libitem';
+    const title=document.createElement('b');title.textContent=t.label+' · '+(t.version||'');
+    d.appendChild(title);
+    const m=document.createElement('div');m.className='sub';
+    m.textContent=(t.state||'missing')+' · '+(t.source||'not installed')+(t.path?' · '+t.path:'');
+    d.appendChild(m);
+    const p=document.createElement('div');p.textContent=t.purpose||'';d.appendChild(p);
+    const row=document.createElement('div');row.className='presetbar';
+    if(t.managedInstall && t.state!=='ready'){
+      const b=document.createElement('button');b.className='primary';b.textContent='Install';
+      b.onclick=()=>installTool(t.id);row.appendChild(b);
+    }
+    if(t.source==='managed' && t.state==='ready'){
+      const b=document.createElement('button');b.className='danger';b.textContent='Remove';
+      b.onclick=()=>removeTool(t.id);row.appendChild(b);
+    }
+    if(t.id==='hermes' && t.state!=='ready'){
+      const s=document.createElement('span');s.className='sub';s.textContent='Project-matched detection only; use the target React Native Hermes compiler.';row.appendChild(s);
+    }
+    if(t.id==='ghidra' && t.host==='termux'){
+      const s=document.createElement('span');s.className='sub';s.textContent='Managed Ghidra install is disabled on Termux; desktop/headless use is preferred.';row.appendChild(s);
+    }
+    d.appendChild(row);root.appendChild(d);
+  });
+}
+async function refreshToolchain(){
+  try{
+    const r=await fetch('/api/toolchain/status?t='+Date.now(),{cache:'no-store'});
+    toolchainCache=await r.json();renderToolchain();
+  }catch{}
+}
+async function installTool(id){
+  if(!confirm('Install managed '+id+' into .lola-tools/? Lola will verify the declared SHA-256/checksum before activation.'))return;
+  const r=await fetch('/api/toolchain/install',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tool:id})});
+  const j=await r.json();if(!r.ok){alert(j.error||'Install failed');return}refreshToolchain();
+}
+async function removeTool(id){
+  if(!confirm('Remove Lola-managed '+id+' from .lola-tools/? System-installed tools are not touched.'))return;
+  const r=await fetch('/api/toolchain/remove',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({tool:id})});
+  const j=await r.json();if(!r.ok){alert(j.error||'Remove failed');return}refreshToolchain();
+}
+async function pollToolchain(){await refreshToolchain();setTimeout(pollToolchain,2500)}
+
 let fridaCache={events:[],counts:{}};
 async function loadFridaLibrary(){
   try{
@@ -923,7 +1003,7 @@ async function poll(){
   }catch{}
   setTimeout(poll,700);
 }
-renderModes();initLibrary();poll();pollRuntime();pollFrida();
+renderModes();initLibrary();poll();pollRuntime();pollFrida();pollToolchain();
 </script>
 </body></html>
 """.replace("__MODES__", json.dumps(APK_MODES))
@@ -959,6 +1039,10 @@ class Handler(BaseHTTPRequestHandler):
             s = state_copy()
             s["tools"] = detect_tools()
             return self.send_json(s)
+        if path == "/api/toolchain/status":
+            data=toolchain_status(ROOT)
+            data["job"]=toolchain_state_copy()
+            return self.send_json(data)
         if path == "/api/library":
             return self.send_json(catalog())
         if path == "/api/targets":
@@ -1130,6 +1214,36 @@ class Handler(BaseHTTPRequestHandler):
                 )
                 th.start()
                 return self.send_json({"ok":True})
+            except Exception as exc:
+                return self.send_json({"error":str(exc)},500)
+
+        if path == "/api/toolchain/install":
+            try:
+                job=toolchain_state_copy()
+                if job.get("status")=="running":
+                    return self.send_json({"error":"Another tool installation is already running"},409)
+                length=int(self.headers.get("Content-Length","0"))
+                req=json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+                tid=str(req.get("tool") or "")
+                valid={x.get("id") for x in toolchain_status(ROOT).get("tools",[])}
+                if tid not in valid:return self.send_json({"error":"Unknown tool"},400)
+                threading.Thread(target=toolchain_install_worker,args=(tid,),daemon=True).start()
+                return self.send_json({"ok":True,"tool":tid})
+            except Exception as exc:
+                return self.send_json({"error":str(exc)},500)
+
+        if path == "/api/toolchain/remove":
+            try:
+                job=toolchain_state_copy()
+                if job.get("status")=="running":
+                    return self.send_json({"error":"A tool installation is running"},409)
+                length=int(self.headers.get("Content-Length","0"))
+                req=json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+                tid=str(req.get("tool") or "")
+                valid={x.get("id") for x in toolchain_status(ROOT).get("tools",[])}
+                if tid not in valid:return self.send_json({"error":"Unknown tool"},400)
+                result=toolchain_remove(tid)
+                return self.send_json(result)
             except Exception as exc:
                 return self.send_json({"error":str(exc)},500)
 
