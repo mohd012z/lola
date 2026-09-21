@@ -1232,3 +1232,99 @@ rules:
     message: "Sensitive configuration/key/certificate file reference found"
     metadata: {category: hidden, surface: sensitive-config, confidence: MEDIUM}
     pattern-regex: "(?i)\\b[A-Za-z0-9_.-]+\\.(pem|key|p12|pfx|jks|keystore|mobileprovision|entitlements|crt|cer|der)\\b"
+
+  # ========================= PRIVACY / ANONYMITY EXPOSURE =========================
+
+  - id: extract-public-ip-discovery-service
+    languages: [generic]
+    severity: INFO
+    message: "Public-IP discovery service/reference found"
+    metadata: {category: privacy, surface: privacy-ip-exposure, confidence: MEDIUM}
+    pattern-regex: "(?i)\\b(api\\.ipify\\.org|ipinfo\\.io|ifconfig\\.me|icanhazip\\.com|checkip\\.amazonaws\\.com|api\\.my-ip\\.io|ipapi\\.co|ip-api\\.com|whatismyip)\\b"
+
+  - id: extract-analytics-telemetry-sdk
+    languages: [generic]
+    severity: INFO
+    message: "Analytics/telemetry/tracking SDK reference found"
+    metadata: {category: privacy, surface: privacy-telemetry, confidence: MEDIUM}
+    pattern-regex: "(?i)\\b(google-analytics|googletagmanager|gtag\\s*\\(|firebaseanalytics|mixpanel|segment\\.|amplitude|appsflyer|adjust\\.|sentry|datadog|newrelic|matomo|plausible|posthog|clarity|hotjar|facebook pixel|fbq\\s*\\()"
+
+  - id: extract-cookie-access
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Browser cookie access found"
+    metadata: {category: privacy, surface: privacy-persistent-id, confidence: HIGH}
+    pattern-either:
+      - pattern: document.cookie
+      - pattern: $DOC.cookie
+
+  - id: extract-persistent-identifier-storage
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Potential persistent identifier stored in browser storage"
+    metadata: {category: privacy, surface: privacy-persistent-id, confidence: MEDIUM}
+    patterns:
+      - pattern-either:
+          - pattern: localStorage.setItem($KEY, $VALUE)
+          - pattern: sessionStorage.setItem($KEY, $VALUE)
+          - pattern: $STORE.setItem($KEY, $VALUE)
+      - metavariable-regex:
+          metavariable: $KEY
+          regex: (?i).*(device|user|client|visitor|fingerprint|install|session|tracking|analytics|advertising|uuid|guid|identifier|id).*
+
+  - id: extract-fingerprinting-library
+    languages: [generic]
+    severity: INFO
+    message: "Browser/device fingerprinting library or technique reference found"
+    metadata: {category: privacy, surface: privacy-fingerprinting, confidence: MEDIUM}
+    pattern-regex: "(?i)\\b(fingerprintjs|fingerprint2|clientjs|canvas fingerprint|audio fingerprint|webgl fingerprint|device fingerprint)\\b"
+
+  - id: extract-canvas-fingerprint-surface
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Canvas rendering/readback surface found; review if used for fingerprinting"
+    metadata: {category: privacy, surface: privacy-fingerprinting, confidence: LOW}
+    pattern-either:
+      - pattern: $CANVAS.toDataURL(...)
+      - pattern: $CTX.getImageData(...)
+      - pattern: $CANVAS.toBlob(...)
+
+  - id: extract-webgl-fingerprint-surface
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "WebGL renderer/vendor information surface found"
+    metadata: {category: privacy, surface: privacy-fingerprinting, confidence: MEDIUM}
+    pattern-either:
+      - pattern: $GL.getParameter(...)
+      - pattern: $GL.getExtension("WEBGL_debug_renderer_info")
+
+  - id: extract-webrtc-candidate-inspection
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "WebRTC ICE candidate handling found; review local/network metadata exposure"
+    metadata: {category: privacy, surface: privacy-network-exposure, confidence: MEDIUM}
+    pattern-either:
+      - pattern: $PC.onicecandidate = $HANDLER
+      - pattern: $PC.addEventListener("icecandidate", ...)
+      - pattern: $CANDIDATE.candidate
+
+  - id: extract-advertising-device-id
+    languages: [generic]
+    severity: WARNING
+    message: "Advertising/device identifier reference found"
+    metadata: {category: privacy, surface: privacy-advertising-id, confidence: MEDIUM}
+    pattern-regex: "(?i)\\b(IDFA|advertisingIdentifier|AdvertisingIdClient|advertisingId|AAID|GAID|identifierForVendor|ANDROID_ID)\\b"
+
+  - id: extract-telemetry-user-context
+    languages: [generic]
+    severity: INFO
+    message: "Telemetry user/device identity context reference found"
+    metadata: {category: privacy, surface: privacy-telemetry, confidence: LOW}
+    pattern-regex: "(?i)\\b(setUser|identify\\s*\\(|setUserId|user_id|device_id|distinct_id|anonymous_id|installation_id|client_id)\\b"
+
+  - id: extract-cross-site-tracking-cookie-flags
+    languages: [generic]
+    severity: INFO
+    message: "Cross-site cookie attribute reference found"
+    metadata: {category: privacy, surface: privacy-cookie, confidence: LOW}
+    pattern-regex: "(?i)\\b(SameSite=None|third[- ]party cookie|partitioned cookie|CHIPS)\\b"
