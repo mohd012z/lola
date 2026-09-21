@@ -3,6 +3,7 @@ param(
   [string]$Config="codex-security.yaml",
   [string]$Report="semgrep-results.json",
   [string]$HtmlReport="semgrep-report.html",
+  [string]$Manifest="target-manifest.json",
   [switch]$Strict,
   [switch]$NoOpen
 )
@@ -24,12 +25,22 @@ $TargetPath = (Resolve-Path -LiteralPath $Target).Path
 $ConfigPath = (Resolve-Path -LiteralPath $Config).Path
 
 $Extensions = @(
-  ".js",".jsx",".mjs",".cjs",".ts",".tsx",".html",".htm",
-  ".json",".yaml",".yml",".xml",".md",".txt",".env",
-  ".properties",".toml",".vue",".svelte"
+  ".js",".jsx",".mjs",".cjs",".ts",".tsx",".html",".htm",".vue",".svelte",
+  ".json",".yaml",".yml",".xml",".md",".txt",".env",".properties",".toml",
+  ".conf",".ini",".sql",".graphql",".gql",".pem",".key",".crt",".cer",
+  ".sh",".ps1",".py",".java",".kt",".kts",".go",".php",".rb",".cs",
+  ".gradle",".pro",".cfg"
 )
-$Names = @("Dockerfile","Containerfile",".env",".env.local",".env.production","nginx.conf","httpd.conf","Caddyfile")
-$SkipDirs = @(".git","node_modules","vendor","dist","build","out",".next",".nuxt","coverage",".cache","tmp",".tmp","generated",".generated")
+$Names = @(
+  "Dockerfile","Containerfile","Caddyfile","nginx.conf","httpd.conf",
+  ".env",".env.local",".env.development",".env.production",".env.test",
+  "AndroidManifest.xml","Info.plist","Podfile","Gemfile"
+)
+$SkipDirs = @(
+  ".git","node_modules","vendor","dist","build","out",".next",".nuxt",
+  "coverage",".cache","tmp",".tmp","generated",".generated","Pods",
+  ".gradle",".idea",".vscode"
+)
 
 if (Test-Path -LiteralPath $TargetPath -PathType Leaf) {
   $Files = @(Get-Item -LiteralPath $TargetPath)
@@ -41,6 +52,7 @@ if (Test-Path -LiteralPath $TargetPath -PathType Leaf) {
     $ext = $_.Extension.ToLowerInvariant()
     (($Extensions -contains $ext) -or ($Names -contains $name)) -and
       (-not $name.EndsWith(".min.js")) -and
+      (-not $name.EndsWith(".min.css")) -and
       (-not $name.EndsWith(".bundle.js")) -and
       (-not $name.EndsWith(".map"))
   })
@@ -62,6 +74,36 @@ if ($Files.Count -gt 0) {
   $Files | Select-Object -First 30 -ExpandProperty FullName | ForEach-Object { Write-Host "  $_" }
   if ($Files.Count -gt 30) { Write-Host "  ... and $($Files.Count - 30) more" }
 }
+
+# Build a manifest of every candidate file so the HTML report can show
+# scanned paths even when Semgrep produces no finding for that file.
+$ManifestRows = @()
+foreach ($File in $Files) {
+  $Hash = ""
+  try {
+    $Hash = (Get-FileHash -LiteralPath $File.FullName -Algorithm SHA256).Hash.ToLowerInvariant()
+  } catch {
+    $Hash = ""
+  }
+
+  $ManifestRows += [PSCustomObject]@{
+    path = $File.FullName
+    name = $File.Name
+    extension = $File.Extension.ToLowerInvariant()
+    bytes = [int64]$File.Length
+    modifiedUtc = $File.LastWriteTimeUtc.ToString("o")
+    sha256 = $Hash
+  }
+}
+
+$ManifestObject = [PSCustomObject]@{
+  target = $TargetPath
+  generatedUtc = [DateTime]::UtcNow.ToString("o")
+  fileCount = $ManifestRows.Count
+  files = $ManifestRows
+}
+$ManifestObject | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath $Manifest -Encoding UTF8
+Write-Host "MANIFEST: $((Resolve-Path -LiteralPath $Manifest).Path)" -ForegroundColor DarkCyan
 
 $argsList = @("scan","--config",$ConfigPath,"--json","--output",$Report)
 if ($Strict) { $argsList += "--error" }
@@ -90,7 +132,7 @@ if (Test-Path -LiteralPath $Report) {
 
     $Python = Get-Command python -ErrorAction SilentlyContinue
     if ($Python -and (Test-Path -LiteralPath "build-report.py")) {
-      & $Python.Source "build-report.py" --input $Report --output $HtmlReport --target $TargetPath
+      & $Python.Source "build-report.py" --input $Report --manifest $Manifest --output $HtmlReport --target $TargetPath
       if (Test-Path -LiteralPath $HtmlReport) {
         $HtmlPath = (Resolve-Path -LiteralPath $HtmlReport).Path
         Write-Host "VISUAL  : $HtmlPath" -ForegroundColor Green
