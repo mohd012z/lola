@@ -11,6 +11,7 @@ param(
 )
 
 $ErrorActionPreference="Stop"
+$ToolRoot=$PSScriptRoot
 
 function Fail([string]$Message) {
   Write-Host "[ERROR] $Message" -ForegroundColor Red
@@ -23,14 +24,16 @@ if ([IO.Path]::GetExtension($ApkPath).ToLowerInvariant() -ne ".apk") { Fail "Tar
 
 $Python=Get-Command python -ErrorAction SilentlyContinue
 if (-not $Python) { Fail "Python is required for APK analysis." }
-if (-not (Test-Path -LiteralPath "analyze-apk.py")) { Fail "analyze-apk.py was not found." }
+$Analyzer=Join-Path $ToolRoot "analyze-apk.py"
+$ReportBuilder=Join-Path $ToolRoot "build-apk-report.py"
+if (-not (Test-Path -LiteralPath $Analyzer)) { Fail "analyze-apk.py was not found." }
 
 Write-Host ""
 Write-Host "Lola APK Deep Scan" -ForegroundColor Cyan
 Write-Host "APK     : $ApkPath"
 Write-Host "Mode    : $Mode"
 
-$Args=@("analyze-apk.py",$ApkPath,"--output",$Analysis)
+$Args=@($Analyzer,$ApkPath,"--output",$Analysis)
 if ($Decompile) { $Args += "--decompile" }
 if ($KeepDecompiled) { $Args += "--keep-extracted" }
 
@@ -42,8 +45,8 @@ if ($AnalyzeExit -ne 0 -or -not (Test-Path -LiteralPath $Analysis)) {
 
 Write-Host "ANALYSIS: $((Resolve-Path -LiteralPath $Analysis).Path)" -ForegroundColor DarkCyan
 
-if (Test-Path -LiteralPath "build-apk-report.py") {
-  & $Python.Source "build-apk-report.py" --input $Analysis --output $HtmlReport --mode $Mode
+if (Test-Path -LiteralPath $ReportBuilder) {
+  & $Python.Source $ReportBuilder --input $Analysis --output $HtmlReport --mode $Mode
   if (Test-Path -LiteralPath $HtmlReport) {
     $ReportPath=(Resolve-Path -LiteralPath $HtmlReport).Path
     Write-Host "VISUAL  : $ReportPath" -ForegroundColor Green
