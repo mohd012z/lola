@@ -49,8 +49,8 @@ def run_fallback(path,question=None,use_mt5=True):
     if use_mt5:
         attempts.append({"bot":"mt5-ai","result":ask_mt5(Path(path),question or
           "Use only the supplied EX4/EX5 evidence. Diagnose supported causes and next checks; label inference and do not claim source recovery.")})
-    resolved=any(a["result"].get("ok") and a["bot"]=="mt5-ai" for a in attempts if isinstance(a.get("result"),dict))
+    ai_reviewed=any(a["result"].get("ok") and a["bot"]=="mt5-ai" for a in attempts if isinstance(a.get("result"),dict))
     return {"ok":True,"plan":plan,"attempts":attempts,
-            "status":"CROSS_CHECKED" if resolved else "NEEDS_HELP",
+            "status":"AI_REVIEWED" if ai_reviewed else "NEEDS_HELP",
             "next":{"command":"/help","packet":local.get("packet"),"evidence_options":plan["evidence_request"]}
-                   if not resolved else {"action":"compare AI suggestion against observed/runtime evidence"}}
+                   if not ai_reviewed else {"action":"compare AI suggestion against observed/runtime evidence before marking resolved"}}
