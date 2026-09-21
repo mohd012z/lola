@@ -16,7 +16,7 @@ INDEX_FILE = LIB_ROOT / "library.json"
 
 COMMANDS = [
     {"id":"/library","group":"System","label":"Built-in Library","purpose":"Search every Lola command/function, tool requirement and output","platform":["Android","Windows","Linux"],"cost":"low","tools":[],"outputs":[".lola-library/library.json"]},
-    {"id":"/targetlibrary","group":"System","label":"Target Library","purpose":"Saved target identities, SHA-256, scan plans, history and output links","platform":["Android","Windows","Linux"],"cost":"low","tools":[],"outputs":[".lola-library/targets/*.json"]},
+    {"id":"/targetlibrary","group":"System","label":"Target Library","purpose":"Saved target identities, SHA-256, scan plans, history and output links","platform":["Android","Windows","Linux"],"cost":"low","tools":[],"outputs":[".lola-library/targets/<target-id>/target.json"]},
     {"id":"/targetplan","group":"System","label":"Target Plan","purpose":"Choose what Lola should inspect before starting a scan","platform":["Android","Windows","Linux"],"cost":"low","tools":[],"outputs":["target lastPlan"]},
     # APK
     {"id":"/apk360","group":"APK","label":"APK 360","purpose":"Complete APK overview","platform":["Android","Windows","Linux"],"cost":"medium","tools":["python"],"outputs":["apk-analysis.json","apk-report.html"]},
@@ -155,6 +155,7 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 def catalog() -> dict[str, Any]:
+    _ensure()
     return {"commands":COMMANDS,"functions":FUNCTIONS,"apkPlan":APK_PLAN,"storage":STORAGE}
 
 def target_id_from_sha(sha256: str) -> str:
