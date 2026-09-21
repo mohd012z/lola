@@ -20,6 +20,7 @@ from pathlib import Path
 import tkinter as tk
 from tkinter import filedialog, messagebox, ttk
 from lola_library import catalog, register_target, set_plan, list_targets, load_target
+from lola_toolchain import status as toolchain_status, install as toolchain_install, remove as toolchain_remove
 
 
 ROOT = Path(__file__).resolve().parent
@@ -238,6 +239,7 @@ class LolaUI(tk.Tk):
         self.quick_tab = ttk.Frame(notebook)
         self.plan_tab = ScrollFrame(notebook)
         self.library_tab = ScrollFrame(notebook)
+        self.toolchain_tab = ScrollFrame(notebook)
         self.apk_tab = ScrollFrame(notebook)
         self.security_tab = ScrollFrame(notebook)
         self.code_tab = ScrollFrame(notebook)
@@ -250,6 +252,7 @@ class LolaUI(tk.Tk):
         notebook.add(self.quick_tab, text="⭐ Quick")
         notebook.add(self.plan_tab, text="✅ Target Plan")
         notebook.add(self.library_tab, text="📚 Library")
+        notebook.add(self.toolchain_tab, text="🧰 Toolchain")
         notebook.add(self.apk_tab, text="📦 APK")
         notebook.add(self.security_tab, text="🛡 Security")
         notebook.add(self.code_tab, text="💻 Code")
@@ -262,6 +265,7 @@ class LolaUI(tk.Tk):
         self.build_quick()
         self.build_target_plan()
         self.build_library()
+        self.build_toolchain()
         self.build_mode_tab(self.apk_tab.inner, "APK Analysis", APK_MODES)
         self.build_mode_tab(self.security_tab.inner, "Security & Privacy", SECURITY_MODES)
         self.build_mode_tab(self.code_tab.inner, "Code Analysis", CODE_MODES)
@@ -433,6 +437,116 @@ class LolaUI(tk.Tk):
         if rec.get("lastMode"):
             self.selected_mode.set(rec["lastMode"])
         self.status.set(f"Loaded library plan: {rec.get('name', target_id)}")
+
+    def build_toolchain(self):
+        p = self.toolchain_tab.inner
+        ttk.Label(p, text="Built-in Managed Toolchain", style="Header.TLabel").pack(anchor="w", padx=14, pady=(14, 6))
+        ttk.Label(
+            p,
+            text="Lola stores only tool definitions in Git. Managed third-party packages are downloaded into .lola-tools/ and checksum-verified before use.",
+            style="Muted.TLabel",
+            wraplength=980,
+        ).pack(anchor="w", padx=14, pady=(0, 8))
+
+        top = ttk.Frame(p)
+        top.pack(fill="x", padx=14, pady=4)
+        ttk.Button(top, text="Refresh", command=self.refresh_toolchain).pack(side="left", padx=3)
+        ttk.Button(top, text="Open .lola-tools", command=lambda: self.open_path(ROOT / ".lola-tools")).pack(side="left", padx=3)
+
+        self.toolchain_status_label = ttk.Label(p, text="", style="Muted.TLabel")
+        self.toolchain_status_label.pack(anchor="w", padx=14, pady=6)
+        self.toolchain_list = ttk.Frame(p)
+        self.toolchain_list.pack(fill="x", padx=10, pady=6)
+        self.refresh_toolchain()
+
+    def refresh_toolchain(self):
+        if not hasattr(self, "toolchain_list"):
+            return
+        for child in self.toolchain_list.winfo_children():
+            child.destroy()
+
+        project = None
+        try:
+            t = Path(self.target.get()).expanduser()
+            if t.exists() and t.is_dir():
+                project = t
+        except Exception:
+            pass
+
+        try:
+            data = toolchain_status(project or ROOT)
+        except Exception as exc:
+            self.toolchain_status_label.configure(text=f"Toolchain error: {exc}")
+            return
+
+        self.toolchain_status_label.configure(
+            text=f"Host: {data.get('host','-')} · Cache: {data.get('root','-')}"
+        )
+
+        for i, tool in enumerate(data.get("tools", [])):
+            card = ttk.LabelFrame(
+                self.toolchain_list,
+                text=f"{tool.get('label','')} · {tool.get('version','')}",
+            )
+            card.grid(row=i // 2, column=i % 2, sticky="nsew", padx=5, pady=5)
+            ttk.Label(
+                card,
+                text=f"{tool.get('state','missing')} · {tool.get('source') or 'not installed'}",
+            ).pack(anchor="w", padx=9, pady=(7, 2))
+            if tool.get("path"):
+                ttk.Label(card, text=tool["path"], style="Muted.TLabel", wraplength=430).pack(anchor="w", padx=9, pady=2)
+            ttk.Label(card, text=tool.get("purpose",""), wraplength=430).pack(anchor="w", padx=9, pady=3)
+
+            row = ttk.Frame(card)
+            row.pack(fill="x", padx=9, pady=(3, 8))
+            if tool.get("managedInstall") and tool.get("state") != "ready":
+                ttk.Button(
+                    row,
+                    text="Install",
+                    command=lambda tid=tool["id"]: self.install_managed_tool(tid),
+                ).pack(side="left", padx=3)
+            if tool.get("source") == "managed" and tool.get("state") == "ready":
+                ttk.Button(
+                    row,
+                    text="Remove",
+                    command=lambda tid=tool["id"]: self.remove_managed_tool(tid),
+                ).pack(side="left", padx=3)
+
+        self.toolchain_list.columnconfigure(0, weight=1)
+        self.toolchain_list.columnconfigure(1, weight=1)
+
+    def install_managed_tool(self, tool_id):
+        if not messagebox.askyesno(
+            "Install tool",
+            f"Install Lola-managed {tool_id} into .lola-tools/?\n\nThe downloaded artifact will be checksum-verified before activation.",
+        ):
+            return
+        self.status.set(f"Installing {tool_id}…")
+
+        def worker():
+            try:
+                toolchain_install(tool_id)
+                self.after(0, lambda: self.status.set(f"Installed {tool_id}"))
+            except Exception as exc:
+                self.after(0, lambda: messagebox.showerror("Toolchain", str(exc)))
+                self.after(0, lambda: self.status.set("Tool install failed"))
+            finally:
+                self.after(0, self.refresh_toolchain)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def remove_managed_tool(self, tool_id):
+        if not messagebox.askyesno(
+            "Remove tool",
+            f"Remove Lola's managed copy of {tool_id}?\n\nSystem-installed tools will not be changed.",
+        ):
+            return
+        try:
+            toolchain_remove(tool_id)
+            self.status.set(f"Removed managed {tool_id}")
+            self.refresh_toolchain()
+        except Exception as exc:
+            messagebox.showerror("Toolchain", str(exc))
 
     def build_mode_tab(self, parent, title, modes):
         ttk.Label(parent, text=title, style="Header.TLabel").pack(anchor="w", padx=12, pady=(14, 8))
