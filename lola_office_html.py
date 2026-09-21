@@ -7,6 +7,7 @@ from __future__ import annotations
 import base64, html, mimetypes
 from pathlib import Path
 from lola_office_html_rich import save_rich
+from lola_pdf_html_rich import pdf_rich
 
 def _page(title,body,extra_css=""):
     css="""*{box-sizing:border-box}body{font-family:system-ui,Arial,sans-serif;margin:0;background:#f5f6f8;color:#171717}
@@ -84,7 +85,7 @@ def convert(src,dst):
     if ext==".csv":return csv_to_html(src,dst)
     if ext==".xlsx":return save_rich(src,dst,"xlsx")
     if ext==".docx":return save_rich(src,dst,"docx")
-    if ext==".pdf":return pdf_to_html(src,dst)
+    if ext==".pdf":return pdf_rich(src,dst)
     return {"ok":False,"error":"Direct HTML adapter not registered","source":ext,
             "fallback":"convert legacy office format to DOCX/XLSX first, then HTML"}
 
