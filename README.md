@@ -393,3 +393,103 @@ scan-modes.json
 ~~~
 
 It contains the structured data behind these four views.
+
+
+## Deep output modes
+
+### /deep-dive — All Details
+This is the main view to use when you want to inspect **everything detected**.
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\MyApp" -Mode /deep-dive -ResolveUrls
+~~~
+
+Open `semgrep-report.html` and select **/deep-dive · All Details**.
+
+It shows:
+- every detection
+- severity
+- rule ID
+- surface/category
+- exact file
+- line/column and end location when available
+- confidence metadata
+- CWE metadata when defined
+- detection message
+- source snippet when Semgrep provides one
+- counts by rule, surface and affected file
+
+`/deepdive` is accepted as an alias.
+
+### /securitycheck
+Groups detections into security-control areas instead of showing one long raw list:
+
+- Secrets & credentials
+- Injection / execution
+- Transport / TLS
+- Authentication & session
+- Filesystem & path handling
+- Network exposure
+- Cryptography
+- Privacy & device
+- Browser messaging / CORS
+
+Each group is marked **Priority review**, **Review**, or **No detection**, with counts and a review action.
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\MyApp" -Mode /securitycheck
+~~~
+
+Important: **No detection does not mean secure**. It only means the current custom rules did not flag that control group.
+
+### /anonymus and /anonymous
+These aliases open the privacy/identity-exposure audit.
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\MyApp" -Mode /anonymus -ResolveUrls
+~~~
+
+It detects or groups:
+- public-IP discovery services
+- analytics and telemetry SDKs/endpoints
+- cookies and persistent browser identifiers
+- device/user/client/visitor IDs stored in Web Storage
+- fingerprinting libraries
+- canvas/WebGL fingerprinting surfaces
+- WebRTC ICE/network candidate handling
+- advertising/device identifier references
+- account-sign-in linkage
+- local/client IP handling
+- device identifiers
+- telemetry user/device context
+
+This mode is for **privacy exposure auditing**. It does not attempt to hide identity, bypass tracking controls, or evade platform/security systems.
+
+## Which output should I open?
+
+For normal use, open:
+
+~~~text
+semgrep-report.html
+~~~
+
+Then select the view you need:
+
+~~~text
+/deep-dive     Every detection and evidence — best for full detail
+/securitycheck Security controls and review priorities
+/anonymus      Privacy / identity exposure
+/360           Whole application surface summary
+/stepview      Before / during / after scan flow
+/protocol      Protocol-specific view
+/hidden        Hidden files/config/UI surfaces
+~~~
+
+Machine-readable outputs remain available for automation:
+
+~~~text
+target-manifest.json
+url-report.json
+semgrep-results.json
+scan-modes.json
+~~~
