@@ -651,3 +651,169 @@ For the richest single run:
 ~~~
 
 Then use the command buttons in `semgrep-report.html` to move between code and security views.
+
+
+## Deep network / live process modes
+
+The scanner now creates:
+
+~~~text
+network-analysis.json
+scan-events.json
+network-monitor.html
+~~~
+
+### /deep-dive network
+Combined network analysis:
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\MyApp" -Mode "/deep-dive network" -ResolveUrls
+~~~
+
+Aliases:
+- `/deep-network`
+- `/deep-dive-network`
+- `"/deep-dive network"`
+
+It combines:
+- source file → URL relationships
+- DNS host/IP resolution
+- redirect chains
+- final URLs
+- HTTP status
+- TLS version/cipher when available
+- application routes
+- public/non-public IP classification
+- network-related Semgrep findings
+- public-IP discovery references
+
+### /trace
+Application-layer trace:
+
+~~~text
+source file
+  ↓
+source URL
+  ↓
+host/domain
+  ↓
+DNS IP
+  ↓
+HTTP redirects
+  ↓
+final URL
+  ↓
+TLS
+~~~
+
+This is not raw ICMP traceroute.
+
+### /route
+Shows application route declarations and their source locations, plus URL destinations.
+
+### /map
+Builds a logical graph of:
+- source files
+- app routes
+- source URLs
+- hostnames
+- DNS IPs
+- redirect URLs
+- final URLs
+
+The map is logical, not geographic.
+
+### /visible
+Shows what is visible from source and resolution data:
+- public hostnames
+- resolved public IP addresses
+- non-public/private addresses
+- network listeners/proxy/IP-related findings
+
+It does not perform an external port scan.
+
+### /realip
+Shows:
+- public IP addresses resolved for application hosts
+- code references to public-IP discovery services
+- an optional explicit current-device public-IP check in `network-monitor.html`
+
+A browser cannot reliably determine its own public IP without contacting an external server.
+
+### /cctv — live process monitor
+This is a **CCTV-style scan status monitor**, not camera recording.
+
+Run:
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\MyApp" -Mode /cctv -ResolveUrls
+~~~
+
+or:
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\MyApp" -LiveMonitor -ResolveUrls
+~~~
+
+The scanner starts a localhost-only web server bound to:
+
+~~~text
+127.0.0.1:8765
+~~~
+
+and opens:
+
+~~~text
+network-monitor.html
+~~~
+
+The page refreshes `scan-events.json` and `network-analysis.json` during processing.
+
+Feeds include:
+- start
+- target discovery
+- manifest
+- URL/DNS map
+- code analysis
+- Semgrep
+- mode analysis
+- network analysis
+- visual report
+- complete
+
+The monitor never activates a camera or microphone.
+
+### Live monitor views
+
+The network monitor has:
+
+~~~text
+/normal
+/hiddenmode
+/anonymus
+/trace
+/route
+/map
+/visible
+/realip
+~~~
+
+`/normal` shows a compact network summary.
+
+`/hiddenmode` focuses on private/local/non-public addresses, proxy trust, client-IP handling, and local-network surfaces.
+
+`/anonymus` focuses on identity/privacy exposure such as client-IP handling, privacy-network findings, public-IP discovery references, device/local-network signals, and related telemetry.
+
+### Generated output set
+
+~~~text
+target-manifest.json
+url-report.json
+code-analysis.json
+semgrep-results.json
+scan-modes.json
+network-analysis.json
+scan-events.json
+semgrep-report.html
+network-monitor.html
+~~~
