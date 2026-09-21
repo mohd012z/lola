@@ -5,6 +5,23 @@ static analysis when installed; Frida remains an explicitly authorized attach-on
 runtime evidence source and is never required for ordinary extraction.
 """
 MODULES=[
+ {"id":"codecli","mode":"interface","purpose":"CLI entry point for managed extraction modules."},
+ {"id":"cpp","mode":"static","purpose":"C++ source/native marker evidence; no target execution."},
+ {"id":"c","mode":"static","purpose":"C source/native marker evidence; no target execution."},
+ {"id":"vector","mode":"static","purpose":"Vector/container terminology and structured numeric evidence."},
+ {"id":"base64","mode":"decode","purpose":"Strict standard Base64 decode of selected text/evidence."},
+ {"id":"base44","mode":"reference","purpose":"Unsupported until an explicit documented Base44 codec is registered."},
+ {"id":"zip","mode":"archive","purpose":"Bounded ZIP inventory and safe workspace extraction."},
+ {"id":"rar","mode":"archive","purpose":"Optional RAR inventory through installed backend; no password guessing."},
+ {"id":"7zip","mode":"archive","purpose":"Optional 7z inventory through py7zr; no password guessing."},
+ {"id":"semgrep","mode":"optional-static","purpose":"Static source-code rules on user-selected source/workspace."},
+ {"id":"blob","mode":"static","purpose":"Raw blob size/header/zero-density evidence."},
+ {"id":"chunk","mode":"static","purpose":"Bounded byte-range chunk map with exact offsets."},
+ {"id":"svg","mode":"static","purpose":"SVG/XML structure inventory."},
+ {"id":"xml","mode":"static","purpose":"XML element/root structure inventory."},
+ {"id":"css","mode":"static","purpose":"CSS selector/property token inventory."},
+ {"id":"formatcode","mode":"static","purpose":"Auto-route known source/text/archive formats to safe extractors."},
+ {"id":"wildcard","mode":"static","purpose":"Fallback any-file fingerprint/blob/chunk extraction."},
  {"id":"allcode","mode":"static","purpose":"Normalize all observable code/string evidence."},
  {"id":"codestring","mode":"static","purpose":"ASCII and conservative UTF-16 string extraction with offsets."},
  {"id":"extractormodule","mode":"static","purpose":"Universal file fingerprint, signatures, regions and evidence."},
@@ -23,6 +40,10 @@ MODULES=[
 ]
 
 ALIASES={
+ "/codecli":"codecli","/c++":"cpp","/cpp":"cpp","/c":"c","/vector":"vector",
+ "/base64":"base64","/base44":"base44","/zip":"zip","/rar":"rar","/7zip":"7zip",
+ "/smgrep":"semgrep","/semgrep":"semgrep","/blob":"blob","/chunk":"chunk",
+ "/svg":"svg","/xml":"xml","/css":"css","/*formatcode":"formatcode","/*.**":"wildcard",
  "/deep-dive":"extractormodule","/allcode":"allcode","/codestring":"codestring",
  "/extractormodule":"extractormodule","/extractorrefactoring":"extractorrefactoring",
  "/refactoringcode":"refactoringcode","/codeencode":"codeencode","/codeencoder":"codeencoder",
