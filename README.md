@@ -1835,3 +1835,58 @@ If **Store target in Library** is checked, Lola additionally saves:
 If it is unchecked, Lola does not persist the completed scan history/output links for that run.
 
 The library is local-only and ignored by Git.
+
+## Android target plan, Target Library, and built-in Code Reader
+
+Lola Mobile now asks **what to do with the APK before scanning**. Use the tick buttons or Light / Recommended / Deep presets.
+
+Target-plan choices include identity, manifest/SDK, permissions, components, URLs, APIs, redacted keys/tokens, certificates, native libraries, WebView, crypto, file inventory, risk review, JADX decompile, Android Code Reader, and artifact-storage choices.
+
+### Persistent target storage
+
+Each APK is identified by SHA-256. Lola uses the first 24 hex characters as its stable target ID.
+
+```text
+.lola-library/
+  library.json
+  targets/
+    <target-id>/
+      target.json
+      target.apk                 optional
+      apk-analysis.json          optional
+      apk-report.html            optional
+      android-code-reader.json   optional
+      decompiled/                optional JADX source
+```
+
+Temporary Android uploads stay under `.lola-mobile/uploads/`.
+
+`target.json` keeps SHA-256, filename, size, first/last seen, last plan/mode/options, scan history, package/SDK summary, risk summary, and output/storage paths.
+
+If **Keep APK in Target Library** is ticked, the retained APK can be selected again from Target Library without uploading it again.
+
+### /library
+
+The built-in `/library` now includes every Lola command, Android Reader commands, internal functions, tool requirements, outputs, execution cost, APK-plan definitions, and the storage map. The persistent catalog is written to `.lola-library/library.json`.
+
+Android Reader commands include `/androidreader`, `/readersearch`, `/readersource`, `/readerresources`, and `/readerdex`.
+
+### Built-in Android Code Reader
+
+When **Build Android Code Reader** is ticked, Lola creates a searchable, redacted `android-code-reader.json` containing APK/manifest evidence, permissions/components, URLs/APIs, certificate/native/WebView/crypto/risk evidence, text resources, printable DEX strings, and JADX source previews when available.
+
+Mobile reader views include Overview, Source, Resources, DEX Strings, URLs/API, Findings, and Search.
+
+Secret-like values and private-key material are redacted before reader storage.
+
+### Artifact retention controls
+
+```text
+Keep APK in Target Library     -> target.apk
+Store analysis detail          -> apk-analysis.json
+Store visual report            -> apk-report.html
+Build Android Code Reader      -> android-code-reader.json
+Store JADX source in Library   -> decompiled/
+```
+
+The lightweight target record and scan history are saved independently from these larger optional artifacts.
