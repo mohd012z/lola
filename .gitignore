@@ -1,3 +1,4 @@
+.lola-tools/
 frida-events.jsonl
 frida-analysis.json
 runtime-events.jsonl
