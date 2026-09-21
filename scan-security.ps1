@@ -2,7 +2,9 @@ param(
   [Parameter(Position=0)][string]$Target=".",
   [string]$Config="codex-security.yaml",
   [string]$Report="semgrep-results.json",
-  [switch]$Strict
+  [string]$HtmlReport="semgrep-report.html",
+  [switch]$Strict,
+  [switch]$NoOpen
 )
 
 $ErrorActionPreference = "Stop"
@@ -35,7 +37,6 @@ if (Test-Path -LiteralPath $TargetPath -PathType Leaf) {
   $Files = @(Get-ChildItem -LiteralPath $TargetPath -Recurse -File -ErrorAction SilentlyContinue | Where-Object {
     $segments = $_.FullName -split '[\\/]'
     foreach ($d in $SkipDirs) { if ($segments -contains $d) { return $false } }
-
     $name = $_.Name
     $ext = $_.Extension.ToLowerInvariant()
     (($Extensions -contains $ext) -or ($Names -contains $name)) -and
@@ -54,10 +55,8 @@ Write-Host "Files  : $($Files.Count) candidate source/config files"
 if ($Files.Count -gt 0) {
   Write-Host ""
   Write-Host "By file type:" -ForegroundColor Cyan
-  $Files |
-    Group-Object { if ($_.Extension) { $_.Extension.ToLowerInvariant() } else { "[no extension]" } } |
-    Sort-Object Count -Descending |
-    Format-Table Count,Name -AutoSize
+  $Files | Group-Object { if ($_.Extension) { $_.Extension.ToLowerInvariant() } else { "[no extension]" } } |
+    Sort-Object Count -Descending | Format-Table Count,Name -AutoSize
 
   Write-Host "First candidate targets:" -ForegroundColor Cyan
   $Files | Select-Object -First 30 -ExpandProperty FullName | ForEach-Object { Write-Host "  $_" }
@@ -87,9 +86,21 @@ if (Test-Path -LiteralPath $Report) {
     Write-Host "WARNING : $($warnings.Count)"
     Write-Host "INFO    : $($info.Count)"
     Write-Host "TOTAL   : $($results.Count)"
-    Write-Host "REPORT  : $((Resolve-Path -LiteralPath $Report).Path)"
+    Write-Host "JSON    : $((Resolve-Path -LiteralPath $Report).Path)"
+
+    $Python = Get-Command python -ErrorAction SilentlyContinue
+    if ($Python -and (Test-Path -LiteralPath "build-report.py")) {
+      & $Python.Source "build-report.py" --input $Report --output $HtmlReport --target $TargetPath
+      if (Test-Path -LiteralPath $HtmlReport) {
+        $HtmlPath = (Resolve-Path -LiteralPath $HtmlReport).Path
+        Write-Host "VISUAL  : $HtmlPath" -ForegroundColor Green
+        if (-not $NoOpen) { Start-Process $HtmlPath }
+      }
+    } else {
+      Write-Host "Visual report skipped: python or build-report.py was not found." -ForegroundColor Yellow
+    }
   } catch {
-    Write-Host "Could not summarize JSON report: $($_.Exception.Message)" -ForegroundColor Yellow
+    Write-Host "Could not summarize/build report: $($_.Exception.Message)" -ForegroundColor Yellow
   }
 }
 
