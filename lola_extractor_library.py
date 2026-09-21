@@ -5,6 +5,9 @@ static analysis when installed; Frida remains an explicitly authorized attach-on
 runtime evidence source and is never required for ordinary extraction.
 """
 MODULES=[
+ {"id":"exe","mode":"static-native","purpose":"PE/EXE header and section evidence; target is never loaded."},
+ {"id":"so","mode":"static-native","purpose":"ELF/shared-object header and section evidence; target is never loaded."},
+ {"id":"dat","mode":"static","purpose":"Generic DAT/raw classification by content, signatures, chunks and strings."},
  {"id":"codecli","mode":"interface","purpose":"CLI entry point for managed extraction modules."},
  {"id":"cpp","mode":"static","purpose":"C++ source/native marker evidence; no target execution."},
  {"id":"c","mode":"static","purpose":"C source/native marker evidence; no target execution."},
@@ -40,6 +43,7 @@ MODULES=[
 ]
 
 ALIASES={
+ "/*.exe":"exe","/*.dll":"exe","/*.so":"so","/*.elf":"so","/*.dat":"dat","/*.bin":"dat",
  "/codecli":"codecli","/c++":"cpp","/cpp":"cpp","/c":"c","/vector":"vector",
  "/base64":"base64","/base44":"base44","/zip":"zip","/rar":"rar","/7zip":"7zip",
  "/smgrep":"semgrep","/semgrep":"semgrep","/blob":"blob","/chunk":"chunk",
