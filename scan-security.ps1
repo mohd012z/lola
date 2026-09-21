@@ -30,13 +30,13 @@ $Extensions = @(
   ".js",".jsx",".mjs",".cjs",".ts",".tsx",".html",".htm",".vue",".svelte",
   ".json",".yaml",".yml",".xml",".md",".txt",".env",".properties",".toml",
   ".conf",".ini",".sql",".graphql",".gql",".pem",".key",".crt",".cer",
-  ".sh",".ps1",".py",".java",".kt",".kts",".go",".php",".rb",".cs",
-  ".gradle",".pro",".cfg"
+  ".sh",".ps1",".py",".java",".kt",".kts",".swift",".m",".mm",".dart",
+  ".go",".php",".rb",".cs",".gradle",".pro",".cfg",".plist",".entitlements"
 )
 $Names = @(
   "Dockerfile","Containerfile","Caddyfile","nginx.conf","httpd.conf",
   ".env",".env.local",".env.development",".env.production",".env.test",
-  "AndroidManifest.xml","Info.plist","Podfile","Gemfile"
+  "AndroidManifest.xml","Info.plist","Podfile","Gemfile","Runner.entitlements"
 )
 $SkipDirs = @(
   ".git","node_modules","vendor","dist","build","out",".next",".nuxt",
