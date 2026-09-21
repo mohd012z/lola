@@ -1,0 +1,152 @@
+# codex-security.yaml — run with: semgrep scan --config codex-security.yaml <target>
+rules:
+
+# ═══════════ EXTRACT ═══════════
+
+  - id: extract-urls
+    languages: [generic]          # works on ANY file: js, html, json, yaml, md
+    severity: INFO
+    message: "URL found"
+    pattern-regex: "https?://[A-Za-z0-9._~:/?#@!$&'()*+,;=%-]+"
+
+  - id: extract-fetch-calls
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "fetch → $URL"
+    pattern: fetch($URL, ...)
+
+  - id: extract-axios-calls
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "axios.$METHOD → $URL"
+    patterns:
+      - pattern: $AXIOS.$METHOD($URL, ...)
+      - metavariable-regex:
+          metavariable: $AXIOS
+          regex: ^axios$
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(get|post|put|patch|delete|head|options|request)$
+
+  - id: extract-config-surface
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Config/env read: $KEY"   # everything the app pulls from its environment
+    pattern-either:
+      - pattern: process.env.$KEY
+      - pattern: process.env[$KEY]
+      - pattern: import.meta.env.$KEY
+
+  - id: extract-express-routes
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Route $METHOD $PATH → $HANDLER"
+    patterns:
+      - pattern: $APP.$METHOD($PATH, ..., $HANDLER)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(get|post|put|patch|delete|all|options|head)$
+
+# ═══════════ AUDIT ═══════════
+
+  - id: audit-xss-sinks
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata: {cwe: "CWE-79", owasp: "A03:2021 Injection"}
+    message: "XSS sink: assigning $VALUE to DOM HTML. If it can contain user/AI/tool output, use textContent or sanitize with DOMPurify."
+    pattern-either:
+      - pattern: $EL.innerHTML = $VALUE
+      - pattern: $EL.outerHTML = $VALUE
+      - pattern: $EL.insertAdjacentHTML(..., $VALUE)
+      - pattern: document.write($VALUE)
+
+  - id: audit-eval-family
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata: {cwe: "CWE-95"}
+    message: "Code executed from strings — untrusted input here is RCE."
+    pattern-either:
+      - pattern: eval($VALUE)
+      - pattern: new Function(...)
+
+  - id: audit-string-timers
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "String argument to setTimeout/setInterval is eval in disguise."
+    pattern-either:
+      - pattern: setTimeout("...", ...)
+      - pattern: setInterval("...", ...)
+
+  - id: audit-hardcoded-secrets
+    languages: [generic]
+    severity: ERROR
+    metadata: {cwe: "CWE-798"}
+    message: "Possible hardcoded credential — move to env/secret store; rotate if ever committed."
+    pattern-regex: "(?i)\\b(api[_-]?key|secret|access[_-]?token|auth[_-]?token|password|client[_-]?secret)\\b[\\\"'\\s:=]{1,4}[\\\"'][A-Za-z0-9_\\-]{16,}[\\\"']"
+
+  - id: audit-private-key
+    languages: [generic]
+    severity: ERROR
+    message: "Private key material in source. Remove from git history and rotate."
+    pattern-regex: "-----BEGIN [A-Z ]*PRIVATE KEY-----"
+
+  - id: audit-sql-concat
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata: {cwe: "CWE-89"}
+    message: "SQL built by interpolation/concatenation — use parameterized queries or the ORM builder."
+    patterns:
+      - pattern-either:
+          - pattern: $Q(`...${$X}...`)
+          - pattern: $Q(... + $X + ...)
+      - metavariable-regex:
+          metavariable: $Q
+          regex: (?i).*(query|execute|exec|raw).*
+
+  - id: audit-postmessage-wildcard
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "postMessage targetOrigin '*' — any window can read this. Pin to an origin allowlist."
+    pattern: $X.postMessage($DATA, "*")
+
+  - id: audit-tls-disabled
+    languages: [javascript, typescript]
+    severity: ERROR
+    metadata: {cwe: "CWE-295"}
+    message: "TLS verification disabled — MITM risk. Never ship this."
+    pattern-either:
+      - pattern: rejectUnauthorized: false
+      - pattern: $ENV.NODE_TLS_REJECT_UNAUTHORIZED = "0"
+
+  - id: audit-weak-hash
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata: {cwe: "CWE-327"}
+    message: "MD5/SHA-1 broken for security use — SHA-256+, argon2/bcrypt for passwords."
+    pattern-either:
+      - pattern: crypto.createHash("md5")
+      - pattern: crypto.createHash("sha1")
+
+  - id: audit-token-in-webstorage
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Token/secret in Web Storage — any XSS can exfiltrate it. Prefer memory or httpOnly cookies."
+    patterns:
+      - pattern-either:
+          - pattern: localStorage.setItem($KEY, $VALUE)
+          - pattern: sessionStorage.setItem($KEY, $VALUE)
+      - metavariable-regex:
+          metavariable: $VALUE
+          regex: (?i).*(token|jwt|secret|apikey|api_key|password).*
+
+  - id: audit-open-redirect
+    languages: [javascript, typescript]
+    severity: WARNING
+    metadata: {cwe: "CWE-601"}
+    message: "Redirect target from external input — validate against an allowlist first."
+    patterns:
+      - pattern-either:
+          - pattern: $RES.redirect($URL)
+          - pattern: window.location.href = $URL
+          - pattern: location.href = $URL
+      - pattern-not: $RES.redirect("/...")
