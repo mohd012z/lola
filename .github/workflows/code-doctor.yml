@@ -33,6 +33,11 @@ on:
       - "**.yml"
       - "**.yaml"
       - "lola_code_doctor.py"
+      - "lola_bot_health.py"
+      - "lola_code_specialists.py"
+      - "lola_ex_fallback_bots.py"
+      - "lola_extractor_dispatcher.py"
+      - "lola_extractor_library.py"
       - ".github/workflows/code-doctor.yml"
   schedule:
     - cron: "17 2 * * *"
