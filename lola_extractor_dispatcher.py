@@ -14,12 +14,19 @@ from lola_pdf_html_rich import pdf_rich, batch_convert
 from lola_pdf_ocr import capabilities as ocr_capabilities, readiness as ocr_readiness, ocr_pages, searchable_pdf\nfrom lola_code_inspector import run_mode as code_inspect
 from lola_code_integration import task as integration_task, merge_plan
 from lola_metatrader_bot import capabilities as mt_capabilities, bot as mt_bot, help_packet as mt_help
+from lola_mt5_mcp_bridge import configuration as mt5_mcp_configuration, discover as mt5_mcp_discover, ask as mt5_ai_ask
 
 def run(command,target=None,arg=None):
     cmd=(command or "").strip().lower()
     mod=resolve(cmd)
     if not mod:return {"ok":False,"error":"unknown command","command":command}
     if cmd=="/codecli":return {"ok":True,"modules":catalog()}
+    if cmd in ("/mt5mcp","/mt5aidiscover"):return mt5_mcp_discover()
+    if cmd in ("/mt5ai","/askmt5"):
+        if not target:return {"ok":False,"error":"MT4/MT5 source or compiled evidence target required","configuration":mt5_mcp_configuration(),"help":mt_help(reason="missing MT5 AI target")}
+        p=Path(target)
+        if not p.is_file():return {"ok":False,"error":"target is not a readable file","help":mt_help(target,"target unavailable")}
+        return mt5_ai_ask(p,arg)
     if cmd in ("/metatrader","/mt4","/mt5") and target is None:return {"ok":True,"metatrader":mt_capabilities()}
     if cmd in ("/mtcheck","/mqlcheck","/mtcompile","/mqlcompile"):
         if not target:return {"ok":False,"error":"MQL4/MQL5 source target required","help":mt_help(reason="missing source target")}
