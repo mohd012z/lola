@@ -36,6 +36,8 @@ def main():
     p.add_argument("--target", default="")
     p.add_argument("--manifest", default="target-manifest.json")
     p.add_argument("--urls", default="url-report.json")
+    p.add_argument("--modes", default="scan-modes.json")
+    p.add_argument("--mode", default="/360")
     args = p.parse_args()
 
     src = Path(args.input)
@@ -75,6 +77,14 @@ def main():
         except Exception:
             pass
 
+    mode_data = {"stepview": {}, "protocol": {}, "hidden": {}, "360": {}}
+    mode_path = Path(args.modes)
+    if mode_path.exists():
+        try:
+            mode_data = json.loads(mode_path.read_text(encoding="utf-8-sig"))
+        except Exception:
+            pass
+
     sev = Counter(x["severity"] for x in findings)
     cats = Counter(x["category"] for x in findings)
     surfaces = Counter(x["surface"] for x in findings)
@@ -101,6 +111,8 @@ def main():
         "topFiles": files.most_common(12),
         "targetFiles": target_files,
         "urlData": url_data,
+        "modeData": mode_data,
+        "initialMode": args.mode,
         "findings": findings,
     }
 
@@ -117,7 +129,7 @@ def main():
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 20% 0,#152443 0,#0b1426 34%,#08101d 70%);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
 .wrap{max-width:1500px;margin:auto;padding:24px}.hero{display:flex;gap:18px;justify-content:space-between;align-items:flex-start;margin-bottom:18px}.hero h1{margin:0 0 5px;font-size:29px}.sub{color:var(--muted);word-break:break-all}
 .grid{display:grid;grid-template-columns:repeat(5,minmax(140px,1fr));gap:12px}.card{background:rgba(17,26,45,.97);border:1px solid var(--line);border-radius:16px;padding:16px;box-shadow:0 12px 35px #0003}.metric{font-size:30px;font-weight:800}.label{color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.09em}.error .metric{color:var(--error)}.warning .metric{color:var(--warn)}.info .metric{color:var(--info)}
-.section{margin-top:16px}.section-head{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:10px}.section h2{font-size:17px;margin:0}
+.modebar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.modebtn{width:auto;background:#101c33;color:var(--text);border:1px solid var(--line);border-radius:999px;padding:9px 13px;cursor:pointer;font-weight:700}.modebtn.active{outline:2px solid var(--accent);background:#1b2a49}.modepanel{display:none}.modepanel.active{display:block}.timeline{display:grid;grid-template-columns:repeat(3,1fr);gap:10px}.phase{background:#0b1426;border:1px solid var(--line);border-radius:13px;padding:13px}.phase h3{margin:0 0 9px}.phase-row{display:flex;justify-content:space-between;gap:12px;padding:7px 0;border-bottom:1px solid #1c2c48}.phase-row:last-child{border-bottom:0}.phase-row span:first-child{color:var(--muted)}.mode-list{display:grid;gap:8px}.mode-item{background:#0b1426;border:1px solid var(--line);border-radius:11px;padding:11px;word-break:break-word}.section{margin-top:16px}.section-head{display:flex;gap:12px;align-items:center;justify-content:space-between;margin-bottom:10px}.section h2{font-size:17px;margin:0}
 .surface-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(190px,1fr));gap:10px}.surface{cursor:pointer;background:var(--panel3);border:1px solid var(--line);border-radius:13px;padding:13px;transition:.15s}.surface:hover{transform:translateY(-1px);border-color:#536d9f}.surface.active{outline:2px solid var(--accent)}.surface-top{display:flex;justify-content:space-between;gap:8px}.surface-name{font-weight:750}.surface-count{font-size:22px;font-weight:850}.mini{display:flex;gap:7px;margin-top:7px;font-size:11px;color:var(--muted)}.dotE{color:var(--error)}.dotW{color:var(--warn)}.dotI{color:var(--info)}
 .two{display:grid;grid-template-columns:1fr 1fr;gap:12px}.bars{display:grid;gap:9px}.bar-row{display:grid;grid-template-columns:minmax(120px,220px) 1fr 46px;gap:10px;align-items:center}.bar-name{white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.bar-bg{height:10px;background:#091223;border:1px solid #22304e;border-radius:99px;overflow:hidden}.bar-fill{height:100%;background:linear-gradient(90deg,#628eff,#9674ff);border-radius:inherit}
 .controls{display:grid;grid-template-columns:minmax(240px,1.5fr) repeat(5,minmax(130px,1fr));gap:9px;margin-top:16px}.controls input,.controls select{width:100%;background:#0b1426;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px 11px}
@@ -126,7 +138,7 @@ def main():
 details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px;margin-top:10px}.detail{background:#0b1426;border:1px solid #22304e;border-radius:9px;padding:9px;min-width:0;overflow-wrap:anywhere}.detail b{display:block;color:var(--muted);font-size:10px;text-transform:uppercase;margin-bottom:3px}pre{white-space:pre-wrap;overflow:auto;background:#070d19;border:1px solid #22304e;border-radius:9px;padding:11px;color:#dce7ff}
 .note{margin-top:12px;padding:11px 13px;border-radius:11px;background:#0c172b;border:1px solid #233a63;color:#b9c9e7}.url-summary{display:grid;grid-template-columns:repeat(4,minmax(120px,1fr));gap:9px;margin-bottom:10px}.url-list{display:grid;gap:9px}.url-card{background:#0b1426;border:1px solid var(--line);border-radius:12px;padding:12px}.url-main{display:grid;grid-template-columns:minmax(250px,1fr) 90px 120px 120px;gap:10px;align-items:start}.url-src,.url-final{word-break:break-all}.url-arrow{color:var(--muted);margin:5px 0}.status-ok{color:var(--ok)}.status-warn{color:var(--warn)}.status-bad{color:var(--error)}.manifest-tools{display:flex;gap:10px;align-items:center;margin-bottom:10px}.manifest-tools input{flex:1;background:#0b1426;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:10px 11px}.manifest{max-height:460px;overflow:auto;border:1px solid var(--line);border-radius:12px}.mf{display:grid;grid-template-columns:minmax(280px,1fr) 90px 90px 110px minmax(180px,.7fr);gap:10px;padding:10px 12px;border-bottom:1px solid #1d2d4b;align-items:center}.mf:last-child{border-bottom:0}.mfpath{word-break:break-all}.mf small{color:var(--muted)}.hash{font-family:ui-monospace,SFMono-Regular,Consolas,monospace;font-size:11px;word-break:break-all;color:#b8caef}.empty{padding:34px;text-align:center;color:var(--muted)}.footer{color:var(--muted);font-size:12px;margin:18px 0}
 @media(max-width:1100px){.controls{grid-template-columns:1fr 1fr 1fr}.detail-grid{grid-template-columns:repeat(3,1fr)}}
-@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.two{grid-template-columns:1fr}.hero{display:block}.url-summary{grid-template-columns:repeat(2,1fr)}.url-main{grid-template-columns:1fr 90px}}
+@media(max-width:900px){.grid{grid-template-columns:repeat(2,1fr)}.two,.timeline{grid-template-columns:1fr}.hero{display:block}.url-summary{grid-template-columns:repeat(2,1fr)}.url-main{grid-template-columns:1fr 90px}}
 @media(max-width:600px){.wrap{padding:13px}.grid,.controls,.detail-grid{grid-template-columns:1fr}.row{display:block}.bar-row{grid-template-columns:100px 1fr 38px}}
 </style>
 </head>
@@ -143,6 +155,36 @@ details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{displa
     <div class="card warning"><div class="label">Warnings</div><div class="metric" id="warnings">0</div></div>
     <div class="card info"><div class="label">Info / inventory</div><div class="metric" id="infos">0</div></div>
     <div class="card"><div class="label">Affected files</div><div class="metric" id="files">0</div></div>
+  </div>
+
+  <div class="modebar" id="modebar">
+    <button class="modebtn" data-mode="/stepview">/stepview</button>
+    <button class="modebtn" data-mode="/protocol">/protocol</button>
+    <button class="modebtn" data-mode="/hidden">/hidden</button>
+    <button class="modebtn" data-mode="/360">/360</button>
+  </div>
+
+  <div class="section card modepanel" id="stepviewPanel">
+    <div class="section-head"><h2>/stepview — Before / During / After</h2><span class="sub">Retrospective scan flow</span></div>
+    <div class="timeline" id="stepTimeline"></div>
+  </div>
+
+  <div class="section card modepanel" id="protocolPanel">
+    <div class="section-head"><h2>/protocol — Protocol map</h2><span class="sub">Transport, messaging and API protocols</span></div>
+    <div class="surface-grid" id="protocolCards"></div>
+    <div class="mode-list" id="protocolEvidence" style="margin-top:10px"></div>
+  </div>
+
+  <div class="section card modepanel" id="hiddenPanel">
+    <div class="section-head"><h2>/hidden — Hidden & sensitive surfaces</h2><span class="sub">Dot paths, hidden attributes, hidden UI, sensitive configs</span></div>
+    <div class="url-summary" id="hiddenSummary"></div>
+    <div class="mode-list" id="hiddenEvidence"></div>
+  </div>
+
+  <div class="section card modepanel" id="view360Panel">
+    <div class="section-head"><h2>/360 — Full scan view</h2><span class="sub">All discovered surfaces combined</span></div>
+    <div class="url-summary" id="view360Summary"></div>
+    <div class="note">360 view combines file/path inventory, URLs, IP/network, device/privacy/account, encryption/TLS, protocols, hidden surfaces, database/routes and security findings.</div>
   </div>
 
   <div class="section card">
@@ -215,6 +257,57 @@ details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{displa
 <script>
 const DATA=JSON.parse(document.getElementById('semgrep-data').textContent);
 const $=id=>document.getElementById(id);
+const MODEDATA=DATA.modeData||{stepview:{},protocol:{},hidden:{},360:{}};
+
+function miniMetric(parent,label,value){
+  const d=document.createElement('div');d.className='detail';
+  const b=document.createElement('b');b.textContent=label;
+  const s=document.createElement('span');s.textContent=String(value??'-');
+  d.append(b,s);parent.appendChild(d);
+}
+function renderModes(){
+  const tl=$('stepTimeline');tl.replaceChildren();
+  for(const key of ['before','during','after']){
+    const p=MODEDATA.stepview?.[key]||{title:key,items:[]};
+    const box=document.createElement('div');box.className='phase';
+    const h=document.createElement('h3');h.textContent=(key==='before'?'⏮️ ':key==='during'?'⏳ ':'✅ ')+(p.title||key);box.appendChild(h);
+    (p.items||[]).forEach(it=>{const r=document.createElement('div');r.className='phase-row';const a=document.createElement('span');a.textContent=it.label;const b=document.createElement('strong');b.textContent=String(it.value??'-');r.append(a,b);box.appendChild(r)});
+    tl.appendChild(box);
+  }
+
+  const pc=$('protocolCards');pc.replaceChildren();
+  Object.entries(MODEDATA.protocol?.counts||{}).sort((a,b)=>b[1]-a[1]).forEach(([name,count])=>{
+    const d=document.createElement('div');d.className='surface';const t=document.createElement('div');t.className='surface-top';
+    const n=document.createElement('div');n.className='surface-name';n.textContent='🔌 '+name;const v=document.createElement('div');v.className='surface-count';v.textContent=count;t.append(n,v);d.appendChild(t);pc.appendChild(d);
+  });
+  if(!pc.children.length) pc.innerHTML='<div class="empty">No protocol surfaces detected.</div>';
+
+  const pe=$('protocolEvidence');pe.replaceChildren();
+  (MODEDATA.protocol?.findings||[]).slice(0,80).forEach(x=>{const d=document.createElement('div');d.className='mode-item';d.textContent=(x.surface||x.category||'protocol')+' • '+(x.path||'')+(x.line?':'+x.line:'')+' — '+(x.message||x.rule||'');pe.appendChild(d)});
+
+  const hs=$('hiddenSummary');hs.replaceChildren();
+  const hc=MODEDATA.hidden?.counts||{};
+  miniMetric(hs,'Hidden/sensitive files',hc.files||0);miniMetric(hs,'Hidden findings',hc.findings||0);miniMetric(hs,'Dot paths',hc.dotPaths||0);miniMetric(hs,'Sensitive config',hc.sensitiveConfig||0);
+  const he=$('hiddenEvidence');he.replaceChildren();
+  (MODEDATA.hidden?.files||[]).slice(0,100).forEach(x=>{const d=document.createElement('div');d.className='mode-item';d.textContent=(x.reason||'hidden')+' • '+(x.path||x.name||'');he.appendChild(d)});
+  (MODEDATA.hidden?.findings||[]).slice(0,100).forEach(x=>{const d=document.createElement('div');d.className='mode-item';d.textContent=(x.surface||'hidden')+' • '+(x.path||'')+(x.line?':'+x.line:'')+' — '+(x.message||x.rule||'');he.appendChild(d)});
+
+  const vs=$('view360Summary');vs.replaceChildren();
+  const sm=MODEDATA['360']?.summary||{};
+  miniMetric(vs,'Files',sm.files||0);miniMetric(vs,'URLs',sm.urls||0);miniMetric(vs,'Findings',sm.findings||0);miniMetric(vs,'Errors',sm.errors||0);
+  miniMetric(vs,'Warnings',sm.warnings||0);miniMetric(vs,'Protocols',sm.protocolSurfaces||0);miniMetric(vs,'Hidden files',sm.hiddenFiles||0);miniMetric(vs,'Info',sm.info||0);
+}
+function setMode(mode){
+  const normalized=mode.startsWith('/')?mode:'/'+mode;
+  document.querySelectorAll('.modebtn').forEach(b=>b.classList.toggle('active',b.dataset.mode===normalized));
+  const map={'/stepview':'stepviewPanel','/protocol':'protocolPanel','/hidden':'hiddenPanel','/360':'view360Panel'};
+  document.querySelectorAll('.modepanel').forEach(p=>p.classList.remove('active'));
+  const panel=$(map[normalized]||'view360Panel');if(panel)panel.classList.add('active');
+  if(normalized==='/protocol'){$('category').value='protocol';render()}
+  else if(normalized==='/hidden'){$('category').value='hidden';render()}
+  else if(normalized==='/360'){$('category').value='';$('surface').value='';$('search').value='';render()}
+  panel?.scrollIntoView({behavior:'smooth',block:'start'});
+}
 const ICONS={
   filesystem:'🗂️','http-files':'📦',uploads:'⬆️','http-routes':'🛣️','browser-navigation':'🧭',
   'network-addresses':'🌐','private-network':'🏠','client-ip':'🛰️','proxy-trust':'🛡️',
@@ -369,7 +462,10 @@ function render(){
   });
 }
 ['search','severity','surface','category','file','rule'].forEach(id=>$(id).addEventListener(id==='search'?'input':'change',render));
+document.querySelectorAll('.modebtn').forEach(b=>b.addEventListener('click',()=>setMode(b.dataset.mode)));
+renderModes();
 render();
+setMode(DATA.initialMode||'/360');
 </script>
 </body>
 </html>""".replace("__DATA__", data)
