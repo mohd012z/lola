@@ -18,12 +18,31 @@ from lola_mt5_mcp_bridge import configuration as mt5_mcp_configuration, discover
 from lola_ex_problem_router import diagnose as ex_diagnose
 from lola_ex_fallback_bots import fallback_plan as ex_fallback_plan, run_fallback as ex_run_fallback
 from lola_python_path_doctor import analyze as py_path_analyze
+from lola_python_capabilities import capability as py_capability, host as py_host, converter as py_converter, inverter as py_inverter, header as py_header, trace as py_trace, links as py_links, urls as py_urls, codec as py_codec, layers as py_layers, pylist as py_list, tools as py_tools, update_plan as py_update_plan
 
 def run(command,target=None,arg=None):
     cmd=(command or "").strip().lower()
     mod=resolve(cmd)
     if not mod:return {"ok":False,"error":"unknown command","command":command}
     if cmd=="/codecli":return {"ok":True,"modules":catalog()}
+    pycmds={"/python","/linux","/host","/pyconverter","/pyinverter","/pyheader","/pytrace","/pylink","/pyurls","/pydecorder","/pyencorder","/pylayer","/pylist","/pyghidra","/pyfrida","/pynano","/pyupdate","/pyupgrade"}
+    if cmd in pycmds:
+        root=Path(target or ".")
+        if cmd in ("/python","/linux","/host"):return {"ok":True,"capability":py_capability(root if root.is_dir() else root.parent)}
+        if cmd in ("/pyupdate","/pyupgrade"):return {"ok":True,"plan":py_update_plan(cmd=="/pyupgrade")}
+        if cmd in ("/pyghidra","/pyfrida","/pynano"):return {"ok":True,"tools":py_tools(str(root if root.is_dir() else root.parent))}
+        if not root.exists():return {"ok":False,"error":"Python target does not exist"}
+        if cmd=="/pyconverter":return py_converter(root,arg)
+        if cmd=="/pyinverter":return py_inverter(root)
+        if cmd=="/pyheader":return {"ok":True,"header":py_header(root)}
+        if cmd=="/pytrace":return {"ok":True,"trace":py_trace(root if root.is_dir() else root.parent)}
+        if cmd=="/pylink":return {"ok":True,"links":py_links(root if root.is_dir() else root.parent)}
+        if cmd=="/pyurls":return {"ok":True,"urls":py_urls(root)}
+        if cmd=="/pydecorder":return py_codec(root,"decode",arg)
+        if cmd=="/pyencorder":return py_codec(root,"encode",arg)
+        if cmd=="/pylayer":return {"ok":True,"layers":py_layers(root if root.is_dir() else root.parent)}
+        if cmd=="/pylist":return {"ok":True,"files":py_list(root if root.is_dir() else root.parent)}
+
     if cmd in ("/pypath","/pyprocess","/pyusage","/pyscript"):
         root=Path(target or ".")
         if not root.exists():return {"ok":False,"error":"Python inspection target does not exist"}
