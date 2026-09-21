@@ -5,6 +5,9 @@ static analysis when installed; Frida remains an explicitly authorized attach-on
 runtime evidence source and is never required for ordinary extraction.
 """
 MODULES=[
+ {"id":"pdfocr","mode":"ocr","purpose":"Per-page PDF OCR with searchable/scanned detection and provenance."},
+ {"id":"ocrreadiness","mode":"static","purpose":"Detect which PDF pages need OCR."},
+ {"id":"searchablepdf","mode":"ocr-export","purpose":"Create a new searchable OCR PDF when OCRmyPDF is available."},
  {"id":"officeconvert","mode":"convert","purpose":"Execute local office document conversions using built-in adapters."},
  {"id":"officecapabilities","mode":"reference","purpose":"Report available document conversion backends."},
  {"id":"documentconvert","mode":"convert-plan","purpose":"PDF Word Excel and office-document conversion routing."},
@@ -72,6 +75,7 @@ MODULES=[
 ]
 
 ALIASES={
+ "/pdfocr":"pdfocr","/ocrpdf":"pdfocr","/ocrscan":"pdfocr","/ocrreadiness":"ocrreadiness","/searchablepdf":"searchablepdf",
  "/officeconvert":"officeconvert","/officeengine":"officeconvert","/officecapabilities":"officecapabilities",
  "/csv2xlsx":"documentconvert","/xlsx2csv":"documentconvert",
  "/documentconvert":"documentconvert","/pdf2word":"pdf2word","/pdf2docx":"pdf2word","/pdf2excel":"pdf2excel","/pdf2xlsx":"pdf2excel",
