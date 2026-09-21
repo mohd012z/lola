@@ -634,21 +634,27 @@ class Handler(BaseHTTPRequestHandler):
                 if not name.lower().endswith(".apk"):
                     return self.send_json({"error":"Please choose an .apk file"},400)
                 UPLOAD_DIR.mkdir(parents=True,exist_ok=True)
-                dest = UPLOAD_DIR / name
+                temp_dest = UPLOAD_DIR / ("upload_" + str(time.time_ns()) + ".apk")
                 remaining = size
-                with dest.open("wb") as f:
+                with temp_dest.open("wb") as f:
                     while remaining:
                         chunk = self.rfile.read(min(1024*1024, remaining))
                         if not chunk:
                             break
                         f.write(chunk); remaining -= len(chunk)
                 if remaining != 0:
-                    dest.unlink(missing_ok=True)
+                    temp_dest.unlink(missing_ok=True)
                     return self.send_json({"error":"Upload incomplete"},400)
-                rec=register_target(dest, name)
+                rec=register_target(temp_dest, name)
+                final_dest=UPLOAD_DIR / f"{rec['id']}_{name}"
+                if final_dest.exists():
+                    temp_dest.unlink(missing_ok=True)
+                else:
+                    temp_dest.replace(final_dest)
+                rec=register_target(final_dest, name)
                 log(f"APK uploaded: {name} · library {rec['id']}")
-                set_state(target=str(dest), targetId=rec["id"], checks=rec.get("lastPlan",[]), status="idle", stage="uploaded", progress=0)
-                return self.send_json({"ok":True,"name":name,"path":str(dest),"targetId":rec["id"],"sha256":rec["sha256"],"lastPlan":rec.get("lastPlan",[])})
+                set_state(target=str(final_dest), targetId=rec["id"], checks=rec.get("lastPlan",[]), status="idle", stage="uploaded", progress=0)
+                return self.send_json({"ok":True,"name":name,"path":str(final_dest),"targetId":rec["id"],"sha256":rec["sha256"],"lastPlan":rec.get("lastPlan",[])})
             except Exception as exc:
                 return self.send_json({"error":str(exc)},500)
 
