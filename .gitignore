@@ -1,3 +1,6 @@
+.lola-apk/
+apk-report.html
+apk-analysis.json
 .lola-preflight/
 preflight-analysis.json
 scan-events.json
