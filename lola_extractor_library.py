@@ -43,7 +43,7 @@ ALIASES={
  "/codecli":"codecli","/c++":"cpp","/cpp":"cpp","/c":"c","/vector":"vector",
  "/base64":"base64","/base44":"base44","/zip":"zip","/rar":"rar","/7zip":"7zip",
  "/smgrep":"semgrep","/semgrep":"semgrep","/blob":"blob","/chunk":"chunk",
- "/svg":"svg","/xml":"xml","/css":"css","/*formatcode":"formatcode","/*.**":"wildcard",
+ "/svg":"svg","/xml":"xml","/css":"css","/*formatcode":"formatcode","/*.**":"wildcard","/*.***":"wildcard",
  "/deep-dive":"extractormodule","/allcode":"allcode","/codestring":"codestring",
  "/extractormodule":"extractormodule","/extractorrefactoring":"extractorrefactoring",
  "/refactoringcode":"refactoringcode","/codeencode":"codeencode","/codeencoder":"codeencoder",
