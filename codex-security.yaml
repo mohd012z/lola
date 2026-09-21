@@ -319,3 +319,403 @@ rules:
           - pattern: child_process.execSync($SINK, ...)
           - pattern: $CP.exec($SINK, ...)
           - pattern: $CP.execSync($SINK, ...)
+# ========================= DEEP SURFACE INVENTORY =========================
+
+  # ---- Filesystem / local paths ----
+
+  - id: extract-fs-read-path
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Filesystem read/open path -> $PATH"
+    metadata: {category: paths, surface: filesystem, confidence: HIGH}
+    pattern-either:
+      - pattern: fs.readFile($PATH, ...)
+      - pattern: fs.readFileSync($PATH, ...)
+      - pattern: fs.open($PATH, ...)
+      - pattern: fs.openSync($PATH, ...)
+      - pattern: fs.createReadStream($PATH, ...)
+      - pattern: $FS.readFile($PATH, ...)
+      - pattern: $FS.readFileSync($PATH, ...)
+      - pattern: $FS.createReadStream($PATH, ...)
+
+  - id: extract-fs-write-path
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Filesystem write/create path -> $PATH"
+    metadata: {category: paths, surface: filesystem, confidence: HIGH}
+    pattern-either:
+      - pattern: fs.writeFile($PATH, ...)
+      - pattern: fs.writeFileSync($PATH, ...)
+      - pattern: fs.appendFile($PATH, ...)
+      - pattern: fs.appendFileSync($PATH, ...)
+      - pattern: fs.createWriteStream($PATH, ...)
+      - pattern: $FS.writeFile($PATH, ...)
+      - pattern: $FS.writeFileSync($PATH, ...)
+      - pattern: $FS.createWriteStream($PATH, ...)
+
+  - id: extract-fs-delete-move-path
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Filesystem delete/move path operation"
+    metadata: {category: paths, surface: filesystem, confidence: HIGH}
+    pattern-either:
+      - pattern: fs.unlink($PATH, ...)
+      - pattern: fs.unlinkSync($PATH, ...)
+      - pattern: fs.rm($PATH, ...)
+      - pattern: fs.rmSync($PATH, ...)
+      - pattern: fs.rename($FROM, $TO, ...)
+      - pattern: fs.renameSync($FROM, $TO, ...)
+      - pattern: $FS.unlink($PATH, ...)
+      - pattern: $FS.rm($PATH, ...)
+      - pattern: $FS.rename($FROM, $TO, ...)
+
+  - id: extract-path-construction
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Path construction -> $METHOD(...)"
+    metadata: {category: paths, surface: filesystem, confidence: HIGH}
+    patterns:
+      - pattern: $PATH.$METHOD(...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(join|resolve|normalize|relative|dirname|basename)$
+
+  - id: extract-runtime-root-path
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Runtime/root path reference"
+    metadata: {category: paths, surface: filesystem, confidence: HIGH}
+    pattern-either:
+      - pattern: __dirname
+      - pattern: __filename
+      - pattern: process.cwd()
+      - pattern: import.meta.url
+
+  - id: extract-express-file-delivery
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "HTTP file delivery path -> $PATH"
+    metadata: {category: paths, surface: http-files, confidence: HIGH}
+    pattern-either:
+      - pattern: $RES.sendFile($PATH, ...)
+      - pattern: $RES.download($PATH, ...)
+      - pattern: $RES.attachment($PATH, ...)
+
+  - id: extract-static-directory
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Static content directory exposed -> $PATH"
+    metadata: {category: paths, surface: http-files, confidence: HIGH}
+    pattern-either:
+      - pattern: express.static($PATH, ...)
+      - pattern: $EXPRESS.static($PATH, ...)
+
+  - id: extract-upload-destination
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Upload/storage destination configuration found"
+    metadata: {category: paths, surface: uploads, confidence: MEDIUM}
+    pattern-either:
+      - pattern: multer({..., dest: $PATH, ...})
+      - pattern: multer.diskStorage({..., destination: $DEST, ...})
+      - pattern: $MULTER({..., dest: $PATH, ...})
+
+  # ---- Routes / URL paths ----
+
+  - id: extract-router-routes
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Router endpoint: $METHOD $PATH"
+    metadata: {category: routes, surface: http-routes, confidence: HIGH}
+    patterns:
+      - pattern: $ROUTER.$METHOD($PATH, ...)
+      - metavariable-regex:
+          metavariable: $METHOD
+          regex: ^(get|post|put|patch|delete|all|options|head|use)$
+
+  - id: extract-navigation-targets
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Browser navigation/redirect target -> $URL"
+    metadata: {category: routes, surface: browser-navigation, confidence: HIGH}
+    pattern-either:
+      - pattern: window.location.href = $URL
+      - pattern: location.href = $URL
+      - pattern: window.location.assign($URL)
+      - pattern: window.location.replace($URL)
+      - pattern: $RES.redirect($URL)
+
+  # ---- IP / proxy / network identity handling ----
+
+  - id: extract-ipv4-literal
+    languages: [generic]
+    severity: INFO
+    message: "IPv4 literal found"
+    metadata: {category: ip, surface: network-addresses, confidence: MEDIUM}
+    pattern-regex: "\\b(?:(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1?[0-9]?[0-9])\\b"
+
+  - id: extract-ipv6-literal
+    languages: [generic]
+    severity: INFO
+    message: "IPv6-style literal found"
+    metadata: {category: ip, surface: network-addresses, confidence: LOW}
+    pattern-regex: "\\b(?:[0-9A-Fa-f]{1,4}:){2,7}[0-9A-Fa-f]{1,4}\\b"
+
+  - id: extract-private-loopback-ip
+    languages: [generic]
+    severity: INFO
+    message: "Private/loopback IPv4 address found"
+    metadata: {category: ip, surface: private-network, confidence: HIGH}
+    pattern-regex: "\\b(?:10\\.(?:[0-9]{1,3}\\.){2}[0-9]{1,3}|192\\.168\\.[0-9]{1,3}\\.[0-9]{1,3}|172\\.(?:1[6-9]|2[0-9]|3[01])\\.[0-9]{1,3}\\.[0-9]{1,3}|127\\.(?:[0-9]{1,3}\\.){2}[0-9]{1,3})\\b"
+
+  - id: extract-client-ip-api
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Client/peer IP source read"
+    metadata: {category: ip, surface: client-ip, confidence: HIGH}
+    pattern-either:
+      - pattern: $REQ.ip
+      - pattern: $REQ.ips
+      - pattern: $REQ.socket.remoteAddress
+      - pattern: $REQ.connection.remoteAddress
+      - pattern: $SOCKET.remoteAddress
+
+  - id: extract-forwarded-client-ip-header
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Proxy/client-IP header read -> $HEADER"
+    metadata: {category: ip, surface: client-ip, confidence: HIGH}
+    pattern-either:
+      - pattern: $REQ.headers[$HEADER]
+      - pattern: $REQ.get($HEADER)
+      - pattern: $REQ.header($HEADER)
+    metavariable-regex:
+      metavariable: $HEADER
+      regex: (?i)^["']?(x-forwarded-for|x-real-ip|cf-connecting-ip|true-client-ip|forwarded|fastly-client-ip|x-client-ip)["']?$
+
+  - id: audit-trust-proxy-all
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Express trust proxy is broadly enabled. Verify requests can only arrive through trusted proxies before using forwarded client-IP/protocol data."
+    metadata: {category: ip, surface: proxy-trust, cwe: "CWE-441", confidence: MEDIUM}
+    pattern-either:
+      - pattern: $APP.set("trust proxy", true)
+      - pattern: $APP.enable("trust proxy")
+
+  - id: audit-bind-all-interfaces
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Service appears to bind to all IPv4 interfaces (0.0.0.0). Confirm network exposure is intentional and protected."
+    metadata: {category: network, surface: listeners, confidence: HIGH}
+    pattern-either:
+      - pattern: $APP.listen($PORT, "0.0.0.0", ...)
+      - pattern: $SERVER.listen($PORT, "0.0.0.0", ...)
+      - pattern: $NET.createServer(...).listen($PORT, "0.0.0.0", ...)
+
+  - id: extract-network-listener
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Network listener/bind found"
+    metadata: {category: network, surface: listeners, confidence: HIGH}
+    pattern-either:
+      - pattern: $APP.listen($PORT, ...)
+      - pattern: $SERVER.listen($PORT, ...)
+      - pattern: $SOCKET.bind($PORT, ...)
+      - pattern: $SOCKET.connect($PORT, $HOST, ...)
+
+  - id: extract-dns-resolution
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "DNS/hostname resolution call -> $HOST"
+    metadata: {category: network, surface: dns, confidence: HIGH}
+    pattern-either:
+      - pattern: dns.lookup($HOST, ...)
+      - pattern: dns.resolve($HOST, ...)
+      - pattern: $DNS.lookup($HOST, ...)
+      - pattern: $DNS.resolve($HOST, ...)
+
+  # ---- Encryption / cryptography ----
+
+  - id: extract-encryption
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Encryption operation -> createCipheriv($ALG, ...)"
+    metadata: {category: crypto, surface: encryption, confidence: HIGH}
+    pattern: $CRYPTO.createCipheriv($ALG, $KEY, $IV, ...)
+
+  - id: extract-decryption
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Decryption operation -> createDecipheriv($ALG, ...)"
+    metadata: {category: crypto, surface: encryption, confidence: HIGH}
+    pattern: $CRYPTO.createDecipheriv($ALG, $KEY, $IV, ...)
+
+  - id: extract-webcrypto-encryption
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Web Crypto operation found"
+    metadata: {category: crypto, surface: webcrypto, confidence: HIGH}
+    pattern-either:
+      - pattern: $CRYPTO.subtle.encrypt($ALG, $KEY, $DATA)
+      - pattern: $CRYPTO.subtle.decrypt($ALG, $KEY, $DATA)
+      - pattern: $CRYPTO.subtle.digest($ALG, $DATA)
+      - pattern: $CRYPTO.subtle.sign($ALG, $KEY, $DATA)
+      - pattern: $CRYPTO.subtle.verify($ALG, $KEY, $SIG, $DATA)
+      - pattern: crypto.subtle.encrypt($ALG, $KEY, $DATA)
+      - pattern: crypto.subtle.decrypt($ALG, $KEY, $DATA)
+      - pattern: crypto.subtle.digest($ALG, $DATA)
+
+  - id: extract-key-derivation
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Password/key derivation operation found"
+    metadata: {category: crypto, surface: key-derivation, confidence: HIGH}
+    pattern-either:
+      - pattern: $CRYPTO.pbkdf2(...)
+      - pattern: $CRYPTO.pbkdf2Sync(...)
+      - pattern: $CRYPTO.scrypt(...)
+      - pattern: $CRYPTO.scryptSync(...)
+      - pattern: $CRYPTO.hkdf(...)
+      - pattern: $CRYPTO.hkdfSync(...)
+
+  - id: extract-secure-random
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Cryptographically secure random generation found"
+    metadata: {category: crypto, surface: random, confidence: HIGH}
+    pattern-either:
+      - pattern: $CRYPTO.randomBytes(...)
+      - pattern: $CRYPTO.randomFill(...)
+      - pattern: $CRYPTO.randomFillSync(...)
+      - pattern: $CRYPTO.randomUUID(...)
+      - pattern: crypto.getRandomValues(...)
+
+  - id: extract-signing-verification
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Cryptographic signing/verification operation found"
+    metadata: {category: crypto, surface: signatures, confidence: HIGH}
+    pattern-either:
+      - pattern: $CRYPTO.createSign(...)
+      - pattern: $CRYPTO.createVerify(...)
+      - pattern: $CRYPTO.sign(...)
+      - pattern: $CRYPTO.verify(...)
+      - pattern: $JWT.sign(...)
+      - pattern: $JWT.verify(...)
+
+  - id: extract-tls-context
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "TLS/HTTPS configuration found"
+    metadata: {category: crypto, surface: tls, confidence: HIGH}
+    pattern-either:
+      - pattern: https.createServer($OPTIONS, ...)
+      - pattern: tls.createServer($OPTIONS, ...)
+      - pattern: new https.Agent($OPTIONS)
+      - pattern: new $HTTPS.Agent($OPTIONS)
+
+  - id: audit-deprecated-cipher-api
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Deprecated password-based createCipher/createDecipher API found. Use createCipheriv/createDecipheriv with a securely generated key and IV."
+    metadata: {category: crypto, surface: encryption, cwe: "CWE-327", confidence: HIGH}
+    pattern-either:
+      - pattern: $CRYPTO.createCipher(...)
+      - pattern: $CRYPTO.createDecipher(...)
+
+  - id: audit-ecb-mode
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "ECB block-cipher mode detected. ECB leaks plaintext structure; use an authenticated mode such as AES-GCM where appropriate."
+    metadata: {category: crypto, surface: encryption, cwe: "CWE-327", confidence: HIGH}
+    patterns:
+      - pattern-either:
+          - pattern: $CRYPTO.createCipheriv($ALG, ...)
+          - pattern: $CRYPTO.createDecipheriv($ALG, ...)
+      - metavariable-regex:
+          metavariable: $ALG
+          regex: (?i).*ecb.*
+
+  - id: audit-static-zero-iv
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Encryption IV appears static/all-zero. IV/nonce reuse can break confidentiality or authenticity depending on the cipher mode."
+    metadata: {category: crypto, surface: encryption, cwe: "CWE-329", confidence: MEDIUM}
+    pattern-either:
+      - pattern: $CRYPTO.createCipheriv($ALG, $KEY, Buffer.alloc($N, 0), ...)
+      - pattern: $CRYPTO.createCipheriv($ALG, $KEY, Buffer.alloc($N), ...)
+      - pattern: $CRYPTO.createCipheriv($ALG, $KEY, "0000000000000000", ...)
+
+  # ---- Database / storage ----
+
+  - id: extract-database-connection
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Database connection/client configuration found"
+    metadata: {category: database, surface: database, confidence: MEDIUM}
+    pattern-either:
+      - pattern: new $DB.Client($CONFIG)
+      - pattern: new $DB.Pool($CONFIG)
+      - pattern: $DB.connect($CONFIG, ...)
+      - pattern: $MONGOOSE.connect($URI, ...)
+      - pattern: $SEQUELIZE = new Sequelize($URI, ...)
+      - pattern: $PRISMA = new PrismaClient(...)
+
+  - id: extract-database-query
+    languages: [javascript, typescript]
+    severity: INFO
+    message: "Database/query operation found"
+    metadata: {category: database, surface: database, confidence: MEDIUM}
+    pattern-either:
+      - pattern: $DB.query($QUERY, ...)
+      - pattern: $DB.execute($QUERY, ...)
+      - pattern: $DB.exec($QUERY, ...)
+      - pattern: $DB.raw($QUERY, ...)
+
+  # ========================= DEEP TAINT AUDIT =========================
+
+  - id: audit-tainted-path-read-write
+    mode: taint
+    languages: [javascript, typescript]
+    severity: ERROR
+    message: "Request-controlled input appears to reach a filesystem path. Normalize and constrain the final resolved path to an approved base directory."
+    metadata: {category: paths, surface: filesystem, cwe: "CWE-22", confidence: HIGH}
+    pattern-sources:
+      - pattern-either:
+          - pattern: $REQ.query.$X
+          - pattern: $REQ.query[$X]
+          - pattern: $REQ.body.$X
+          - pattern: $REQ.body[$X]
+          - pattern: $REQ.params.$X
+          - pattern: $REQ.params[$X]
+    pattern-sinks:
+      - pattern-either:
+          - pattern: fs.readFile($SINK, ...)
+          - pattern: fs.readFileSync($SINK, ...)
+          - pattern: fs.writeFile($SINK, ...)
+          - pattern: fs.writeFileSync($SINK, ...)
+          - pattern: fs.createReadStream($SINK, ...)
+          - pattern: fs.createWriteStream($SINK, ...)
+          - pattern: $FS.readFile($SINK, ...)
+          - pattern: $FS.writeFile($SINK, ...)
+          - pattern: $RES.sendFile($SINK, ...)
+          - pattern: $RES.download($SINK, ...)
+
+  - id: audit-tainted-browser-navigation
+    mode: taint
+    languages: [javascript, typescript]
+    severity: WARNING
+    message: "Browser-controlled data appears to determine a navigation target. Restrict destinations to approved origins/paths."
+    metadata: {category: routes, surface: browser-navigation, cwe: "CWE-601", confidence: HIGH}
+    pattern-sources:
+      - pattern-either:
+          - pattern: location.hash
+          - pattern: location.search
+          - pattern: $PARAMS.get(...)
+          - pattern: window.name
+    pattern-sinks:
+      - pattern-either:
+          - pattern: window.location.href = $SINK
+          - pattern: location.href = $SINK
+          - pattern: window.location.assign($SINK)
+          - pattern: window.location.replace($SINK)
