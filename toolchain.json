@@ -1,0 +1,127 @@
+{
+  "schemaVersion": 1,
+  "updated": "2026-09-21",
+  "root": ".lola-tools",
+  "tools": [
+    {
+      "id": "apktool",
+      "label": "Apktool",
+      "version": "3.0.3",
+      "kind": "github-release-asset",
+      "repository": "iBotPeaches/Apktool",
+      "tag": "v3.0.3",
+      "assetRegex": "^apktool_3\\.0\\.3\\.jar$",
+      "sha256": "dbf930b076c6b9be08d57c449cacefc3bdd6b71ebd59b3066fc0e1f5b14f9423",
+      "archive": "file",
+      "launch": ["java", "-jar", "{install}/apktool_3.0.3.jar"],
+      "requires": ["java"],
+      "platforms": ["windows", "linux", "darwin", "termux"],
+      "purpose": "Decode/rebuild Android resources and smali for authorized APK review."
+    },
+    {
+      "id": "gradle",
+      "label": "Gradle",
+      "version": "9.7.1",
+      "kind": "direct",
+      "url": "https://services.gradle.org/distributions/gradle-9.7.1-bin.zip",
+      "checksumUrl": "https://services.gradle.org/distributions/gradle-9.7.1-bin.zip.sha256",
+      "archive": "zip",
+      "installSubdir": "gradle-9.7.1",
+      "launchWindows": ["{install}/gradle-9.7.1/bin/gradle.bat"],
+      "launchUnix": ["{install}/gradle-9.7.1/bin/gradle"],
+      "requires": ["java"],
+      "platforms": ["windows", "linux", "darwin", "termux"],
+      "purpose": "Pinned build runner for Android/Java projects. Android builds still require a compatible Android SDK/AGP/JDK."
+    },
+    {
+      "id": "ghidra",
+      "label": "Ghidra",
+      "version": "12.1.3",
+      "kind": "github-release-asset",
+      "repository": "NationalSecurityAgency/ghidra",
+      "tag": "Ghidra_12.1.3_build",
+      "assetRegex": "^ghidra_12\\.1\\.3_PUBLIC_.*\\.zip$",
+      "sha256": "93a5d11a9ad510622acaaf908c556a7b9b764d338e78a7567f3689bf5081fd54",
+      "archive": "zip",
+      "launchWindows": ["{install}/ghidra_12.1.3_PUBLIC/ghidraRun.bat"],
+      "launchUnix": ["{install}/ghidra_12.1.3_PUBLIC/ghidraRun"],
+      "headlessCandidates": ["support/analyzeHeadless", "support/analyzeHeadless.bat"],
+      "requires": ["java"],
+      "minimumJava": 25,
+      "platforms": ["windows", "linux", "darwin"],
+      "termux": "detect-only",
+      "purpose": "Native-library and binary analysis. Desktop/headless use is preferred; Ghidra 12.1.x requires JDK 25."
+    },
+    {
+      "id": "hermes",
+      "label": "Hermes / hermesc",
+      "version": "project-matched",
+      "kind": "project-detect",
+      "candidates": [
+        "node_modules/hermes-compiler/hermesc/linux64-bin/hermesc",
+        "node_modules/hermes-compiler/hermesc/osx-bin/hermesc",
+        "node_modules/react-native/sdks/hermesc/linux64-bin/hermesc",
+        "node_modules/react-native/sdks/hermesc/osx-bin/hermesc"
+      ],
+      "systemCommands": ["hermesc", "hermes"],
+      "repository": "facebook/hermes",
+      "platforms": ["windows", "linux", "darwin", "termux"],
+      "termux": "detect-only",
+      "purpose": "React Native Hermes compiler/runtime detection. Lola prefers the compiler bundled with the target React Native toolchain to avoid bytecode-version mismatch."
+    },
+    {
+      "id": "jadx",
+      "label": "JADX",
+      "version": "system",
+      "kind": "system-detect",
+      "systemCommands": ["jadx", "jadx-gui"],
+      "platforms": ["windows", "linux", "darwin", "termux"],
+      "purpose": "DEX to Java/Kotlin-like source context for the Android Code Reader."
+    },
+    {
+      "id": "bundletool",
+      "label": "Bundletool",
+      "version": "system",
+      "kind": "system-detect",
+      "systemCommands": ["bundletool"],
+      "platforms": ["windows", "linux", "darwin", "termux"],
+      "purpose": "Android App Bundle/APKS inspection when available."
+    },
+    {
+      "id": "aapt",
+      "label": "AAPT / AAPT2",
+      "version": "android-sdk",
+      "kind": "system-detect",
+      "systemCommands": ["aapt2", "aapt"],
+      "platforms": ["windows", "linux", "darwin", "termux"],
+      "purpose": "Android resource and manifest inspection."
+    },
+    {
+      "id": "apksigner",
+      "label": "APK Signer",
+      "version": "android-sdk",
+      "kind": "system-detect",
+      "systemCommands": ["apksigner", "keytool"],
+      "platforms": ["windows", "linux", "darwin", "termux"],
+      "purpose": "Signature/certificate verification."
+    },
+    {
+      "id": "adb",
+      "label": "ADB",
+      "version": "android-sdk",
+      "kind": "system-detect",
+      "systemCommands": ["adb"],
+      "platforms": ["windows", "linux", "darwin", "termux"],
+      "purpose": "Authorized Android device discovery and read-only runtime/logcat observation."
+    },
+    {
+      "id": "frida",
+      "label": "Frida",
+      "version": "system",
+      "kind": "system-detect",
+      "systemCommands": ["frida", "frida-ps", "frida-trace"],
+      "platforms": ["windows", "linux", "darwin", "termux"],
+      "purpose": "Optional authorized observation-only runtime instrumentation."
+    }
+  ]
+}
