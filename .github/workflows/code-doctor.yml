@@ -1,0 +1,76 @@
+name: Lola Code Doctor
+
+on:
+  workflow_dispatch:
+  push:
+    paths:
+      - "**.py"
+      - "**.js"
+      - "**.mjs"
+      - "**.cjs"
+      - "**.ts"
+      - "**.tsx"
+      - "**.java"
+      - "**.kt"
+      - "**.c"
+      - "**.h"
+      - "**.cpp"
+      - "**.hpp"
+      - "**.cs"
+      - "**.vb"
+      - "**.vbs"
+      - "**.sh"
+      - "**.ps1"
+      - "**.mq4"
+      - "**.mq5"
+      - "**.smali"
+      - "**.json"
+      - "**.xml"
+      - "**.svg"
+      - "**.css"
+      - "**.html"
+      - "**.yml"
+      - "**.yaml"
+      - "lola_code_doctor.py"
+      - ".github/workflows/code-doctor.yml"
+  schedule:
+    - cron: "17 2 * * *"
+
+permissions:
+  contents: read
+
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+      - name: Compile every Python file
+        run: |
+          python - <<'PY'
+          import pathlib, py_compile
+          bad=[]
+          for p in pathlib.Path(".").rglob("*.py"):
+              if ".git" in p.parts:
+                  continue
+              try:
+                  py_compile.compile(str(p),doraise=True)
+              except Exception as e:
+                  bad.append((str(p),str(e)))
+          for p,e in bad:
+              print("FAIL",p,e)
+          if bad:
+              raise SystemExit(1)
+          PY
+      - name: Run multi-format Code Doctor
+        if: success() || failure()
+        run: python lola_code_doctor.py . --output code-doctor-report.json
+      - name: Upload diagnostic report
+        if: always()
+        uses: actions/upload-artifact@v6
+        with:
+          name: lola-code-doctor-report
+          path: code-doctor-report.json
+          if-no-files-found: warn
