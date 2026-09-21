@@ -1,0 +1,182 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lola Network Live Monitor</title>
+<style>
+:root{color-scheme:dark;--bg:#07101d;--panel:#101a2d;--panel2:#0a1425;--line:#263959;--text:#eef4ff;--muted:#99abc8;--ok:#58d7a8;--warn:#ffc55f;--bad:#ff6b82;--accent:#72a7ff}
+*{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 20% 0,#142646,#07101d 55%);color:var(--text);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif}
+.wrap{max-width:1400px;margin:auto;padding:18px}.hero{display:flex;gap:12px;justify-content:space-between;align-items:flex-start}.hero h1{margin:0}.muted{color:var(--muted)}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;margin:14px 0}.toolbar button,.toolbar input{background:#13213b;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 12px}.toolbar button{cursor:pointer}.toolbar button.active{outline:2px solid var(--accent)}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:10px}.card{background:rgba(16,26,45,.96);border:1px solid var(--line);border-radius:15px;padding:14px}.metric{font-size:27px;font-weight:800}.label{font-size:11px;text-transform:uppercase;color:var(--muted);letter-spacing:.08em}
+.cctv{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:10px;margin-top:12px}.feed{background:#08111f;border:1px solid var(--line);border-radius:13px;padding:12px;min-height:130px;position:relative}.feed.active{outline:2px solid var(--ok)}.dot{width:9px;height:9px;border-radius:50%;background:var(--muted);display:inline-block;margin-right:7px}.feed.active .dot{background:var(--ok);box-shadow:0 0 12px var(--ok)}.feed.error .dot{background:var(--bad)}.feed h3{margin:0 0 8px;font-size:14px}.event{border-bottom:1px solid #1b2d4a;padding:8px 0}.event:last-child{border-bottom:0}.time{color:var(--muted);font-size:11px}
+.two{display:grid;grid-template-columns:1fr 1fr;gap:12px;margin-top:12px}.list{display:grid;gap:8px}.item{background:#0a1425;border:1px solid var(--line);border-radius:11px;padding:10px;word-break:break-word}.pill{display:inline-block;border:1px solid var(--line);border-radius:999px;padding:2px 8px;margin:2px;font-size:11px}.ok{color:var(--ok)}.warn{color:var(--warn)}.bad{color:var(--bad)}
+.chain{display:flex;gap:7px;align-items:center;flex-wrap:wrap}.node{border:1px solid var(--line);background:#0b1629;border-radius:10px;padding:7px 9px;max-width:100%;word-break:break-all}.arrow{color:var(--muted)}
+.note{margin-top:12px;border:1px solid #29466d;background:#0d1b31;border-radius:12px;padding:11px;color:#c0d0ea}
+.hidden{display:none!important}
+@media(max-width:850px){.hero{display:block}.two{grid-template-columns:1fr}.wrap{padding:12px}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div><h1>📡 Lola Network Live Monitor</h1><div class="muted">CCTV-style scan/process monitor — no camera recording.</div></div>
+    <div class="muted" id="lastUpdate">Waiting for scan data…</div>
+  </div>
+
+  <div class="toolbar">
+    <button data-mode="normal" class="active">/normal</button>
+    <button data-mode="hiddenmode">/hiddenmode</button>
+    <button data-mode="anonymus">/anonymus</button>
+    <button data-mode="trace">/trace</button>
+    <button data-mode="route">/route</button>
+    <button data-mode="map">/map</button>
+    <button data-mode="visible">/visible</button>
+    <button data-mode="realip">/realip</button>
+  </div>
+
+  <div class="grid">
+    <div class="card"><div class="label">Scan status</div><div class="metric" id="status">Idle</div></div>
+    <div class="card"><div class="label">URLs</div><div class="metric" id="urls">0</div></div>
+    <div class="card"><div class="label">Domains</div><div class="metric" id="domains">0</div></div>
+    <div class="card"><div class="label">Public IPs</div><div class="metric" id="publicIps">0</div></div>
+    <div class="card"><div class="label">Redirect hops</div><div class="metric" id="redirects">0</div></div>
+    <div class="card"><div class="label">TLS endpoints</div><div class="metric" id="tls">0</div></div>
+  </div>
+
+  <div class="card" style="margin-top:12px">
+    <h2>🎥 /cctv — Process feeds</h2>
+    <div class="cctv" id="feeds"></div>
+  </div>
+
+  <div class="two">
+    <div class="card">
+      <h2 id="leftTitle">Network trace</h2>
+      <div class="list" id="left"></div>
+    </div>
+    <div class="card">
+      <h2 id="rightTitle">Visible network surface</h2>
+      <div class="list" id="right"></div>
+    </div>
+  </div>
+
+  <div class="card" style="margin-top:12px" id="realIpCard">
+    <h2>🌐 /realip — This device (explicit check)</h2>
+    <div class="muted">A browser needs to contact a server to learn its public IP. This runs only when you press the button.</div>
+    <div class="toolbar">
+      <input id="ipEndpoint" value="https://api.ipify.org?format=json" aria-label="Public IP check endpoint">
+      <button id="checkIp">Check my public IP</button>
+    </div>
+    <div id="myIp" class="item">Not checked.</div>
+  </div>
+
+  <div class="note">
+    <b>Trace/route meaning:</b> this is an application-layer route: source file → URL/route → DNS IP → redirects → final URL/TLS. A normal browser cannot perform a raw ICMP traceroute. Camera/microphone are never activated by this page.
+  </div>
+</div>
+<script>
+const $=id=>document.getElementById(id);
+let NET={summary:{},trace:{items:[]},route:{items:[]},map:{nodes:[],edges:[]},visible:{},realip:{}};
+let EVENTS={status:'idle',events:[]};
+let MODE='normal';
+
+async function loadJson(path,fallback){
+  try{const r=await fetch(path+'?t='+Date.now(),{cache:'no-store'});if(!r.ok)throw 0;return await r.json()}catch{return fallback}
+}
+function textItem(root,title,meta,body=''){
+  const d=document.createElement('div');d.className='item';
+  const h=document.createElement('strong');h.textContent=title;d.appendChild(h);
+  if(meta){const m=document.createElement('div');m.className='muted';m.textContent=meta;d.appendChild(m)}
+  if(body){const b=document.createElement('div');b.textContent=body;d.appendChild(b)}
+  root.appendChild(d);
+}
+function renderFeeds(){
+  const root=$('feeds');root.replaceChildren();
+  const stages=['start','target-discovery','manifest','url-map','code-analysis','semgrep','mode-analysis','network-analysis','report','complete'];
+  stages.forEach(stage=>{
+    const ev=[...(EVENTS.events||[])].reverse().find(x=>x.stage===stage);
+    const d=document.createElement('div');d.className='feed';
+    if(EVENTS.currentStage===stage)d.classList.add('active');
+    if(ev?.level==='error')d.classList.add('error');
+    const h=document.createElement('h3');h.innerHTML='<span class="dot"></span>'+stage;d.appendChild(h);
+    const msg=document.createElement('div');msg.textContent=ev?.message||'Waiting…';d.appendChild(msg);
+    const t=document.createElement('div');t.className='time';t.textContent=ev?.time||'';d.appendChild(t);
+    root.appendChild(d);
+  });
+}
+function traceChain(x){
+  const wrap=document.createElement('div');wrap.className='item';
+  const chain=document.createElement('div');chain.className='chain';
+  const parts=[x.sourceUrl,...(x.redirects||[]).map(r=>r.to),x.finalUrl&&x.finalUrl!==x.sourceUrl?x.finalUrl:null].filter(Boolean);
+  [...new Set(parts)].forEach((p,i)=>{if(i){const a=document.createElement('span');a.className='arrow';a.textContent='→';chain.appendChild(a)}const n=document.createElement('span');n.className='node';n.textContent=p;chain.appendChild(n)});
+  wrap.appendChild(chain);
+  const meta=document.createElement('div');meta.className='muted';meta.textContent='IPs: '+((x.resolvedIps||[]).join(', ')||'-')+' · status '+(x.status||'-')+' · TLS '+(x.tls?.version||'-');wrap.appendChild(meta);
+  return wrap;
+}
+function renderMode(){
+  document.querySelectorAll('[data-mode]').forEach(b=>b.classList.toggle('active',b.dataset.mode===MODE));
+  const l=$('left'),r=$('right');l.replaceChildren();r.replaceChildren();
+  $('realIpCard').classList.toggle('hidden',MODE!=='realip'&&MODE!=='normal');
+  if(MODE==='trace'){
+    $('leftTitle').textContent='/trace';$('rightTitle').textContent='Trace details';
+    (NET.trace?.items||[]).forEach(x=>l.appendChild(traceChain(x)));
+    (NET.trace?.items||[]).forEach(x=>textItem(r,x.host||'host',(x.destinationClass||'')+' · '+((x.resolvedIps||[]).join(', ')||'-'),'Redirects: '+(x.redirects||[]).length+' · '+(x.error||'')));
+  }else if(MODE==='route'){
+    $('leftTitle').textContent='/route — application routes';$('rightTitle').textContent='URL destinations';
+    (NET.route?.items||[]).forEach(x=>textItem(l,(x.method||'')+' '+(x.route||''),(x.path||'')+':'+(x.line||'?')));
+    (NET.trace?.items||[]).forEach(x=>textItem(r,x.sourceUrl||'URL',x.host||'',x.finalUrl&&x.finalUrl!==x.sourceUrl?'Final: '+x.finalUrl:''));
+  }else if(MODE==='map'){
+    $('leftTitle').textContent='/map — logical nodes';$('rightTitle').textContent='Map edges';
+    (NET.map?.nodes||[]).slice(0,300).forEach(x=>textItem(l,x.kind+' · '+x.label,x.id,''));
+    (NET.map?.edges||[]).slice(0,500).forEach(x=>textItem(r,x.label||'link',x.from+' → '+x.to,''));
+  }else if(MODE==='visible'){
+    $('leftTitle').textContent='/visible — public hosts/IPs';$('rightTitle').textContent='Network findings';
+    (NET.visible?.publicHosts||[]).forEach(x=>textItem(l,'Host '+x.host,'references '+x.references,''));
+    (NET.visible?.publicIps||[]).forEach(x=>textItem(l,'Public IP '+x.ip,'references '+x.references,''));
+    (NET.visible?.networkFindings||[]).forEach(x=>textItem(r,(x.severity||'INFO')+' · '+(x.surface||''),(x.path||'')+':'+(x.line||'?'),x.message||x.rule||''));
+  }else if(MODE==='hiddenmode'){
+    $('leftTitle').textContent='/hiddenmode — non-public/internal';$('rightTitle').textContent='Hidden/network findings';
+    (NET.visible?.nonPublicIps||[]).forEach(x=>textItem(l,x.class+' · '+x.ip,'references '+x.references,''));
+    (NET.visible?.networkFindings||[]).filter(x=>['private-network','proxy-trust','device-local-network','client-ip'].includes(x.surface)).forEach(x=>textItem(r,x.surface,(x.path||'')+':'+(x.line||'?'),x.message||''));
+  }else if(MODE==='anonymus'){
+    $('leftTitle').textContent='/anonymus — identity/privacy exposure';$('rightTitle').textContent='Public IP discovery references';
+    (NET.visible?.networkFindings||[]).filter(x=>String(x.surface).includes('privacy')||['client-ip','device-local-network'].includes(x.surface)).forEach(x=>textItem(l,x.surface,(x.path||'')+':'+(x.line||'?'),x.message||''));
+    (NET.realip?.publicIpDiscoveryReferences||[]).forEach(x=>textItem(r,x.host||'IP service',x.sourceUrl||'',(x.occurrences||[]).map(o=>(o.path||'')+':'+(o.line||'?')).join(' · ')));
+  }else if(MODE==='realip'){
+    $('leftTitle').textContent='/realip — resolved app IPs';$('rightTitle').textContent='IP discovery references';
+    (NET.realip?.resolvedPublicIps||[]).forEach(x=>textItem(l,x.ip,'references '+x.references,''));
+    (NET.realip?.publicIpDiscoveryReferences||[]).forEach(x=>textItem(r,x.host||'service',x.sourceUrl||'',''));
+  }else{
+    $('leftTitle').textContent='/normal — recent traces';$('rightTitle').textContent='Visible network surface';
+    (NET.trace?.items||[]).slice(0,20).forEach(x=>l.appendChild(traceChain(x)));
+    (NET.visible?.publicHosts||[]).slice(0,30).forEach(x=>textItem(r,x.host,'references '+x.references,''));
+  }
+  if(!l.children.length)l.innerHTML='<div class="item muted">No matching data yet.</div>';
+  if(!r.children.length)r.innerHTML='<div class="item muted">No matching data yet.</div>';
+}
+async function refresh(){
+  EVENTS=await loadJson('scan-events.json',EVENTS);
+  NET=await loadJson('network-analysis.json',NET);
+  const s=NET.summary||{};
+  $('status').textContent=EVENTS.status||'idle';$('urls').textContent=s.urls||0;$('domains').textContent=s.domains||0;$('publicIps').textContent=s.publicIps||0;$('redirects').textContent=s.redirectHops||0;$('tls').textContent=s.tlsEndpoints||0;
+  $('lastUpdate').textContent='Updated '+new Date().toLocaleTimeString();
+  renderFeeds();renderMode();
+}
+document.querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>{MODE=b.dataset.mode;renderMode()});
+$('checkIp').onclick=async()=>{
+  const endpoint=$('ipEndpoint').value.trim();
+  if(!/^https:\/\//i.test(endpoint)){ $('myIp').textContent='Use an HTTPS endpoint.';return }
+  $('myIp').textContent='Checking…';
+  try{
+    const r=await fetch(endpoint,{cache:'no-store'});
+    const body=await r.text();
+    let value=body;
+    try{const j=JSON.parse(body);value=j.ip||j.address||body}catch{}
+    $('myIp').textContent='Public IP reported by '+new URL(endpoint).host+': '+String(value).trim();
+  }catch(e){$('myIp').textContent='Public-IP check failed: '+e.message}
+};
+refresh();setInterval(refresh,1000);
+</script>
+</body>
+</html>
