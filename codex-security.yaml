@@ -485,13 +485,14 @@ rules:
     severity: INFO
     message: "Proxy/client-IP header read -> $HEADER"
     metadata: {category: ip, surface: client-ip, confidence: HIGH}
-    pattern-either:
-      - pattern: $REQ.headers[$HEADER]
-      - pattern: $REQ.get($HEADER)
-      - pattern: $REQ.header($HEADER)
-    metavariable-regex:
-      metavariable: $HEADER
-      regex: (?i)^["']?(x-forwarded-for|x-real-ip|cf-connecting-ip|true-client-ip|forwarded|fastly-client-ip|x-client-ip)["']?$
+    patterns:
+      - pattern-either:
+          - pattern: $REQ.headers[$HEADER]
+          - pattern: $REQ.get($HEADER)
+          - pattern: $REQ.header($HEADER)
+      - metavariable-regex:
+          metavariable: $HEADER
+          regex: (?i)^["']?(x-forwarded-for|x-real-ip|cf-connecting-ip|true-client-ip|forwarded|fastly-client-ip|x-client-ip)["']?$
 
   - id: audit-trust-proxy-all
     languages: [javascript, typescript]
