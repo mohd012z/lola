@@ -5,6 +5,8 @@ static analysis when installed; Frida remains an explicitly authorized attach-on
 runtime evidence source and is never required for ordinary extraction.
 """
 MODULES=[
+ {"id":"pdfrichhtml","mode":"convert","purpose":"Render PDF pages to interactive HTML with searchable/OCR text."},
+ {"id":"batchofficehtml","mode":"batch-convert","purpose":"Convert supported office-document folders to HTML."},
  {"id":"office2html","mode":"convert","purpose":"Convert office documents to responsive semantic HTML."},
  {"id":"pdf2html","mode":"reconstruct","purpose":"PDF pages and text to responsive HTML with page provenance."},
  {"id":"word2html","mode":"convert","purpose":"DOCX paragraphs and tables to semantic HTML."},
@@ -79,6 +81,7 @@ MODULES=[
 ]
 
 ALIASES={
+ "/pdfrichhtml":"pdfrichhtml","/pdfocrhtml":"pdfrichhtml","/batchofficehtml":"batchofficehtml","/folder2html":"batchofficehtml",
  "/office2html":"office2html","/document2html":"office2html","/pdf2html":"pdf2html","/word2html":"word2html","/docx2html":"word2html","/excel2html":"excel2html","/xlsx2html":"excel2html","/csv2html":"office2html",
  "/pdfocr":"pdfocr","/ocrpdf":"pdfocr","/ocrscan":"pdfocr","/ocrreadiness":"ocrreadiness","/searchablepdf":"searchablepdf",
  "/officeconvert":"officeconvert","/officeengine":"officeconvert","/officecapabilities":"officecapabilities",
