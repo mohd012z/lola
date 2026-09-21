@@ -1512,3 +1512,123 @@ APK targets require an APK mode.
 Project/source targets require Security, Code, Network, or Pre-scan modes.
 
 This prevents accidental mode mismatches.
+
+
+## Android / Termux mobile UI
+
+For Android, use the mobile localhost web UI instead of the desktop Tkinter UI.
+
+Start with:
+
+~~~bash
+python lola_mobile.py
+~~~
+
+or:
+
+~~~bash
+bash START_LOLA_ANDROID.sh
+~~~
+
+The server binds to:
+
+~~~text
+127.0.0.1:8766
+~~~
+
+and opens:
+
+~~~text
+http://127.0.0.1:8766
+~~~
+
+The UI is responsive for Android portrait/landscape and includes:
+
+- Choose APK from Android file picker
+- APK 360
+- Manifest
+- Permissions
+- Components
+- URLs
+- API
+- Keys
+- Certificates
+- Native .SO
+- WebView
+- Crypto
+- Files
+- Code/JADX
+- Risk Review
+- Tools
+- Run
+- Stop
+- Live progress
+- Live log
+- Open report
+
+The selected APK is uploaded only to Lola's localhost Python server and stored under:
+
+~~~text
+.lola-mobile/uploads
+~~~
+
+The server is bound to localhost by default, so it is not exposed to the LAN.
+
+### Minimal Termux setup
+
+Install Termux from its maintained F-Droid or GitHub release source. Keep Termux and any Termux plugins from the same source/signing family.
+
+Inside Termux:
+
+~~~bash
+pkg update
+pkg upgrade
+pkg install python git
+~~~
+
+Then clone or open the Lola repository and run:
+
+~~~bash
+cd lola
+bash START_LOLA_ANDROID.sh
+~~~
+
+Python alone provides the core APK ZIP/DEX/string/native-library analysis.
+
+### Optional richer APK tooling
+
+Additional local Android/Java tools can improve manifest/signing/decompilation detail when available.
+
+Lola detects these automatically:
+
+~~~text
+java
+apkanalyzer
+aapt2
+aapt
+apksigner
+keytool
+jadx
+apktool
+~~~
+
+Use the **Tools** button in Lola Mobile to see which ones are available on the phone.
+
+### Android limits
+
+The Android version is intentionally APK-focused.
+
+The desktop source/project pipeline currently relies on PowerShell/Semgrep orchestration and is better suited to Windows/Linux desktop.
+
+Large APKs or JADX decompilation may use substantial RAM/CPU. Android may stop long-running background work if Termux is heavily restricted by battery/process management, so keep Termux active during deep scans when possible.
+
+### Android generated files
+
+~~~text
+.lola-mobile/uploads
+apk-analysis.json
+apk-report.html
+.lola-apk/decompiled       optional
+~~~
+
+Lola Mobile does not need Tkinter.
