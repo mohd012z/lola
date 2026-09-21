@@ -71,11 +71,15 @@ def decode_manifest(apk):
     if tool("aapt"):
         r=run(["aapt","dump","xmltree",str(apk),"AndroidManifest.xml"])
         attempts.append(("aapt",r))
-    if tool("jadx"):
-        td=Path(tempfile.mkdtemp(prefix="lola_manifest_"))
+    if tool("apktool"):
+        td=Path(tempfile.mkdtemp(prefix="lola_apktool_manifest_"))
         try:
-            r=run(["jadx","--no-src","--no-res","-d",str(td),str(apk)],120)
-            attempts.append(("jadx",r))
+            r=run(["apktool","d","-f","-s","-o",str(td),str(apk)],120)
+            attempts.append(("apktool",r))
+            mp=td/"AndroidManifest.xml"
+            if mp.exists():
+                txt=mp.read_text(encoding="utf-8",errors="ignore")
+                if "<manifest" in txt:return txt,"apktool",attempts
         finally:
             shutil.rmtree(td,ignore_errors=True)
     return "","unavailable",attempts
