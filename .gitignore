@@ -3,3 +3,4 @@ url-report.json
 semgrep-results.json
 semgrep-report.html
 .semgrep/
+device-snapshot.json
