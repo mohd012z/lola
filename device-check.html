@@ -1,0 +1,185 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>Lola Device Snapshot</title>
+<style>
+:root{color-scheme:dark;--bg:#07101e;--panel:#111b2e;--panel2:#0c1527;--line:#263858;--text:#eef4ff;--muted:#99aac8;--ok:#58d7a8;--warn:#ffc45f;--accent:#6fa5ff}
+*{box-sizing:border-box}body{margin:0;background:linear-gradient(180deg,#081426,#07101e);font:14px/1.45 system-ui,-apple-system,Segoe UI,Roboto,sans-serif;color:var(--text)}
+.wrap{max-width:1180px;margin:auto;padding:20px}.hero{display:flex;gap:15px;justify-content:space-between;align-items:flex-start}.hero h1{margin:0;font-size:26px}.muted{color:var(--muted)}
+.actions{display:flex;gap:8px;flex-wrap:wrap}button{background:#172541;color:var(--text);border:1px solid var(--line);border-radius:10px;padding:9px 13px;cursor:pointer}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(260px,1fr));gap:11px;margin-top:15px}.card{background:var(--panel);border:1px solid var(--line);border-radius:15px;padding:14px}.card h2{font-size:15px;margin:0 0 10px}.row{display:grid;grid-template-columns:135px 1fr;gap:9px;padding:6px 0;border-bottom:1px solid #1b2a45}.row:last-child{border:0}.k{color:var(--muted)}.v{word-break:break-word}.yes{color:var(--ok)}.no{color:var(--muted)}.warn{color:var(--warn)}
+.note{margin-top:14px;padding:12px;border:1px solid #294468;background:#0d1a30;border-radius:12px;color:#bfd0eb}pre{white-space:pre-wrap;word-break:break-word;background:#080e1a;border:1px solid var(--line);border-radius:12px;padding:12px;max-height:420px;overflow:auto}
+@media(max-width:600px){.wrap{padding:12px}.hero{display:block}.actions{margin-top:10px}.row{grid-template-columns:110px 1fr}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="hero">
+    <div>
+      <h1>📱 Lola Device Snapshot</h1>
+      <div class="muted">Local-only runtime capability view. No external network requests are made.</div>
+    </div>
+    <div class="actions">
+      <button id="refresh">Refresh</button>
+      <button id="copy">Copy JSON</button>
+      <button id="download">Save JSON</button>
+    </div>
+  </div>
+
+  <div class="note">
+    This page intentionally does <b>not</b> attempt to obtain protected identifiers such as IMEI, hardware serial, SIM identifiers, Android ID, advertising ID, or MAC address. Ordinary browsers also cannot reliably reveal the device's public IP or full local network-interface list without external/native help.
+  </div>
+
+  <div class="grid" id="cards"></div>
+  <h2>Raw snapshot</h2>
+  <pre id="raw"></pre>
+</div>
+
+<script>
+const $=id=>document.getElementById(id);
+let SNAP={};
+
+function supported(name, value){return {name,value:!!value}}
+function fmtBytes(n){if(!Number.isFinite(n))return null;if(n<1024)return n+' B';if(n<1048576)return (n/1024).toFixed(1)+' KB';if(n<1073741824)return (n/1048576).toFixed(1)+' MB';return (n/1073741824).toFixed(2)+' GB'}
+async function permissionState(name){
+  try{
+    if(!navigator.permissions?.query)return 'unsupported';
+    const r=await navigator.permissions.query({name});
+    return r.state||'unknown';
+  }catch{return 'unsupported'}
+}
+async function collect(){
+  const uaData=navigator.userAgentData;
+  let uaHigh={};
+  if(uaData?.getHighEntropyValues){
+    try{
+      uaHigh=await uaData.getHighEntropyValues(['architecture','bitness','model','platformVersion','uaFullVersion','fullVersionList']);
+    }catch{}
+  }
+
+  let storage={};
+  try{
+    if(navigator.storage?.estimate){
+      const e=await navigator.storage.estimate();
+      storage={usage:e.usage??null,quota:e.quota??null,usageText:fmtBytes(e.usage),quotaText:fmtBytes(e.quota)};
+    }
+  }catch{}
+
+  let battery={supported:false};
+  try{
+    if(navigator.getBattery){
+      const b=await navigator.getBattery();
+      battery={supported:true,charging:b.charging,level:Math.round((b.level||0)*100),chargingTime:b.chargingTime,dischargingTime:b.dischargingTime};
+    }
+  }catch{}
+
+  const conn=navigator.connection||navigator.mozConnection||navigator.webkitConnection;
+  const perms={};
+  for(const name of ['geolocation','camera','microphone','notifications','clipboard-read','clipboard-write']){
+    if(name==='notifications' && 'Notification' in window){perms[name]=Notification.permission;continue}
+    perms[name]=await permissionState(name);
+  }
+
+  const caps={
+    geolocation:'geolocation' in navigator,
+    mediaDevices:!!navigator.mediaDevices,
+    getUserMedia:!!navigator.mediaDevices?.getUserMedia,
+    bluetooth:'bluetooth' in navigator,
+    usb:'usb' in navigator,
+    serial:'serial' in navigator,
+    hid:'hid' in navigator,
+    nfc:'NDEFReader' in window,
+    vibration:'vibrate' in navigator,
+    serviceWorker:'serviceWorker' in navigator,
+    webShare:'share' in navigator,
+    clipboard:'clipboard' in navigator,
+    credentials:'credentials' in navigator,
+    webAuthn:'PublicKeyCredential' in window,
+    webCrypto:!!crypto?.subtle,
+    webRTC:'RTCPeerConnection' in window,
+    webSocket:'WebSocket' in window
+  };
+
+  SNAP={
+    generatedAt:new Date().toISOString(),
+    secureContext:window.isSecureContext,
+    page:{protocol:location.protocol,host:location.host||'(local file)',online:navigator.onLine},
+    browser:{
+      userAgent:navigator.userAgent,
+      platform:navigator.platform||null,
+      vendor:navigator.vendor||null,
+      language:navigator.language||null,
+      languages:navigator.languages||[],
+      cookieEnabled:navigator.cookieEnabled,
+      doNotTrack:navigator.doNotTrack??null,
+      userAgentData:uaData?{brands:uaData.brands||[],mobile:uaData.mobile,platform:uaData.platform,...uaHigh}:null
+    },
+    hardware:{
+      logicalProcessors:navigator.hardwareConcurrency??null,
+      deviceMemoryGB:navigator.deviceMemory??null,
+      maxTouchPoints:navigator.maxTouchPoints??null
+    },
+    screen:{
+      width:screen.width,height:screen.height,
+      availableWidth:screen.availWidth,availableHeight:screen.availHeight,
+      colorDepth:screen.colorDepth,pixelDepth:screen.pixelDepth,
+      devicePixelRatio:window.devicePixelRatio
+    },
+    locale:{
+      timezone:Intl.DateTimeFormat().resolvedOptions().timeZone||null,
+      locale:Intl.DateTimeFormat().resolvedOptions().locale||null
+    },
+    network:conn?{
+      effectiveType:conn.effectiveType??null,
+      downlinkMbps:conn.downlink??null,
+      rttMs:conn.rtt??null,
+      saveData:conn.saveData??null,
+      type:conn.type??null
+    }:null,
+    storage,
+    battery,
+    permissions:perms,
+    capabilities:caps
+  };
+  render();
+}
+function card(title, obj){
+  const c=document.createElement('section');c.className='card';
+  const h=document.createElement('h2');h.textContent=title;c.appendChild(h);
+  Object.entries(obj||{}).forEach(([k,v])=>{
+    const r=document.createElement('div');r.className='row';
+    const key=document.createElement('div');key.className='k';key.textContent=k;
+    const val=document.createElement('div');val.className='v';
+    if(typeof v==='boolean'){val.textContent=v?'Yes':'No';val.classList.add(v?'yes':'no')}
+    else if(v===null||v===undefined){val.textContent='Not available';val.classList.add('no')}
+    else if(typeof v==='object')val.textContent=JSON.stringify(v);
+    else val.textContent=String(v);
+    r.append(key,val);c.appendChild(r);
+  });
+  return c;
+}
+function render(){
+  const root=$('cards');root.replaceChildren();
+  root.append(
+    card('Page / context',SNAP.page),
+    card('Browser / OS hints',SNAP.browser),
+    card('Hardware hints',SNAP.hardware),
+    card('Screen',SNAP.screen),
+    card('Locale',SNAP.locale),
+    card('Network capability',SNAP.network||{status:'Not exposed by this browser'}),
+    card('Storage estimate',SNAP.storage),
+    card('Battery',SNAP.battery),
+    card('Permission states',SNAP.permissions),
+    card('Available device APIs',SNAP.capabilities)
+  );
+  $('raw').textContent=JSON.stringify(SNAP,null,2);
+}
+$('refresh').onclick=collect;
+$('copy').onclick=async()=>{try{await navigator.clipboard.writeText(JSON.stringify(SNAP,null,2));$('copy').textContent='Copied';setTimeout(()=>$('copy').textContent='Copy JSON',1200)}catch{alert('Clipboard unavailable in this context.')}};
+$('download').onclick=()=>{const b=new Blob([JSON.stringify(SNAP,null,2)],{type:'application/json'});const a=document.createElement('a');a.href=URL.createObjectURL(b);a.download='device-snapshot.json';a.click();setTimeout(()=>URL.revokeObjectURL(a.href),1000)};
+collect();
+</script>
+</body>
+</html>
