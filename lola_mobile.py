@@ -24,7 +24,8 @@ import webbrowser
 from http import HTTPStatus
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
-from lola_library import catalog, register_target, set_plan, complete_scan, list_targets, load_target
+from lola_library import catalog, register_target, set_plan, complete_scan, list_targets, load_target, archive_artifacts, artifact_paths
+from android_code_reader import build_reader, search_reader
 
 ROOT = Path(__file__).resolve().parent
 UPLOAD_DIR = ROOT / ".lola-mobile" / "uploads"
@@ -51,6 +52,7 @@ STATE = {
     "log": [],
     "report": "",
     "analysis": "",
+    "reader": "",
     "tools": {},
 }
 STATE_LOCK = threading.Lock()
@@ -130,11 +132,13 @@ def run_cmd_stream(cmd: list[str], stage: str, progress_start: int, progress_end
 def scan_worker(target: Path, target_id: str, mode: str, checks: list[str], decompile: bool, keep_decompiled: bool, cleanup: bool):
     analysis = ROOT / "apk-analysis.json"
     report = ROOT / "apk-report.html"
+    reader = ROOT / "android-code-reader.json"
+    decompiled_dir = ROOT / ".lola-apk" / "decompiled"
     try:
         set_state(
             status="running", stage="validate", target=str(target), targetId=target_id, checks=checks, mode=mode,
             progress=3, started=time.time(), finished=None, exitCode=None,
-            report="", analysis=str(analysis)
+            report="", analysis=str(analysis), reader=""
         )
         log("Validating APK target")
         if "store_target" in checks:
@@ -165,11 +169,31 @@ def scan_worker(target: Path, target_id: str, mode: str, checks: list[str], deco
         if rc != 0:
             raise RuntimeError(f"Report builder exited with code {rc}")
 
-        if cleanup:
-            tmp = ROOT / ".lola-apk" / "decompiled"
-            if tmp.exists():
-                shutil.rmtree(tmp, ignore_errors=True)
-                log("Removed Lola temporary decompiled output")
+        if "android_reader" in checks:
+            set_state(stage="reader", progress=97)
+            log("Building Android Code Reader library")
+            build_reader(target, analysis, decompiled_dir if decompiled_dir.exists() else None, reader)
+            set_state(reader=str(reader), progress=98)
+
+        stored = archive_artifacts(
+            target_id,
+            source_apk=target,
+            analysis=analysis,
+            report=report,
+            reader=reader if reader.exists() else None,
+            decompiled=decompiled_dir if decompiled_dir.exists() else None,
+            keep_apk="store_target" in checks,
+            keep_analysis="store_analysis" in checks,
+            keep_report="store_report" in checks,
+            keep_reader="android_reader" in checks,
+            keep_decompiled="store_decompiled" in checks,
+        )
+        if stored:
+            log("Target Library archived: " + ", ".join(sorted(stored.keys())))
+
+        if decompiled_dir.exists() and (cleanup or (not keep_decompiled and "store_decompiled" not in checks)):
+            shutil.rmtree(decompiled_dir, ignore_errors=True)
+            log("Removed Lola temporary decompiled output")
 
         finished=time.time()
         try:
@@ -179,12 +203,12 @@ def scan_worker(target: Path, target_id: str, mode: str, checks: list[str], deco
         if "store_target" in checks:
             complete_scan(
                 target_id, "complete", mode, checks, analysis_data,
-                {"analysis":str(analysis),"report":str(report)},
+                {"analysis":stored.get("apk-analysis.json",str(analysis)),"report":stored.get("apk-report.html",str(report)),"reader":stored.get("android-code-reader.json",str(reader) if reader.exists() else "")},
                 started=STATE.get("started"), finished=finished
             )
         set_state(
             status="complete", stage="complete", progress=100, finished=finished,
-            exitCode=0, report=str(report)
+            exitCode=0, report=str(report), reader=str(reader) if reader.exists() else ""
         )
         log("APK scan complete")
     except Exception as exc:
@@ -284,7 +308,23 @@ button,.btn,select,input[type=text]{border:1px solid var(--line);background:#132
 <div class="card" id="libraryCard">
   <div class="row" style="justify-content:space-between"><b>📚 Built-in /library</b><span class="sub" id="libraryCount"></span></div>
   <input class="search" id="librarySearch" type="text" placeholder="Search command, function, output, tool...">
+  <div id="storageMap" class="sub" style="margin-top:8px"></div>
   <div class="libgrid" id="commandLibrary" style="margin-top:10px"></div>
+</div>
+
+<div class="card" id="readerCard">
+  <div class="row" style="justify-content:space-between"><b>📖 Android Code Reader</b><span class="sub" id="readerSummary">Not built yet</span></div>
+  <div class="sub">Search manifest/permissions/components, DEX strings, APK resources and retained JADX source from the current target.</div>
+  <input class="search" id="readerSearch" type="text" placeholder="Search class, method, URL, API, string, permission, WebView...">
+  <div class="presetbar">
+    <button class="ghost" onclick="loadReader('overview')">Overview</button>
+    <button class="ghost" onclick="loadReader('source')">Source</button>
+    <button class="ghost" onclick="loadReader('resources')">Resources</button>
+    <button class="ghost" onclick="loadReader('dex')">DEX Strings</button>
+    <button class="ghost" onclick="loadReader('urls')">URLs/API</button>
+    <button class="ghost" onclick="loadReader('risk')">Findings</button>
+  </div>
+  <div class="libgrid" id="readerResults" style="margin-top:10px"></div>
 </div>
 
 <div class="card">
@@ -304,7 +344,7 @@ button,.btn,select,input[type=text]{border:1px solid var(--line);background:#132
 <script>
 const MODES=__MODES__;
 let selectedMode='/apk360', uploadedPath='', targetId='', lastStatus='idle', opened=false;
-let LIB={commands:[],apkPlan:[]};
+let LIB={commands:[],functions:[],apkPlan:[],storage:{}};
 let selectedChecks=new Set();
 const $=id=>document.getElementById(id);
 
@@ -341,13 +381,13 @@ function applyPreset(name){
 function renderCommandLibrary(){
   const q=$('librarySearch').value.trim().toLowerCase();
   const root=$('commandLibrary');root.replaceChildren();
-  const items=(LIB.commands||[]).filter(x=>!q||JSON.stringify(x).toLowerCase().includes(q));
+  const items=[...(LIB.commands||[]),...(LIB.functions||[])].filter(x=>!q||JSON.stringify(x).toLowerCase().includes(q));
   $('libraryCount').textContent=items.length+' commands/functions';
   items.slice(0,120).forEach(x=>{
     const d=document.createElement('div');d.className='libitem';
     d.innerHTML='<b>'+x.label+' <span class="sub">'+x.id+'</span></b>'+
       '<div>'+x.purpose+'</div>'+
-      '<div class="sub">'+x.group+' · cost '+x.cost+' · tools '+((x.tools||[]).join(', ')||'none')+' · outputs '+((x.outputs||[]).join(', ')||'none')+'</div>';
+      '<div class="sub">'+(x.group||'Function')+' · cost '+(x.cost||'-')+' · tools '+((x.tools||[]).join(', ')||'none')+' · outputs '+((x.outputs||[]).join(', ')||'none')+(x.module?' · module '+x.module:'')+'</div>';
     if(x.id.startsWith('/apk')){
       d.onclick=()=>{selectedMode=x.id;renderModes();window.scrollTo({top:0,behavior:'smooth'})};
       d.style.cursor='pointer';
@@ -381,8 +421,58 @@ async function initLibrary(){
   try{
     const r=await fetch('/api/library',{cache:'no-store'});LIB=await r.json();
     applyPreset('recommended');renderCommandLibrary();refreshTargets();
+    const storage=LIB.storage||{};
+    $('storageMap').innerHTML='<b>Target storage:</b> '+(storage.targetPattern||'.lola-library/targets/&lt;target-id&gt;/target.json')+
+      '<br>Analysis: '+(storage.analysis||'-')+'<br>Report: '+(storage.report||'-')+'<br>Reader: '+(storage.reader||'-');
   }catch{}
 }
+
+
+async function fetchReader(){
+  if(!targetId)return null;
+  const r=await fetch('/api/reader?id='+encodeURIComponent(targetId)+'&t='+Date.now(),{cache:'no-store'});
+  if(!r.ok)return null;
+  return await r.json();
+}
+function readerItem(root,title,meta,body){
+  const d=document.createElement('div');d.className='libitem';
+  const b=document.createElement('b');b.textContent=title;d.appendChild(b);
+  if(meta){const m=document.createElement('div');m.className='sub';m.textContent=meta;d.appendChild(m)}
+  if(body){const x=document.createElement('div');x.style.whiteSpace='pre-wrap';x.style.wordBreak='break-word';x.textContent=body;d.appendChild(x)}
+  root.appendChild(d);
+}
+async function loadReader(view='overview'){
+  const data=await fetchReader(),root=$('readerResults');root.replaceChildren();
+  if(!data){root.innerHTML='<div class="libitem sub">Reader not built for this target yet. Tick "Build Android Code Reader" and scan.</div>';return}
+  const s=data.summary||{};
+  $('readerSummary').textContent=(s.sourceFiles||0)+' source · '+(s.resourcePreviews||0)+' resources · '+(s.dexStrings||0)+' DEX strings';
+  if(view==='overview'){
+    Object.entries(s).forEach(([k,v])=>readerItem(root,k,'',typeof v==='object'?JSON.stringify(v):String(v)));
+  }else if(view==='source'){
+    (data.sourceFiles||[]).slice(0,120).forEach(x=>readerItem(root,x.path,(x.lines||'?')+' lines · '+(x.extension||''),x.preview||'[preview unavailable]'));
+  }else if(view==='resources'){
+    (data.resources||[]).slice(0,120).forEach(x=>readerItem(root,x.path,(x.bytes||0)+' bytes · '+(x.extension||''),x.preview||''));
+  }else if(view==='dex'){
+    (data.dexStrings||[]).slice(0,180).forEach(x=>readerItem(root,x.value||'DEX string',(x.dex||'')+' @ '+(x.offset||0),''));
+  }else if(view==='urls'){
+    const sections=data.sections||{};
+    [...(sections.urls?.items||[]),...(sections.api?.items||[])].slice(0,180).forEach(x=>readerItem(root,x.url||x.preview||'URL/API',x.entry||'',JSON.stringify(x)));
+  }else if(view==='risk'){
+    const sections=data.sections||{};
+    (sections.risk?.items||[]).slice(0,180).forEach(x=>readerItem(root,(x.severity||'INFO')+' · '+(x.area||'finding'),x.message||'',typeof x.detail==='string'?x.detail:JSON.stringify(x.detail||{})));
+  }
+  if(!root.children.length)root.innerHTML='<div class="libitem sub">No entries for this reader view.</div>';
+}
+async function searchReader(){
+  const q=$('readerSearch').value.trim(),root=$('readerResults');root.replaceChildren();
+  if(!q){loadReader('overview');return}
+  if(!targetId){root.innerHTML='<div class="libitem sub">Choose a target first.</div>';return}
+  const r=await fetch('/api/reader/search?id='+encodeURIComponent(targetId)+'&q='+encodeURIComponent(q),{cache:'no-store'});
+  const j=await r.json();
+  (j.results||[]).forEach(x=>readerItem(root,x.kind+' · '+x.title,x.location||'',x.preview||''));
+  if(!root.children.length)root.innerHTML='<div class="libitem sub">No reader matches.</div>';
+}
+$('readerSearch').oninput=()=>{clearTimeout(window.__readerTimer);window.__readerTimer=setTimeout(searchReader,300)};
 
 function renderModes(){
   const root=$('modes');root.replaceChildren();
@@ -406,6 +496,7 @@ $('apk').onchange=async e=>{
   if(!r.ok){$('uploadStatus').textContent='Upload failed: '+(j.error||r.status);return}
   uploadedPath=j.path;targetId=j.targetId||'';$('uploadStatus').textContent='Ready: '+j.name+' · Library ID '+(targetId||'-');
   if(j.lastPlan?.length){selectedChecks=new Set(j.lastPlan);renderPlan()}
+  loadReader('overview');refreshTargets();
 };
 async function runScan(){
   if(!uploadedPath){alert('Choose and upload an APK first.');return}
@@ -431,7 +522,10 @@ async function poll(){
     const toolEntries=Object.entries(s.tools||{});$('tools').textContent=toolEntries.filter(x=>x[1]).length;
     $('toolList').innerHTML=toolEntries.map(([k,v])=>'<span class="'+(v?'ok':'warn')+'">'+(v?'●':'○')+' '+k+'</span>').join(' &nbsp; ');
     $('reportBtn').disabled=!s.report;
-    if(s.status==='complete'&&lastStatus!=='complete'&&$('autoReport').checked&&!opened){opened=true;setTimeout(openReport,500)}
+    if(s.status==='complete'&&lastStatus!=='complete'){
+      loadReader('overview');refreshTargets();
+      if($('autoReport').checked&&!opened){opened=true;setTimeout(openReport,500)}
+    }
     lastStatus=s.status;
   }catch{}
   setTimeout(poll,700);
@@ -481,6 +575,37 @@ class Handler(BaseHTTPRequestHandler):
             tid=(qs.get("id") or [""])[0]
             rec=load_target(tid)
             return self.send_json(rec if rec else {"error":"Target not found"},200 if rec else 404)
+        if path == "/api/reader":
+            qs=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            tid=(qs.get("id") or [STATE.get("targetId","")])[0]
+            rec=load_target(tid) if tid else None
+            candidates=[]
+            if rec:
+                candidates.append(Path((rec.get("storage") or {}).get("reader","")))
+                candidates.append(Path((rec.get("outputs") or {}).get("android-code-reader.json","")))
+            candidates.append(ROOT/"android-code-reader.json")
+            for rp in candidates:
+                if str(rp) and rp.exists() and rp.is_file():
+                    try:return self.send_json(json.loads(rp.read_text(encoding="utf-8-sig")))
+                    except Exception:pass
+            return self.send_json({"error":"Reader not found"},404)
+        if path == "/api/reader/search":
+            qs=urllib.parse.parse_qs(urllib.parse.urlsplit(self.path).query)
+            tid=(qs.get("id") or [STATE.get("targetId","")])[0]
+            q=(qs.get("q") or [""])[0]
+            rec=load_target(tid) if tid else None
+            candidates=[]
+            if rec:
+                candidates.append(Path((rec.get("storage") or {}).get("reader","")))
+                candidates.append(Path((rec.get("outputs") or {}).get("android-code-reader.json","")))
+            candidates.append(ROOT/"android-code-reader.json")
+            for rp in candidates:
+                if str(rp) and rp.exists() and rp.is_file():
+                    try:
+                        data=json.loads(rp.read_text(encoding="utf-8-sig"))
+                        return self.send_json({"results":search_reader(data,q,200)})
+                    except Exception:pass
+            return self.send_json({"results":[]})
         if path == "/apk-report.html":
             p = ROOT / "apk-report.html"
             if not p.exists():
