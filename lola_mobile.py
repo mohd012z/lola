@@ -141,8 +141,7 @@ def scan_worker(target: Path, target_id: str, mode: str, checks: list[str], deco
             report="", analysis=str(analysis), reader=""
         )
         log("Validating APK target")
-        if "store_target" in checks:
-            set_plan(target_id, checks, mode, {"decompile":decompile,"keepDecompiled":keep_decompiled,"cleanup":cleanup})
+        set_plan(target_id, checks, mode, {"decompile":decompile,"keepDecompiled":keep_decompiled,"cleanup":cleanup})
         if not ANALYZER.exists():
             raise RuntimeError(f"Missing analyzer: {ANALYZER}")
         if not REPORTER.exists():
@@ -152,9 +151,9 @@ def scan_worker(target: Path, target_id: str, mode: str, checks: list[str], deco
 
         set_state(stage="analyze", progress=8)
         cmd = [sys.executable, str(ANALYZER), str(target), "--output", str(analysis), "--checks", ",".join(checks)]
-        if decompile:
+        if decompile or "decompile" in checks or "store_decompiled" in checks:
             cmd.append("--decompile")
-        if keep_decompiled:
+        if keep_decompiled or "android_reader" in checks or "store_decompiled" in checks:
             cmd.append("--keep-extracted")
 
         rc = run_cmd_stream(cmd, "analyze", 8, 76)
@@ -194,18 +193,23 @@ def scan_worker(target: Path, target_id: str, mode: str, checks: list[str], deco
         if decompiled_dir.exists() and (cleanup or (not keep_decompiled and "store_decompiled" not in checks)):
             shutil.rmtree(decompiled_dir, ignore_errors=True)
             log("Removed Lola temporary decompiled output")
+        if cleanup and "store_target" not in checks and target.exists():
+            try:
+                target.unlink()
+                log("Removed temporary uploaded APK after scan")
+            except Exception:
+                pass
 
         finished=time.time()
         try:
             analysis_data=json.loads(analysis.read_text(encoding="utf-8-sig")) if analysis.exists() else {}
         except Exception:
             analysis_data={}
-        if "store_target" in checks:
-            complete_scan(
-                target_id, "complete", mode, checks, analysis_data,
-                {"analysis":stored.get("apk-analysis.json",str(analysis)),"report":stored.get("apk-report.html",str(report)),"reader":stored.get("android-code-reader.json",str(reader) if reader.exists() else "")},
-                started=STATE.get("started"), finished=finished
-            )
+        complete_scan(
+            target_id, "complete", mode, checks, analysis_data,
+            {"analysis":stored.get("apk-analysis.json",str(analysis)),"report":stored.get("apk-report.html",str(report)),"reader":stored.get("android-code-reader.json",str(reader) if reader.exists() else "")},
+            started=STATE.get("started"), finished=finished
+        )
         set_state(
             status="complete", stage="complete", progress=100, finished=finished,
             exitCode=0, report=str(report), reader=str(reader) if reader.exists() else ""
@@ -213,8 +217,7 @@ def scan_worker(target: Path, target_id: str, mode: str, checks: list[str], deco
         log("APK scan complete")
     except Exception as exc:
         try:
-            if "store_target" in checks:
-                complete_scan(target_id, "error", mode, checks, None, {}, started=STATE.get("started"), finished=time.time())
+            complete_scan(target_id, "error", mode, checks, None, {}, started=STATE.get("started"), finished=time.time())
         except Exception:
             pass
         log("ERROR: " + str(exc))
@@ -329,8 +332,13 @@ button,.btn,select,input[type=text]{border:1px solid var(--line);background:#132
 
 <div class="card">
   <div class="row" style="justify-content:space-between"><b>🎯 Target Library</b><button class="ghost" onclick="refreshTargets()">Refresh</button></div>
-  <div class="sub">Stored details: .lola-library/targets/&lt;target-id&gt;.json</div>
+  <div class="sub">Stored details: .lola-library/targets/&lt;target-id&gt;/target.json</div>
   <div class="libgrid" id="targetLibrary" style="margin-top:10px"></div>
+</div>
+
+<div class="card">
+  <div class="row" style="justify-content:space-between"><b>🗂 Target Detail</b><span class="sub" id="targetDetailTitle">Select a saved target</span></div>
+  <div class="libgrid" id="targetDetail" style="margin-top:10px"></div>
 </div>
 </div>
 
@@ -415,7 +423,27 @@ async function loadTargetRecord(id){
   targetId=j.id||targetId;
   if(j.lastPlan?.length){selectedChecks=new Set(j.lastPlan);renderPlan()}
   selectedMode=j.lastMode||selectedMode;renderModes();
-  alert('Loaded library plan for '+(j.name||id)+'\\nSHA-256: '+(j.sha256||''));
+  $('targetDetailTitle').textContent=(j.name||id)+' · '+(j.id||'');
+  const root=$('targetDetail');root.replaceChildren();
+  const rows=[
+    ['SHA-256',j.sha256||''],
+    ['Size',Math.round((j.size||0)/1024/1024)+' MB'],
+    ['Current upload path',j.storedPath||'-'],
+    ['Last status',j.lastStatus||'-'],
+    ['Package',j.apk?.package||'-'],
+    ['SDK','min '+(j.apk?.minSdk||'-')+' / target '+(j.apk?.targetSdk||'-')],
+    ['Risk findings',String(j.apk?.riskFindings||0)],
+    ['Last plan',(j.lastPlan||[]).join(', ')||'-'],
+    ['Storage folder',j.storage?.folder||'-'],
+    ['Stored APK',j.storage?.apk||'-'],
+    ['Analysis',j.storage?.analysis||'-'],
+    ['Report',j.storage?.report||'-'],
+    ['Android reader',j.storage?.reader||'-'],
+    ['Decompiled source',j.storage?.decompiled||'-'],
+    ['Scan history',String((j.scans||[]).length)]
+  ];
+  rows.forEach(x=>readerItem(root,x[0],'',x[1]));
+  loadReader('overview');
 }
 async function initLibrary(){
   try{
