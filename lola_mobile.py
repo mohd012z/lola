@@ -146,7 +146,7 @@ def scan_worker(target: Path, target_id: str, mode: str, checks: list[str], deco
             raise RuntimeError("Selected file is not an APK")
 
         set_state(stage="analyze", progress=8)
-        cmd = [sys.executable, str(ANALYZER), str(target), "--output", str(analysis)]
+        cmd = [sys.executable, str(ANALYZER), str(target), "--output", str(analysis), "--checks", ",".join(checks)]
         if decompile:
             cmd.append("--decompile")
         if keep_decompiled:
@@ -327,7 +327,7 @@ function applyPreset(name){
   selectedChecks.clear();
   const plan=LIB.apkPlan||[];
   if(name==='light'){
-    ['identity','manifest','permissions','components','files','risk','store_target'].forEach(x=>selectedChecks.add(x));
+    ['identity','manifest','permissions','components','files','store_target'].forEach(x=>selectedChecks.add(x));
   }else if(name==='recommended'){
     plan.filter(x=>x.default).forEach(x=>selectedChecks.add(x.id));
   }else if(name==='deep'){
