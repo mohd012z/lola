@@ -1317,3 +1317,198 @@ python lola.py "C:\Projects\MyApp" --mode /anonymus --live-monitor
 ~~~
 
 You do not need to edit the Python file each time. Pass the target on the command line so paths with spaces and different APK/project locations are handled safely.
+
+
+## Button-based desktop UI
+
+You no longer need to type Lola scan commands manually.
+
+Start the desktop control panel with:
+
+~~~powershell
+python lola_ui.py
+~~~
+
+On Windows, you can also double-click:
+
+~~~text
+START_LOLA_UI.bat
+~~~
+
+### Main workflow
+
+~~~text
+1. Browse APK / File / Folder
+2. Choose a mode button
+3. Select optional checkboxes
+4. Press RUN SCAN
+5. Watch Live Log
+6. Open the generated report from Outputs
+~~~
+
+### UI tabs
+
+~~~text
+Quick
+APK
+Security
+Code
+Network
+Pre-scan
+Options
+Outputs
+Live Log
+~~~
+
+### Quick Actions
+
+The Quick tab provides one-click presets for:
+
+~~~text
+APK Full Scan
+APK Deep + JADX
+APK Risk Review
+Project Deep Dive
+Privacy Audit
+Deep Network
+Live Monitor
+Deep Code
+~~~
+
+### APK buttons
+
+~~~text
+APK 360
+Manifest
+Permissions
+Components
+URLs
+API
+Keys
+Certificates
+Native .SO
+WebView
+Crypto
+Files
+Code / JADX
+Risk Review
+Tools
+~~~
+
+### Security buttons
+
+~~~text
+360 Overview
+Deep Dive
+Security Check
+Privacy / Anonymous
+Step View
+Protocol
+Hidden
+~~~
+
+### Code-analysis buttons
+
+~~~text
+Deep Code
+Extraction
+Code Summary
+Code View
+Password / Key
+Strings
+Transparent Flow
+Modification
+Fallback
+Code URLs
+Encryption
+Hidden Mode
+~~~
+
+### Network buttons
+
+~~~text
+Deep Network
+Trace
+Route
+Map
+Visible
+Real IP
+CCTV Monitor
+Normal
+~~~
+
+### Pre-scan buttons
+
+~~~text
+Preflight
+View Extraction
+View URLs
+Routes
+API
+Keys
+Hidden Traces
+Hide Modes
+Hide Log Detection
+IP Mirror
+Certs
+~~~
+
+The hidden/log-related buttons are detection views only. They do not enable concealment or erase external logs.
+
+### Options are now checkboxes
+
+~~~text
+Resolve public URLs / redirects / TLS
+Open live network monitor
+Capture redacted source snapshot
+Copy public certificates
+Decompile APK with JADX
+Keep JADX output
+Clean Lola temporary data
+Do not persist Lola event JSON
+Do not auto-open final HTML
+~~~
+
+### Output panel
+
+The UI automatically shows which generated files currently exist and provides Open buttons for:
+
+~~~text
+apk-report.html
+apk-analysis.json
+semgrep-report.html
+network-monitor.html
+semgrep-results.json
+code-analysis.json
+network-analysis.json
+preflight-analysis.json
+url-report.json
+target-manifest.json
+scan-modes.json
+~~~
+
+### Live Log
+
+The Live Log tab streams the output of the running Lola process into the UI. It includes:
+- start
+- target path
+- current mode
+- analysis progress
+- errors/warnings from the scanner
+- completion status
+
+You can also:
+- Stop a running scan
+- Clear the UI log
+- Copy the UI log
+- Open the output folder
+
+### Target safety
+
+The UI automatically detects whether the selected target is an APK or a source/project target.
+
+APK targets require an APK mode.
+
+Project/source targets require Security, Code, Network, or Pre-scan modes.
+
+This prevents accidental mode mismatches.
