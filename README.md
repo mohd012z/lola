@@ -1245,3 +1245,75 @@ apk-analysis.json
 apk-report.html
 .lola-apk\decompiled     optional temporary/decompiled source
 ~~~
+
+
+## Python master target launcher
+
+Use `lola.py` as the single Python master entry point.
+
+### Positional target
+
+~~~powershell
+python lola.py "C:\Apps\sample.apk"
+~~~
+
+### --target option
+
+~~~powershell
+python lola.py --target "C:\Apps\sample.apk"
+~~~
+
+For a source/project folder:
+
+~~~powershell
+python lola.py --target "C:\Projects\MyApp"
+~~~
+
+The launcher automatically detects:
+
+~~~text
+.apk file       → APK pipeline
+folder/project  → source/security pipeline
+other file      → source/security pipeline
+~~~
+
+### APK modes from Python master
+
+~~~powershell
+python lola.py "C:\Apps\sample.apk" --mode /apk360
+python lola.py "C:\Apps\sample.apk" --mode /apkpermissions
+python lola.py "C:\Apps\sample.apk" --mode /apkurls
+python lola.py "C:\Apps\sample.apk" --mode /apkrisk
+~~~
+
+Optional decompilation:
+
+~~~powershell
+python lola.py "C:\Apps\sample.apk" --mode /apkcode --decompile --keep-decompiled
+~~~
+
+### Project modes from Python master
+
+~~~powershell
+python lola.py "C:\Projects\MyApp" --mode /360
+python lola.py "C:\Projects\MyApp" --mode /deep-dive --resolve-urls
+python lola.py "C:\Projects\MyApp" --mode /anonymus --live-monitor
+~~~
+
+### Useful master options
+
+~~~text
+--target PATH
+--mode MODE
+--resolve-urls
+--live-monitor
+--capture-all-code
+--copy-public-certs
+--decompile
+--keep-decompiled
+--cleanup
+--no-persist-events
+--no-open
+~~~
+
+You do not need to edit the Python file each time. Pass the target on the command line so paths with spaces and different APK/project locations are handled safely.
