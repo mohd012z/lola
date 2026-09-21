@@ -2091,3 +2091,91 @@ Target-specific Frida outputs are stored as:
 ```
 
 `frida_runtime.py` is attach-only. The target app must already be running. It does not spawn, patch, install, or alter the target.
+## Built-in managed toolchain
+
+Lola now keeps the toolchain **definition and manager inside GitHub** while keeping third-party binaries outside Git.
+
+Repository-owned files:
+
+```text
+toolchain.json
+lola_toolchain.py
+TOOLCHAIN.md
+.github/workflows/toolchain-check.yml
+```
+
+Downloaded/managed binaries are stored under:
+
+```text
+.lola-tools/
+```
+
+and are ignored by Git.
+
+### Managed versions
+
+```text
+Apktool  3.0.3
+Gradle   9.7.1
+Ghidra   12.1.3
+Hermes   project-matched / detected
+```
+
+Apktool, Gradle and Ghidra are installable through Lola when the current platform/dependencies support them. Downloads are checksum-verified before activation.
+
+Hermes is intentionally project-aware rather than blindly pinned. Modern React Native bundles Hermes with React Native, and the matching Hermes compiler/runtime should be used for the target project to avoid bytecode-version mismatch.
+
+### Other detected tools
+
+```text
+JADX
+bundletool
+AAPT / AAPT2
+apksigner / keytool
+ADB
+Frida
+```
+
+These are detected from the Android SDK/system/project toolchain and shown in the same Toolchain UI.
+
+### Mobile UI
+
+Lola Mobile now contains a **Built-in Toolchain** card with:
+
+```text
+Ready / Missing / Project required / Unsupported
+Version
+Source: managed / system / project
+Install
+Remove
+Refresh
+Java compatibility
+Install path
+```
+
+Managed install/remove actions only affect `.lola-tools/`. They do not uninstall system tools.
+
+### Analyzer integration
+
+`analyze-apk.py` automatically uses Lola's managed Apktool if no normal `apktool` executable is available on PATH.
+
+### Termux behavior
+
+Apktool and Gradle may be managed on Termux when Java is available.
+
+Ghidra managed installation is disabled on Termux because the current desktop release is large and requires JDK 25; Lola reports it as detect-only/unsupported rather than forcing a desktop package onto Android.
+
+### Toolchain commands
+
+```bash
+python lola_toolchain.py status
+python lola_toolchain.py install apktool
+python lola_toolchain.py install gradle
+python lola_toolchain.py install ghidra
+python lola_toolchain.py remove apktool
+python lola_toolchain.py path apktool
+```
+
+Use `python lola_toolchain.py status --project /path/to/react-native-project` to detect a project-matched `hermesc`.
+
+The GitHub Actions workflow `toolchain-check.yml` validates the JSON manifest and compiles the Lola Python integration without downloading large third-party packages.
