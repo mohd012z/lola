@@ -26,6 +26,7 @@ from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from lola_library import catalog, register_target, set_plan, complete_scan, list_targets, load_target, archive_artifacts, artifact_paths, remove_generated_code
 from android_code_reader import build_reader, search_reader
+from frida_library import catalog as frida_catalog
 
 ROOT = Path(__file__).resolve().parent
 UPLOAD_DIR = ROOT / ".lola-mobile" / "uploads"
@@ -35,6 +36,9 @@ REPORTER = ROOT / "build-apk-report.py"
 RUNTIME_MONITOR = ROOT / "apk_runtime_monitor.py"
 RUNTIME_ANALYSIS = ROOT / "runtime-analysis.json"
 RUNTIME_EVENTS = ROOT / "runtime-events.jsonl"
+FRIDA_RUNNER = ROOT / "frida_runtime.py"
+FRIDA_ANALYSIS = ROOT / "frida-analysis.json"
+FRIDA_EVENTS = ROOT / "frida-events.jsonl"
 
 HOST = "127.0.0.1"
 PORT = 8766
@@ -58,12 +62,16 @@ STATE = {
     "reader": "",
     "tools": {},
     "runtime": {"status":"idle","package":"","message":"Ready","started":None,"finished":None,"exitCode":None},
+    "frida": {"status":"idle","package":"","mode":"gadget","message":"Ready","started":None,"finished":None,"exitCode":None},
 }
 STATE_LOCK = threading.Lock()
 PROCESS: subprocess.Popen | None = None
 RUNTIME_PROCESS: subprocess.Popen | None = None
 RUNTIME_LOCK = threading.Lock()
 RUNTIME_STATE = {"status":"idle","package":"","message":"Ready","started":None,"finished":None,"exitCode":None}
+FRIDA_PROCESS: subprocess.Popen | None = None
+FRIDA_LOCK = threading.Lock()
+FRIDA_STATE = {"status":"idle","package":"","mode":"gadget","message":"Ready","started":None,"finished":None,"exitCode":None}
 
 APK_MODES = [
     ["/apk360","APK 360","Complete APK overview"],
@@ -101,7 +109,7 @@ def state_copy():
         return out
 
 def detect_tools():
-    names = ["python","java","apkanalyzer","aapt2","aapt","apksigner","keytool","jadx","apktool","adb","termux-open-url"]
+    names = ["python","java","apkanalyzer","aapt2","aapt","apksigner","keytool","jadx","apktool","adb","frida","frida-ps","frida-trace","termux-open-url"]
     return {n: bool(shutil.which(n)) for n in names}
 
 def safe_name(name: str) -> str:
@@ -136,6 +144,57 @@ def run_cmd_stream(cmd: list[str], stage: str, progress_start: int, progress_end
     set_state(progress=progress_end)
     return rc
 
+
+
+def frida_state_copy():
+    with FRIDA_LOCK:
+        return dict(FRIDA_STATE)
+
+def set_frida_state(**kwargs):
+    with FRIDA_LOCK:
+        FRIDA_STATE.update(kwargs)
+
+def frida_worker(package: str, mode: str, probes: list[str], duration: int, target_id: str):
+    global FRIDA_PROCESS
+    try:
+        set_frida_state(status="running",package=package,mode=mode,message="Starting authorized attach-only Frida observation",started=time.time(),finished=None,exitCode=None)
+        for p in (FRIDA_ANALYSIS,FRIDA_EVENTS):
+            try:
+                if p.exists(): p.unlink()
+            except Exception: pass
+        cmd=[
+            sys.executable,str(FRIDA_RUNNER),"--package",package,"--mode",mode,
+            "--probes",",".join(probes),"--duration",str(max(5,min(duration,3600))),
+            "--output",str(FRIDA_ANALYSIS),"--events",str(FRIDA_EVENTS),"--authorized"
+        ]
+        FRIDA_PROCESS=subprocess.Popen(cmd,cwd=str(ROOT),stdout=subprocess.PIPE,stderr=subprocess.STDOUT,text=True,bufsize=1)
+        lines=[]
+        if FRIDA_PROCESS.stdout:
+            for line in FRIDA_PROCESS.stdout:
+                line=line.rstrip()
+                if line:
+                    lines.append(line)
+                    set_frida_state(message=line[-1200:])
+        rc=FRIDA_PROCESS.wait()
+        FRIDA_PROCESS=None
+        if rc!=0:
+            set_frida_state(status="error",message=(lines[-1] if lines else f"Frida runner exited {rc}"),finished=time.time(),exitCode=rc)
+            return
+        if target_id:
+            rec=load_target(target_id)
+            if rec:
+                folder=Path((rec.get("storage") or {}).get("folder",""))
+                if folder:
+                    folder.mkdir(parents=True,exist_ok=True)
+                    if FRIDA_ANALYSIS.exists(): shutil.copy2(FRIDA_ANALYSIS,folder/"frida-analysis.json")
+                    if FRIDA_EVENTS.exists(): shutil.copy2(FRIDA_EVENTS,folder/"frida-events.jsonl")
+                    rec["outputs"]={**rec.get("outputs",{}),"frida-analysis.json":str(folder/"frida-analysis.json"),"frida-events.jsonl":str(folder/"frida-events.jsonl")}
+                    from lola_library import save_target
+                    save_target(rec)
+        set_frida_state(status="complete",message="Frida observation complete",finished=time.time(),exitCode=0)
+    except Exception as exc:
+        FRIDA_PROCESS=None
+        set_frida_state(status="error",message=str(exc),finished=time.time(),exitCode=1)
 
 def runtime_state_copy():
     with RUNTIME_LOCK:
@@ -401,6 +460,34 @@ button,.btn,select,input[type=text]{border:1px solid var(--line);background:#132
   <div class="libgrid" id="readerResults" style="margin-top:10px"></div>
 </div>
 
+<div class="card" id="fridaCard">
+  <div class="row" style="justify-content:space-between"><b>🧩 Frida Runtime (optional)</b><span class="sub" id="fridaStatus">Idle</span></div>
+  <div class="sub">Observation-only instrumentation for an app/test build you own or are authorized to test. Root is optional: choose Frida Gadget for an authorized unrooted test build, or frida-server for a rooted test device.</div>
+  <div class="row" style="margin-top:9px">
+    <select id="fridaMode">
+      <option value="gadget">Unrooted · Frida Gadget</option>
+      <option value="root-server">Rooted · frida-server</option>
+    </select>
+    <input class="search" id="fridaDuration" type="text" value="120" inputmode="numeric" style="max-width:100px">
+  </div>
+  <label class="check" style="margin-top:8px"><input id="fridaAuthorized" type="checkbox"><span><b>I own/have authorization for this test target</b><small class="sub">Required before Lola will attach Frida.</small></span></label>
+  <div class="sub" style="margin-top:8px">Safe probes:</div>
+  <div class="opts" id="fridaProbes" style="margin-top:8px"></div>
+  <div class="presetbar">
+    <button class="primary" onclick="startFrida()">Start Frida</button>
+    <button class="danger" onclick="stopFrida()">Stop</button>
+    <button class="ghost" onclick="showFrida('all')">All</button>
+    <button class="ghost" onclick="showFrida('url')">URLs</button>
+    <button class="ghost" onclick="showFrida('lifecycle')">Lifecycle</button>
+    <button class="ghost" onclick="showFrida('storage')">Storage</button>
+    <button class="ghost" onclick="showFrida('crypto')">Crypto</button>
+    <button class="ghost" onclick="showFrida('billing')">Billing</button>
+    <button class="ghost" onclick="showFrida('methods')">Methods</button>
+  </div>
+  <div class="libgrid" id="fridaResults" style="margin-top:10px"></div>
+  <div class="sub" style="margin-top:8px">Excluded by design: pinning bypass, root/Frida hiding, purchase/subscription tampering, secret-key dumping, and response manipulation.</div>
+</div>
+
 <div class="card" id="runtimeCard">
   <div class="row" style="justify-content:space-between"><b>⏱ Realtime APK Test</b><span class="sub" id="runtimeStatus">Idle</span></div>
   <div class="sub">Read-only ADB/logcat observation for the selected installed test package. Open the app manually first. No purchase/subscription state is changed.</div>
@@ -446,6 +533,8 @@ const MODES=__MODES__;
 let selectedMode='/apk360', uploadedPath='', targetId='', lastStatus='idle', opened=false;
 let LIB={commands:[],functions:[],apkPlan:[],storage:{}};
 let selectedChecks=new Set();
+let FRIDALIB={modes:[],tools:[],probes:[],safety:{}};
+let selectedFridaProbes=new Set(['overview','classes','methods','lifecycle','urls','dns','intents','storage','crypto','billing','callbacks','timers']);
 const $=id=>document.getElementById(id);
 
 
@@ -507,6 +596,8 @@ function renderCommandLibrary(){
         d.onclick=removeGeneratedCode;d.style.cursor='pointer';
       } else if(x.id==='/test apk realtime'){
         d.onclick=()=>{$('runtimeCard').scrollIntoView({behavior:'smooth',block:'start'});startRuntime()};d.style.cursor='pointer';
+      } else if(String(x.id||'').startsWith('/frida')){
+        d.onclick=()=>{$('fridaCard').scrollIntoView({behavior:'smooth',block:'start'})};d.style.cursor='pointer';
       }
     }
     root.appendChild(d);
@@ -552,6 +643,8 @@ async function loadTargetRecord(id){
     ['Decompiled source',j.storage?.decompiled||'-'],
     ['Runtime analysis',j.storage?.runtimeAnalysis||j.outputs?.['runtime-analysis.json']||'-'],
     ['Runtime events',j.storage?.runtimeEvents||j.outputs?.['runtime-events.jsonl']||'-'],
+    ['Frida analysis',j.storage?.fridaAnalysis||j.outputs?.['frida-analysis.json']||'-'],
+    ['Frida events',j.storage?.fridaEvents||j.outputs?.['frida-events.jsonl']||'-'],
     ['Scan history',String((j.scans||[]).length)]
   ];
   rows.forEach(x=>readerItem(root,x[0],'',x[1]));
@@ -569,7 +662,7 @@ async function loadTargetRecord(id){
 async function initLibrary(){
   try{
     const r=await fetch('/api/library',{cache:'no-store'});LIB=await r.json();
-    applyPreset('recommended');renderCommandLibrary();refreshTargets();
+    applyPreset('recommended');renderCommandLibrary();refreshTargets();loadFridaLibrary();
     const storage=LIB.storage||{};
     $('storageMap').innerHTML='<b>Target storage:</b> '+(storage.targetPattern||'.lola-library/targets/&lt;target-id&gt;/target.json')+
       '<br>Analysis: '+(storage.analysis||'-')+'<br>Report: '+(storage.report||'-')+'<br>Reader: '+(storage.reader||'-');
@@ -698,6 +791,52 @@ async function searchReader(){
 $('readerSearch').oninput=()=>{clearTimeout(window.__readerTimer);window.__readerTimer=setTimeout(searchReader,300)};
 
 
+
+let fridaCache={events:[],counts:{}};
+async function loadFridaLibrary(){
+  try{
+    const r=await fetch('/api/frida/library',{cache:'no-store'});FRIDALIB=await r.json();
+    const root=$('fridaProbes');root.replaceChildren();
+    (FRIDALIB.probes||[]).forEach(p=>{
+      const lab=document.createElement('label');lab.className='check';
+      const cb=document.createElement('input');cb.type='checkbox';cb.checked=selectedFridaProbes.has(p.id);
+      cb.onchange=()=>{if(cb.checked)selectedFridaProbes.add(p.id);else selectedFridaProbes.delete(p.id)};
+      const span=document.createElement('span');span.innerHTML='<b>'+p.label+'</b><small class="sub">'+p.description+'</small>';
+      lab.append(cb,span);root.appendChild(lab);
+    });
+  }catch{}
+}
+async function startFrida(){
+  if(!targetId){alert('Select/scan a target first.');return}
+  if(!$('fridaAuthorized').checked){alert('Confirm that you own or are authorized to instrument this test target.');return}
+  const pkg=$('runtimePackage').value.trim();
+  if(!pkg){alert('Package name is missing. Run APK analysis first.');return}
+  const mode=$('fridaMode').value;
+  const duration=Math.max(5,Math.min(parseInt($('fridaDuration').value||'120',10)||120,3600));
+  const probes=[...selectedFridaProbes];
+  if(!probes.length){alert('Select at least one Frida probe.');return}
+  const r=await fetch('/api/frida/start',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({targetId,package:pkg,mode,duration,probes,authorized:true})});
+  const j=await r.json();if(!r.ok){alert(j.error||'Could not start Frida');return}
+  $('fridaStatus').textContent='Starting…';$('fridaCard').scrollIntoView({behavior:'smooth',block:'start'});
+}
+async function stopFrida(){await fetch('/api/frida/stop',{method:'POST'})}
+async function pollFrida(){
+  try{
+    const r=await fetch('/api/frida/status?t='+Date.now(),{cache:'no-store'}),j=await r.json();
+    fridaCache=j;$('fridaStatus').textContent=(j.status||'idle')+' · '+(j.message||'');
+    if(j.status==='running'||j.status==='complete'||j.status==='error')showFrida(window.__fridaFilter||'all',false);
+  }catch{}
+  setTimeout(pollFrida,900);
+}
+function showFrida(filter='all',remember=true){
+  if(remember)window.__fridaFilter=filter;
+  const root=$('fridaResults');root.replaceChildren();
+  const counts=fridaCache.counts||{};
+  if(filter==='all')readerItem(root,'Counts','',JSON.stringify(counts,null,2));
+  (fridaCache.events||[]).filter(x=>filter==='all'||String(x.kind||'')===filter).slice(-180).forEach(x=>readerItem(root,x.kind||'event',new Date((x.time||0)).toLocaleTimeString(),JSON.stringify(x.data||{},null,2)));
+  if(!root.children.length)root.innerHTML='<div class="libitem sub">No matching Frida evidence yet. Open the authorized test app manually, then start Frida.</div>';
+}
+
 let runtimeCache={events:[],counts:{}};
 async function startRuntime(){
   if(!targetId){alert('Select/scan a target first.');return}
@@ -784,7 +923,7 @@ async function poll(){
   }catch{}
   setTimeout(poll,700);
 }
-renderModes();initLibrary();poll();pollRuntime();
+renderModes();initLibrary();poll();pollRuntime();pollFrida();
 </script>
 </body></html>
 """.replace("__MODES__", json.dumps(APK_MODES))
@@ -860,6 +999,28 @@ class Handler(BaseHTTPRequestHandler):
                         return self.send_json({"results":search_reader(data,q,200)})
                     except Exception:pass
             return self.send_json({"results":[]})
+        if path == "/api/frida/library":
+            return self.send_json(frida_catalog())
+        if path == "/api/frida/status":
+            state=frida_state_copy()
+            events=[]
+            counts={}
+            if FRIDA_ANALYSIS.exists():
+                try:
+                    data=json.loads(FRIDA_ANALYSIS.read_text(encoding="utf-8-sig"))
+                    counts=data.get("counts",{})
+                    events=data.get("events",[])
+                except Exception: pass
+            if FRIDA_EVENTS.exists():
+                try:
+                    lines=FRIDA_EVENTS.read_text(encoding="utf-8",errors="ignore").splitlines()[-250:]
+                    events=[json.loads(x) for x in lines if x.strip()]
+                    counts={}
+                    for ev in events:
+                        kind=str(ev.get("kind") or "message")
+                        counts[kind]=counts.get(kind,0)+1
+                except Exception: pass
+            return self.send_json({**state,"events":events,"counts":counts})
         if path == "/api/runtime/status":
             state=runtime_state_copy()
             events=[]
@@ -971,6 +1132,48 @@ class Handler(BaseHTTPRequestHandler):
                 return self.send_json({"ok":True})
             except Exception as exc:
                 return self.send_json({"error":str(exc)},500)
+
+        if path == "/api/frida/start":
+            try:
+                if frida_state_copy().get("status")=="running":
+                    return self.send_json({"error":"Frida observation already running"},409)
+                if not FRIDA_RUNNER.exists():
+                    return self.send_json({"error":"frida_runtime.py is missing"},500)
+                length=int(self.headers.get("Content-Length","0"))
+                req=json.loads(self.rfile.read(length).decode("utf-8")) if length else {}
+                if not bool(req.get("authorized")):
+                    return self.send_json({"error":"Authorization acknowledgement is required."},400)
+                tid=str(req.get("targetId") or STATE.get("targetId") or "")
+                package=str(req.get("package") or "").strip()
+                mode=str(req.get("mode") or "gadget")
+                duration=int(req.get("duration") or 120)
+                probes=[str(x) for x in (req.get("probes") or [])]
+                rec=load_target(tid) if tid else None
+                if not rec:return self.send_json({"error":"Target not found"},404)
+                expected=(rec.get("apk") or {}).get("package","")
+                if expected and package!=expected:
+                    return self.send_json({"error":"Frida package must match the selected target package: "+expected},400)
+                fc=frida_catalog()
+                valid_modes={x["id"] for x in fc.get("modes",[]) if x["id"] in {"root-server","gadget"}}
+                valid_probes={x["id"] for x in fc.get("probes",[])}
+                if mode not in valid_modes:return self.send_json({"error":"Invalid Frida mode"},400)
+                probes=[x for x in probes if x in valid_probes]
+                if not probes:return self.send_json({"error":"Select at least one safe Frida probe"},400)
+                threading.Thread(target=frida_worker,args=(package,mode,probes,duration,tid),daemon=True).start()
+                return self.send_json({"ok":True,"package":package,"mode":mode})
+            except Exception as exc:
+                return self.send_json({"error":str(exc)},500)
+
+        if path == "/api/frida/stop":
+            global FRIDA_PROCESS
+            if FRIDA_PROCESS and FRIDA_PROCESS.poll() is None:
+                try:
+                    FRIDA_PROCESS.terminate()
+                    time.sleep(.2)
+                    if FRIDA_PROCESS.poll() is None:FRIDA_PROCESS.kill()
+                    set_frida_state(status="stopped",message="Stopped by user",finished=time.time())
+                except Exception as exc:return self.send_json({"error":str(exc)},500)
+            return self.send_json({"ok":True})
 
         if path == "/api/runtime/start":
             try:
