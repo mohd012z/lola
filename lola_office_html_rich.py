@@ -13,43 +13,11 @@ def docx_rich(src):
     doc=Document(src)
     return docx_headers_footers(doc)+word_body_in_order(doc,data_uri)
 
-"""High-fidelity helpers for Lola Office -> interactive HTML."""
-from __future__ import annotations
-import base64, html, io
-from pathlib import Path
-from lola_office_html_styles import xlsx_style, xlsx_images, docx_headers_footers, hyperlink_map
-from lola_office_layout import word_body_in_order, excel_layout, excel_colgroup
-
-def data_uri(blob,mime):
-    return "data:"+mime+";base64,"+base64.b64encode(blob).decode("ascii")
-
-def docx_rich(src):
-    from docx import Document
-    doc=Document(src);parts=[docx_headers_footers(doc)]
-    for p in doc.paragraphs:
-        style=(p.style.name if p.style else "")
-        level=None
-        if style.lower().startswith("heading"):
-            try:level=max(1,min(6,int(style.split()[-1])))
-            except:level=2
-        runs=[]
-        for r in p.runs:
-            t=html.escape(r.text)
-            if r.bold:t="<strong>"+t+"</strong>"
-            if r.italic:t="<em>"+t+"</em>"
-            if r.underline:t="<u>"+t+"</u>"
-            runs.append(t)
-        text="".join(runs)
-        for label,url in hyperlink_map(p):
-            safe_url=html.escape(url,quote=True)
-            text=text.replace(html.escape(label),"<a href='"+safe_url+"' rel='noopener noreferrer'>"+html.escape(label)+"</a>",1)
-        if text:parts.append(("<h%d>%s</h%d>"%(level,text,level)) if level else "<p>"+text+"</p>")
-    # Embedded images are exported as data URIs.
-    for rel in doc.part.rels.values():
-        if "image" in rel.reltype:
-            part=rel.target_part;mime=part.content_type
-            parts.append("<figure><img loading='lazy' src='"+data_uri(part.blob,mime)+"'></figure>")
-    return "".join(parts)
+def _chart_inventory(ws):
+    out=[]
+    for i,ch in enumerate(getattr(ws,"_charts",[]),1):
+        out.append("<div class=\'chart-card\'>Chart "+str(i)+" · workbook chart metadata detected</div>")
+    return "".join(out)
 
 def xlsx_rich(src):
     from openpyxl import load_workbook
@@ -73,7 +41,7 @@ def xlsx_rich(src):
                 style=xlsx_style(cell)
                 cells.append("<td"+attrs+" data-cell='"+cell.coordinate+"' style='"+html.escape(style,quote=True)+"'>"+html.escape(v)+"</td>")
             rd=ws.row_dimensions[r]\n            rstyle=("height:%spt"%rd.height if rd.height else "")+(";display:none" if rd.hidden else "")\n            rows.append("<tr style='"+html.escape(rstyle,quote=True)+"'>"+"".join(cells)+"</tr>")
-        parts.append("<section class='sheet' data-sheet='"+html.escape(ws.title,quote=True)+"'><h2>"+html.escape(ws.title)+"</h2><div class='table-wrap' data-freeze='"+html.escape(str(excel_layout(ws).get("freeze_panes") or ""),quote=True)+"'><table>"+excel_colgroup(ws)+"".join(rows)+"</table></div>"+xlsx_images(ws)+"</section>")
+        parts.append("<section class='sheet' data-sheet='"+html.escape(ws.title,quote=True)+"'><h2>"+html.escape(ws.title)+"</h2><div class='table-wrap' data-freeze='"+html.escape(str(excel_layout(ws).get("freeze_panes") or ""),quote=True)+"'><table>"+excel_colgroup(ws)+"".join(rows)+"</table></div>"+xlsx_images(ws)+_chart_inventory(ws)+"</section>")
     return "".join(parts)
 
 def interactive_shell(title,body):
