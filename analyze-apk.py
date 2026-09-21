@@ -116,27 +116,39 @@ def main():
     ap.add_argument("--extract-dir",default=".lola-apk/decompiled")
     ap.add_argument("--decompile",action="store_true")
     ap.add_argument("--keep-extracted",action="store_true")
+    ap.add_argument("--checks",default="",help="Comma-separated target-plan checks. Empty means full core scan.")
     args=ap.parse_args()
+    all_checks={"identity","manifest","permissions","components","urls","api","keys","certs","native","webview","crypto","files","risk","decompile","store_target"}
+    checks={x.strip() for x in args.checks.split(",") if x.strip()} if args.checks else set(all_checks)
+    checks &= all_checks
+    if not checks:
+        checks={"identity"}
+    if "decompile" in checks:
+        args.decompile=True
+    need_strings=bool(checks & {"urls","api","keys","webview","crypto","risk"})
+    need_manifest=bool(checks & {"manifest","permissions","components","risk"})
     apk=Path(args.apk).resolve()
     if not apk.exists() or apk.suffix.lower()!=".apk":raise SystemExit("Target must be an existing .apk file")
     if not zipfile.is_zipfile(apk):raise SystemExit("Target is not a valid ZIP/APK container")
 
     files=[]; urls=[]; api_refs=[]; secret_refs=[]; webview=[]; crypto=[]; indicators=[]
     native=defaultdict(list); dex=[]; assets=[]; cert_entries=[]; abis=Counter()
-    ext_counts=Counter(); total_uncompressed=0
+    ext_counts=Counter(); total_uncompressed=0; entry_count=0
     with zipfile.ZipFile(apk,"r") as z:
         for zi in z.infolist():
+            entry_count+=1
             p=zi.filename
             ext=Path(p).suffix.lower()
             ext_counts[ext or "[none]"]+=1;total_uncompressed+=zi.file_size
             item={"path":p,"compressed":zi.compress_size,"bytes":zi.file_size,"crc":f"{zi.CRC:08x}","extension":ext}
-            files.append(item)
+            if "files" in checks: files.append(item)
             if re.match(r"classes(?:\d+)?\.dex$",Path(p).name): dex.append(item)
-            if p.startswith("assets/"): assets.append(item)
-            if p.upper().startswith("META-INF/") and ext in {".rsa",".dsa",".ec",".sf",".mf"}:cert_entries.append(item)
+            if p.startswith("assets/") and "files" in checks: assets.append(item)
+            if "certs" in checks and p.upper().startswith("META-INF/") and ext in {".rsa",".dsa",".ec",".sf",".mf"}:cert_entries.append(item)
             m=re.match(r"lib/([^/]+)/(.+\.so)$",p)
-            if m:
+            if m and ("native" in checks or "risk" in checks):
                 abi,name=m.groups();abis[abi]+=1;native[abi].append({"path":p,"name":name,"bytes":zi.file_size})
+            if not need_strings: continue
             # Only inspect bounded entries plus DEX strings.
             if zi.file_size==0 or zi.file_size>MAX_ENTRY_TEXT and ext!=".dex": continue
             try:data=z.read(zi)
@@ -149,21 +161,28 @@ def main():
                 strings=collect_strings(data)
             for off,s in strings:
                 rs=redact(s)
-                for murl in URL_RE.finditer(s):
-                    raw=murl.group(0)
-                    urls.append({"entry":p,"offset":off+murl.start(),"url":redact(raw),"host":urlsplit(raw).hostname or "","scheme":urlsplit(raw).scheme})
-                for ma in API_RE.finditer(s):
-                    api_refs.append({"entry":p,"offset":off+ma.start(),"preview":redact(ma.group(0))[:600]})
-                if SECRET_NAME_RE.search(s) or PROVIDER_TOKEN_RE.search(s) or PRIVATE_KEY_RE.search(s):
-                    mm=SECRET_ASSIGN_RE.search(s)
-                    secret_refs.append({"entry":p,"offset":off,"name":(mm.group("n") if mm else (SECRET_NAME_RE.search(s).group(0) if SECRET_NAME_RE.search(s) else "secret-like")),"masked":mask(mm.group("v")) if mm else "<value not collected>"})
-                if WEBVIEW_RE.search(s): webview.append({"entry":p,"offset":off,"preview":rs[:900]})
-                if CRYPTO_RE.search(s): crypto.append({"entry":p,"offset":off,"preview":rs[:900]})
-                if ROOT_DEBUG_RE.search(s): indicators.append({"entry":p,"offset":off,"preview":rs[:900]})
+                if "urls" in checks or "risk" in checks:
+                    for murl in URL_RE.finditer(s):
+                        raw=murl.group(0)
+                        urls.append({"entry":p,"offset":off+murl.start(),"url":redact(raw),"host":urlsplit(raw).hostname or "","scheme":urlsplit(raw).scheme})
+                if "api" in checks:
+                    for ma in API_RE.finditer(s):
+                        api_refs.append({"entry":p,"offset":off+ma.start(),"preview":redact(ma.group(0))[:600]})
+                if "keys" in checks or "risk" in checks:
+                    if SECRET_NAME_RE.search(s) or PROVIDER_TOKEN_RE.search(s) or PRIVATE_KEY_RE.search(s):
+                        mm=SECRET_ASSIGN_RE.search(s)
+                        secret_refs.append({"entry":p,"offset":off,"name":(mm.group("n") if mm else (SECRET_NAME_RE.search(s).group(0) if SECRET_NAME_RE.search(s) else "secret-like")),"masked":mask(mm.group("v")) if mm else "<value not collected>"})
+                if ("webview" in checks or "risk" in checks) and WEBVIEW_RE.search(s): webview.append({"entry":p,"offset":off,"preview":rs[:900]})
+                if ("crypto" in checks or "risk" in checks) and CRYPTO_RE.search(s): crypto.append({"entry":p,"offset":off,"preview":rs[:900]})
+                if "risk" in checks and ROOT_DEBUG_RE.search(s): indicators.append({"entry":p,"offset":off,"preview":rs[:900]})
 
-    manifest_xml,manifest_tool,manifest_attempts=decode_manifest(apk)
-    badging,badging_tool=extract_aapt_badging(apk)
-    signer=signer_info(apk)
+    if need_manifest:
+        manifest_xml,manifest_tool,manifest_attempts=decode_manifest(apk)
+        badging,badging_tool=extract_aapt_badging(apk)
+    else:
+        manifest_xml,manifest_tool,manifest_attempts="","skipped",[]
+        badging,badging_tool="","skipped"
+    signer=signer_info(apk) if "certs" in checks else {"tool":"skipped","ok":False,"stdout":"","stderr":""}
 
     package="";min_sdk="";target_sdk="";permissions=[];components=[];app_attrs={}
     if manifest_xml:
@@ -203,21 +222,22 @@ def main():
 
     exported=[x for x in components if x["exported"]=="true"]
     risk=[]
-    for p in permissions:
-        if p in HIGH_RISK_PERMS:risk.append({"severity":"WARNING","area":"permission","message":"Sensitive permission declared","detail":p})
-    for x in exported:
-        risk.append({"severity":"WARNING","area":"exported-component","message":"Exported Android component requires review","detail":x})
-    if app_attrs.get("usesCleartextTraffic","").lower()=="true":risk.append({"severity":"WARNING","area":"network","message":"Cleartext traffic enabled","detail":"android:usesCleartextTraffic=true"})
-    if app_attrs.get("debuggable","").lower()=="true":risk.append({"severity":"ERROR","area":"build","message":"Application is debuggable","detail":"android:debuggable=true"})
-    if app_attrs.get("allowBackup","").lower()=="true":risk.append({"severity":"INFO","area":"backup","message":"Application backup is enabled","detail":"android:allowBackup=true"})
-    if any("setWebContentsDebuggingEnabled" in x["preview"] for x in webview):risk.append({"severity":"WARNING","area":"webview","message":"WebView debugging reference found","detail":"Review release-build behavior"})
-    if any(re.search(r"(?i)AES/ECB|MD5|SHA-?1",x["preview"]) for x in crypto):risk.append({"severity":"WARNING","area":"crypto","message":"Legacy/weak crypto reference found","detail":"Review crypto findings"})
-    if secret_refs:risk.append({"severity":"WARNING","area":"secrets","message":"Secret-like references found in APK strings/resources","detail":f"{len(secret_refs)} references; values redacted"})
+    if "risk" in checks:
+        for p in permissions:
+            if p in HIGH_RISK_PERMS:risk.append({"severity":"WARNING","area":"permission","message":"Sensitive permission declared","detail":p})
+        for x in exported:
+            risk.append({"severity":"WARNING","area":"exported-component","message":"Exported Android component requires review","detail":x})
+        if app_attrs.get("usesCleartextTraffic","").lower()=="true":risk.append({"severity":"WARNING","area":"network","message":"Cleartext traffic enabled","detail":"android:usesCleartextTraffic=true"})
+        if app_attrs.get("debuggable","").lower()=="true":risk.append({"severity":"ERROR","area":"build","message":"Application is debuggable","detail":"android:debuggable=true"})
+        if app_attrs.get("allowBackup","").lower()=="true":risk.append({"severity":"INFO","area":"backup","message":"Application backup is enabled","detail":"android:allowBackup=true"})
+        if any("setWebContentsDebuggingEnabled" in x["preview"] for x in webview):risk.append({"severity":"WARNING","area":"webview","message":"WebView debugging reference found","detail":"Review release-build behavior"})
+        if any(re.search(r"(?i)AES/ECB|MD5|SHA-?1",x["preview"]) for x in crypto):risk.append({"severity":"WARNING","area":"crypto","message":"Legacy/weak crypto reference found","detail":"Review crypto findings"})
+        if secret_refs:risk.append({"severity":"WARNING","area":"secrets","message":"Secret-like references found in APK strings/resources","detail":f"{len(secret_refs)} references; values redacted"})
 
     tools={n:bool(tool(n)) for n in ["apkanalyzer","aapt2","aapt","apksigner","keytool","jadx","apktool"]}
     summary={
         "apk":str(apk),"sha256":sha256_file(apk),"bytes":apk.stat().st_size,
-        "entries":len(files),"uncompressedBytes":total_uncompressed,"package":package,
+        "entries":entry_count,"uncompressedBytes":total_uncompressed,"package":package,
         "minSdk":min_sdk,"targetSdk":target_sdk,"permissions":len(permissions),
         "exportedComponents":len(exported),"dexFiles":len(dex),"nativeLibraries":sum(len(v) for v in native.values()),
         "abis":dict(abis),"urls":len(urls),"apiRefs":len(api_refs),"secretRefs":len(secret_refs),
@@ -225,17 +245,18 @@ def main():
     }
     out={
       "summary":summary,"tools":tools,
+      "plan":{"requested":sorted(checks),"fullCore":not bool(args.checks),"decompile":bool(args.decompile)},
       "manifest":{"tool":manifest_tool,"package":package,"minSdk":min_sdk,"targetSdk":target_sdk,"application":app_attrs,"raw":manifest_xml[:300000] if manifest_xml else "","badgingTool":badging_tool,"badging":badging[:120000]},
-      "permissions":{"items":permissions,"sensitive":[p for p in permissions if p in HIGH_RISK_PERMS]},
-      "components":{"items":components,"exported":exported},
-      "files":{"items":files,"extensions":dict(ext_counts),"assets":assets,"dex":dex},
-      "native":{"abis":dict(abis),"libraries":dict(native)},
-      "urls":{"items":urls},
-      "api":{"items":api_refs},
-      "keys":{"items":secret_refs,"redacted":True,"note":"Full secret values are not collected."},
-      "certs":{"zipEntries":cert_entries,"signerTool":signer.get("tool"),"signerOutput":redact(signer.get("stdout",""))[:200000],"signerError":signer.get("stderr","")[:20000]},
-      "webview":{"items":webview},
-      "crypto":{"items":crypto},
+      "permissions":{"items":permissions if ("permissions" in checks or "risk" in checks) else [],"sensitive":[p for p in permissions if p in HIGH_RISK_PERMS] if ("permissions" in checks or "risk" in checks) else []},
+      "components":{"items":components if ("components" in checks or "risk" in checks) else [],"exported":exported if ("components" in checks or "risk" in checks) else []},
+      "files":{"items":files if "files" in checks else [],"extensions":dict(ext_counts) if "files" in checks else {},"assets":assets if "files" in checks else [],"dex":dex},
+      "native":{"abis":dict(abis) if ("native" in checks or "risk" in checks) else {},"libraries":dict(native) if ("native" in checks or "risk" in checks) else {}},
+      "urls":{"items":urls if ("urls" in checks or "risk" in checks) else []},
+      "api":{"items":api_refs if "api" in checks else []},
+      "keys":{"items":secret_refs if ("keys" in checks or "risk" in checks) else [],"redacted":True,"note":"Full secret values are not collected."},
+      "certs":{"zipEntries":cert_entries if "certs" in checks else [],"signerTool":signer.get("tool"),"signerOutput":redact(signer.get("stdout",""))[:200000] if "certs" in checks else "","signerError":signer.get("stderr","")[:20000] if "certs" in checks else ""},
+      "webview":{"items":webview if ("webview" in checks or "risk" in checks) else []},
+      "crypto":{"items":crypto if ("crypto" in checks or "risk" in checks) else []},
       "indicators":{"items":indicators},
       "decompile":decompile,"extractedSummary":extracted_summary,
       "risk":{"items":risk},
