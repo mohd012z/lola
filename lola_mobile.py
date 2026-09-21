@@ -137,7 +137,8 @@ def scan_worker(target: Path, target_id: str, mode: str, checks: list[str], deco
             report="", analysis=str(analysis)
         )
         log("Validating APK target")
-        set_plan(target_id, checks, mode, {"decompile":decompile,"keepDecompiled":keep_decompiled,"cleanup":cleanup})
+        if "store_target" in checks:
+            set_plan(target_id, checks, mode, {"decompile":decompile,"keepDecompiled":keep_decompiled,"cleanup":cleanup})
         if not ANALYZER.exists():
             raise RuntimeError(f"Missing analyzer: {ANALYZER}")
         if not REPORTER.exists():
@@ -175,11 +176,12 @@ def scan_worker(target: Path, target_id: str, mode: str, checks: list[str], deco
             analysis_data=json.loads(analysis.read_text(encoding="utf-8-sig")) if analysis.exists() else {}
         except Exception:
             analysis_data={}
-        complete_scan(
-            target_id, "complete", mode, checks, analysis_data,
-            {"analysis":str(analysis),"report":str(report)},
-            started=STATE.get("started"), finished=finished
-        )
+        if "store_target" in checks:
+            complete_scan(
+                target_id, "complete", mode, checks, analysis_data,
+                {"analysis":str(analysis),"report":str(report)},
+                started=STATE.get("started"), finished=finished
+            )
         set_state(
             status="complete", stage="complete", progress=100, finished=finished,
             exitCode=0, report=str(report)
@@ -187,7 +189,8 @@ def scan_worker(target: Path, target_id: str, mode: str, checks: list[str], deco
         log("APK scan complete")
     except Exception as exc:
         try:
-            complete_scan(target_id, "error", mode, checks, None, {}, started=STATE.get("started"), finished=time.time())
+            if "store_target" in checks:
+                complete_scan(target_id, "error", mode, checks, None, {}, started=STATE.get("started"), finished=time.time())
         except Exception:
             pass
         log("ERROR: " + str(exc))
