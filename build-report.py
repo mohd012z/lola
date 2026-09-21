@@ -171,6 +171,12 @@ details{margin-top:10px}summary{cursor:pointer;color:#bfd1ff}.detail-grid{displa
   </div>
 
   <div class="section card">
+    <div class="section-head"><h2>Account & personal-data map</h2><span class="sub">Authentication • contacts • calendar • files • biometrics</span></div>
+    <div class="surface-grid" id="accountSurfaces"></div>
+    <div class="note">This map shows where source code touches account/authentication or personal-data APIs. It does not enumerate a user's real accounts, passwords, contacts, or files. Browser and OS permission/consent boundaries still apply at runtime.</div>
+  </div>
+
+  <div class="section card">
     <div class="section-head"><h2>Target file manifest</h2><span class="sub" id="manifestCount"></span></div>
     <div class="manifest-tools"><input id="manifestSearch" placeholder="Search every scanned path, extension, hash..."></div>
     <div class="manifest" id="manifest"></div>
@@ -217,7 +223,8 @@ const ICONS={
   'device-identity':'🧩','device-fingerprinting':'🕵️','device-media':'🎥','device-location':'📍',
   'device-permissions':'✅','device-clipboard':'📋','device-power':'🔋','device-network':'📶',
   'device-storage':'💽','device-local-network':'🛜','device-host':'🖥️','android-device':'🤖',
-  'ios-device':'','device-identifiers':'🪪','device-capabilities':'🧰','device-bridge':'🌉'
+  'ios-device':'','device-identifiers':'🪪','device-capabilities':'🧰','device-bridge':'🌉',
+  'device-files':'🗃️','account-auth':'👤','personal-data':'👥','device-biometric':'🔐','device-notifications':'🔔'
 };
 const icon=s=>ICONS[s]||'•';
 $('target').textContent=DATA.target ? 'Target: '+DATA.target : 'Target not recorded';
@@ -244,7 +251,8 @@ if(!Object.keys(DATA.surfaces||{}).length){$('surfaces').innerHTML='<div class="
 const deviceNames=new Set([
   'device-identity','device-fingerprinting','device-media','device-location','device-permissions',
   'device-clipboard','device-power','device-network','device-storage','device-local-network',
-  'device-host','android-device','ios-device','device-identifiers','device-capabilities','device-bridge'
+  'device-host','android-device','ios-device','device-identifiers','device-capabilities','device-bridge',
+  'device-files','account-auth','personal-data','device-biometric','device-notifications'
 ]);
 Object.entries(DATA.surfaces||{}).filter(([name])=>deviceNames.has(name)).sort((a,b)=>b[1]-a[1]).forEach(([name,count])=>{
   const s=DATA.surfaceSeverity[name]||{};const card=document.createElement('div');card.className='surface';card.dataset.surface=name;
@@ -256,6 +264,18 @@ Object.entries(DATA.surfaces||{}).filter(([name])=>deviceNames.has(name)).sort((
   $('deviceSurfaces').appendChild(card);
 });
 if(!$('deviceSurfaces').children.length){$('deviceSurfaces').innerHTML='<div class="empty">No device/privacy APIs detected in this scan.</div>'}
+
+const accountNames=new Set(['account-auth','personal-data','device-files','device-biometric','device-notifications','device-media']);
+Object.entries(DATA.surfaces||{}).filter(([name])=>accountNames.has(name)).sort((a,b)=>b[1]-a[1]).forEach(([name,count])=>{
+  const s=DATA.surfaceSeverity[name]||{};const card=document.createElement('div');card.className='surface';card.dataset.surface=name;
+  const top=document.createElement('div');top.className='surface-top';
+  const n=document.createElement('div');n.className='surface-name';n.textContent=icon(name)+' '+name;
+  const ct=document.createElement('div');ct.className='surface-count';ct.textContent=count;top.append(n,ct);card.appendChild(top);
+  const mini=document.createElement('div');mini.className='mini';mini.innerHTML='<span class="dotE">E '+(s.ERROR||0)+'</span><span class="dotW">W '+(s.WARNING||0)+'</span><span class="dotI">I '+(s.INFO||0)+'</span>';card.appendChild(mini);
+  card.onclick=()=>{const sel=$('surface');sel.value=(sel.value===name?'':name);document.querySelectorAll('.surface').forEach(x=>x.classList.toggle('active',x.dataset.surface===sel.value));render()};
+  $('accountSurfaces').appendChild(card);
+});
+if(!$('accountSurfaces').children.length){$('accountSurfaces').innerHTML='<div class="empty">No account/personal-data APIs detected in this scan.</div>'}
 
 function renderBars(rootId,items){
   const root=$(rootId),max=Math.max(1,...items.map(x=>x[1]));
