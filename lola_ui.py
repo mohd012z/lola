@@ -162,7 +162,7 @@ class LolaUI(tk.Tk):
         self.configure_styles()
         self.build_ui()
         self.after(120, self.pump_logs)
-        self.after(1200, self.refresh_outputs)
+        self.after(1200, self.poll_outputs)
 
     def configure_styles(self):
         style = ttk.Style(self)
@@ -441,13 +441,20 @@ class LolaUI(tk.Tk):
         if not MASTER.exists():
             raise ValueError(f"Missing master launcher: {MASTER}")
 
+        mode = self.selected_mode.get()
+        is_apk = p.is_file() and p.suffix.lower() == ".apk"
+        if is_apk and not mode.startswith("/apk"):
+            raise ValueError("APK target selected. Choose a mode from the APK tab, such as /apk360.")
+        if not is_apk and mode.startswith("/apk"):
+            raise ValueError("Project/source target selected. Choose a Security, Code, Network, or Pre-scan mode.")
+
         cmd = [
             sys.executable,
             str(MASTER),
             "--target",
             str(p),
             "--mode",
-            self.selected_mode.get(),
+            mode,
         ]
 
         if self.resolve_urls.get():
@@ -550,7 +557,10 @@ class LolaUI(tk.Tk):
                 exists = path.exists()
                 state.configure(text="●" if exists else "○")
                 btn.configure(state="normal" if exists else "disabled")
-        self.after(2500, self.refresh_outputs)
+
+    def poll_outputs(self):
+        self.refresh_outputs()
+        self.after(2500, self.poll_outputs)
 
     def open_path(self, path: Path):
         if not path.exists():
