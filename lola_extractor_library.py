@@ -4,7 +4,18 @@ Adapters describe how evidence sources fit together. Ghidra is for native PE/ELF
 static analysis when installed; Frida remains an explicitly authorized attach-only
 runtime evidence source and is never required for ordinary extraction.
 """
-MODULES=[\n {"id":"codecheckall","mode":"analysis","purpose":"Repository-wide Python syntax and cross-function inspection."},\n {"id":"codetarget","mode":"analysis","purpose":"Focus inspection on a named code target."},\n {"id":"codeidentify","mode":"analysis","purpose":"Identify files and definitions matching a target."},\n {"id":"codemethode","mode":"analysis","purpose":"Inventory methods/functions by file or target."},\n {"id":"codeexpanding","mode":"analysis","purpose":"Show safe architecture expansion points."},\n {"id":"codeextra","mode":"analysis","purpose":"Show additional static code inspection opportunities."},\n {"id":"codecodecodelayer","mode":"analysis","purpose":"Map code into interface/dispatch/extract/convert/office/OCR/analysis/runtime layers."},\n {"id":"skeleton","mode":"analysis","purpose":"Build repository import and definition skeleton."},\n {"id":"troubleshooting","mode":"analysis","purpose":"Report static Python syntax problems."},\n {"id":"codesummary","mode":"analysis","purpose":"Summarize repository code structure."},\n {"id":"codecheck","mode":"analysis","purpose":"Static Python code check."},\n {"id":"pycheck","mode":"analysis","purpose":"Python syntax and cross-function check."},
+MODULES=[
+ {"id":"mergecode","mode":"integration-plan","purpose":"Plan provenance-preserving integration of compatible code components."},
+ {"id":"combineidea","mode":"analysis","purpose":"Combine compatible architecture ideas without blindly concatenating code."},
+ {"id":"codeidea","mode":"analysis","purpose":"Generate evidence-based code architecture improvement ideas."},
+ {"id":"codeintelligent","mode":"analysis","purpose":"Identify target format and propose bounded inspection/integration routes."},
+ {"id":"codewrap","mode":"integration-plan","purpose":"Create an auditable wrapper plan around inspection/extraction/conversion."},
+ {"id":"codescriptidea","mode":"analysis","purpose":"Suggest script/workflow structure for a selected code target."},
+ {"id":"codecompile","mode":"compile-plan","purpose":"Select a language-specific compile or syntax-check route."},
+ {"id":"codeextract","mode":"static","purpose":"Select a safe static extraction route by code format."},
+ {"id":"codeconvert","mode":"convert-plan","purpose":"Select a compatible representation conversion route."},
+ {"id":"codeencrypt","mode":"crypto-plan","purpose":"Plan authenticated encryption for user-owned workspace artifacts."},
+ {"id":"codedecrypt","mode":"crypto-plan","purpose":"Plan authorized decryption of user-owned workspace artifacts; no password guessing or protection bypass."},\n {"id":"codecheckall","mode":"analysis","purpose":"Repository-wide Python syntax and cross-function inspection."},\n {"id":"codetarget","mode":"analysis","purpose":"Focus inspection on a named code target."},\n {"id":"codeidentify","mode":"analysis","purpose":"Identify files and definitions matching a target."},\n {"id":"codemethode","mode":"analysis","purpose":"Inventory methods/functions by file or target."},\n {"id":"codeexpanding","mode":"analysis","purpose":"Show safe architecture expansion points."},\n {"id":"codeextra","mode":"analysis","purpose":"Show additional static code inspection opportunities."},\n {"id":"codecodecodelayer","mode":"analysis","purpose":"Map code into interface/dispatch/extract/convert/office/OCR/analysis/runtime layers."},\n {"id":"skeleton","mode":"analysis","purpose":"Build repository import and definition skeleton."},\n {"id":"troubleshooting","mode":"analysis","purpose":"Report static Python syntax problems."},\n {"id":"codesummary","mode":"analysis","purpose":"Summarize repository code structure."},\n {"id":"codecheck","mode":"analysis","purpose":"Static Python code check."},\n {"id":"pycheck","mode":"analysis","purpose":"Python syntax and cross-function check."},
  {"id":"pdfrichhtml","mode":"convert","purpose":"Render PDF pages to interactive HTML with searchable/OCR text."},
  {"id":"batchofficehtml","mode":"batch-convert","purpose":"Convert supported office-document folders to HTML."},
  {"id":"office2html","mode":"convert","purpose":"Convert office documents to responsive semantic HTML."},
@@ -80,7 +91,10 @@ MODULES=[\n {"id":"codecheckall","mode":"analysis","purpose":"Repository-wide Py
  {"id":"toolsextractor","mode":"reference","purpose":"Inventory available managed/system analysis tools."},
 ]
 
-ALIASES={\n "/codecheckall":"codecheckall","/codetarget":"codetarget","/codeidentify":"codeidentify","/codemethode":"codemethode","/codemethod":"codemethode",\n "/codeexpanding":"codeexpanding","/codeextra":"codeextra","/codecodecodelayer":"codecodecodelayer","/codelayer":"codecodecodelayer",\n "/skeleton":"skeleton","/troubleshooting":"troubleshooting","/codesummary":"codesummary","/codecheck":"codecheck","/pycheck":"pycheck",
+ALIASES={
+ "/mergecode":"mergecode","/combineidea":"combineidea","/codeidea":"codeidea","/codeintelligent":"codeintelligent","/codewrap":"codewrap","/codescriptidea":"codescriptidea",
+ "/codecompile":"codecompile","/compilecode":"codecompile","/codeextract":"codeextract","/extractcode":"codeextract","/codeconvert":"codeconvert","/convertcode":"codeconvert",
+ "/codeencrypt":"codeencrypt","/codedecrypt":"codedecrypt",\n "/codecheckall":"codecheckall","/codetarget":"codetarget","/codeidentify":"codeidentify","/codemethode":"codemethode","/codemethod":"codemethode",\n "/codeexpanding":"codeexpanding","/codeextra":"codeextra","/codecodecodelayer":"codecodecodelayer","/codelayer":"codecodecodelayer",\n "/skeleton":"skeleton","/troubleshooting":"troubleshooting","/codesummary":"codesummary","/codecheck":"codecheck","/pycheck":"pycheck",
  "/pdfrichhtml":"pdfrichhtml","/pdfocrhtml":"pdfrichhtml","/batchofficehtml":"batchofficehtml","/folder2html":"batchofficehtml",
  "/office2html":"office2html","/document2html":"office2html","/pdf2html":"pdf2html","/word2html":"word2html","/docx2html":"word2html","/excel2html":"excel2html","/xlsx2html":"excel2html","/csv2html":"office2html",
  "/pdfocr":"pdfocr","/ocrpdf":"pdfocr","/ocrscan":"pdfocr","/ocrreadiness":"ocrreadiness","/searchablepdf":"searchablepdf",
