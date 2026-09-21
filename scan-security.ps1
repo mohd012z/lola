@@ -50,6 +50,18 @@ function Fail([string]$Message) {
 }
 
 if (-not (Test-Path -LiteralPath $Target)) { Fail "Target does not exist: $Target" }
+
+$TargetPath = (Resolve-Path -LiteralPath $Target).Path
+if ((Test-Path -LiteralPath $TargetPath -PathType Leaf) -and ([IO.Path]::GetExtension($TargetPath).ToLowerInvariant() -eq ".apk")) {
+  if (-not (Test-Path -LiteralPath "scan-apk.ps1")) { Fail "APK target detected but scan-apk.ps1 is missing." }
+  Write-Host "APK target detected — switching to Lola APK pipeline." -ForegroundColor Cyan
+  $ApkMode = if ($Mode -like "apk*" -or $Mode -like "/apk*") { $Mode } else { "/apk360" }
+  $ApkArgs = @("-ExecutionPolicy","Bypass","-File","scan-apk.ps1",$TargetPath,"-Mode",$ApkMode)
+  if ($NoOpen) { $ApkArgs += "-NoOpen" }
+  & powershell @ApkArgs
+  exit $LASTEXITCODE
+}
+
 if (-not (Test-Path -LiteralPath $Config)) { Fail "Config does not exist: $Config" }
 
 Write-ScanEvent "start" "Scan requested in mode $Mode" "info" "running"
@@ -57,7 +69,6 @@ Write-ScanEvent "start" "Scan requested in mode $Mode" "info" "running"
 $Semgrep = Get-Command semgrep -ErrorAction SilentlyContinue
 if (-not $Semgrep) { Fail "Install Semgrep with: python -m pip install semgrep" }
 
-$TargetPath = (Resolve-Path -LiteralPath $Target).Path
 $ConfigPath = (Resolve-Path -LiteralPath $Config).Path
 
 $Extensions = @(
