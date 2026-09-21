@@ -28,6 +28,14 @@ CLASS_RE = re.compile(r"(?m)^\s*(?:public\s+|private\s+|protected\s+|internal\s+
 METHOD_RE = re.compile(r"(?m)^\s*(?:public|private|protected|internal|static|final|synchronized|native|abstract|suspend|override|\s)+[\w<>,?.\[\]$]+\s+([A-Za-z_$][\w$]*)\s*\(")
 ANDROID_REF_RE = re.compile(r"(?i)\b(Activity|Service|BroadcastReceiver|ContentProvider|Intent|WebView|Context|SharedPreferences|RoomDatabase|SQLiteDatabase|Retrofit|OkHttpClient|WorkManager|Firebase|LocationManager|BiometricPrompt|KeyStore)\b")
 STRING_LITERAL_RE = re.compile(r'''(?s)(?:"([^"\n\r]{4,220})"|'([^'\n\r]{4,220})')''')
+BILLING_PATTERNS = {
+    "payment": re.compile(r"(?i)\b(BillingClient|BillingFlowParams|launchBillingFlow|ProductDetails|Purchase|one[- ]time product|in[- ]app|IAB|billing)\b"),
+    "subscribes": re.compile(r"(?i)\b(subscription|subs|basePlan|offerToken|ReplacementMode|renew|entitlement|queryPurchasesAsync|ProductType\.SUBS)\b"),
+    "verify": re.compile(r"(?i)\b(verify|verification|purchaseState|PURCHASED|PENDING|isAcknowledged|acknowledgePurchase|signature|backend|server)\b"),
+    "callback": re.compile(r"(?i)\b(PurchasesUpdatedListener|onPurchasesUpdated|onProductDetailsResponse|onBillingSetupFinished|onBillingServiceDisconnected|listener|callback)\b"),
+    "fallback": re.compile(r"(?i)\b(fallback|retry|reconnect|backoff|SERVICE_DISCONNECTED|timeout|catch|exception|failed|failure|default)\b"),
+    "recheck": re.compile(r"(?i)\b(queryPurchasesAsync|queryProductDetailsAsync|restore|refresh|resume|recheck|re-query|reconnect|onResume)\b"),
+}
 
 TEXT_EXTS = {
     ".xml",".json",".txt",".html",".htm",".js",".css",".properties",".ini",".cfg",
@@ -66,6 +74,12 @@ def build_reader(apk: Path, analysis_path: Path, source_dir: Path | None, output
     dex_strings: list[dict[str, Any]] = []
     source_files: list[dict[str, Any]] = []
     code_strings: list[dict[str, Any]] = []
+    billing_evidence: dict[str, list[dict[str, Any]]] = {k:[] for k in BILLING_PATTERNS}
+
+    def add_billing(kind: str, location: str, text: str):
+        bucket=billing_evidence[kind]
+        if len(bucket)>=600:return
+        bucket.append({"location":location,"preview":redact(text[:1200])})
 
     if apk.exists() and zipfile.is_zipfile(apk):
         with zipfile.ZipFile(apk, "r") as z:
@@ -84,6 +98,11 @@ def build_reader(apk: Path, analysis_path: Path, source_dir: Path | None, output
                             "bytes": zi.file_size,
                             "preview": preview(text, 18000),
                         })
+                        for kind,pat in BILLING_PATTERNS.items():
+                            for bm in pat.finditer(text[:MAX_TEXT_ENTRY]):
+                                ln=text.count("\n",0,bm.start())+1
+                                line=text.splitlines()[ln-1] if text.splitlines() and ln<=len(text.splitlines()) else bm.group(0)
+                                add_billing(kind,f"{p}:{ln}",line)
                         if len(code_strings) < 5000:
                             for sm in STRING_LITERAL_RE.finditer(text[:MAX_TEXT_ENTRY]):
                                 val=(sm.group(1) or sm.group(2) or "").strip()
@@ -106,6 +125,8 @@ def build_reader(apk: Path, analysis_path: Path, source_dir: Path | None, output
                             "offset": m.start(),
                             "value": red,
                         })
+                        for kind,pat in BILLING_PATTERNS.items():
+                            if pat.search(s): add_billing(kind,f"{p} @ {m.start()}",s)
                         if len(code_strings) < 5000:
                             code_strings.append({"kind":"dex","location":f"{p} @ {m.start()}","value":red[:500]})
                         count += 1
@@ -150,6 +171,12 @@ def build_reader(apk: Path, analysis_path: Path, source_dir: Path | None, output
                 "methods": methods,
                 "androidRefs": refs,
             })
+            for kind,pat in BILLING_PATTERNS.items():
+                for bm in pat.finditer(text[:MAX_SOURCE_BYTES]):
+                    ln=text.count("\n",0,bm.start())+1
+                    lines=text.splitlines()
+                    line=lines[ln-1] if lines and ln<=len(lines) else bm.group(0)
+                    add_billing(kind,f"{rel}:{ln}",line)
             if len(code_strings) < 5000:
                 for sm in STRING_LITERAL_RE.finditer(text[:MAX_SOURCE_BYTES]):
                     val=(sm.group(1) or sm.group(2) or "").strip()
@@ -281,6 +308,29 @@ def build_reader(apk: Path, analysis_path: Path, source_dir: Path | None, output
         "analysisSections":sorted(sections.keys())
     }
 
+
+    maincode={
+        "files":[{"path":x.get("path"),"classes":x.get("classes",[]),"methods":x.get("methods",[]),"androidRefs":x.get("androidRefs",[])} for x in source_files[:500]],
+        "entryPoints":[x for x in component_items[:500]],
+        "billingFiles":sorted({x.get("location","").split(":",1)[0] for group in billing_evidence.values() for x in group if x.get("location")})[:500],
+        "note":"Static entry/code overview; no target code is executed."
+    }
+    urls_view={
+        "items":url_items,
+        "hosts":host_counter.most_common(200),
+        "api":api_items[:2000]
+    }
+    billing_summary={k:{"count":len(v),"items":v} for k,v in billing_evidence.items()}
+    verification={
+        "hasPurchaseListener":bool(billing_evidence["callback"]),
+        "hasPurchaseVerificationSignals":bool(billing_evidence["verify"]),
+        "hasRecheckSignals":bool(billing_evidence["recheck"]),
+        "hasFallbackSignals":bool(billing_evidence["fallback"]),
+        "paymentSignals":len(billing_evidence["payment"]),
+        "subscriptionSignals":len(billing_evidence["subscribes"]),
+        "note":"Presence checks only. They do not prove billing correctness or successful server-side verification."
+    }
+
     transparent={
         "nodes":list(nodes.values()),
         "edges":edges,
@@ -300,6 +350,12 @@ def build_reader(apk: Path, analysis_path: Path, source_dir: Path | None, output
         "codeStrings": len(code_strings),
         "traceEdges": len(edges),
         "routes": len(routes),
+        "paymentSignals": len(billing_evidence["payment"]),
+        "subscriptionSignals": len(billing_evidence["subscribes"]),
+        "callbackSignals": len(billing_evidence["callback"]),
+        "fallbackSignals": len(billing_evidence["fallback"]),
+        "verifySignals": len(billing_evidence["verify"]),
+        "recheckSignals": len(billing_evidence["recheck"]),
         "redacted": True,
     }
     out = {
@@ -316,8 +372,13 @@ def build_reader(apk: Path, analysis_path: Path, source_dir: Path | None, output
         "transparent": transparent,
         "codeBrains": code_brains,
         "targetCodes": target_codes,
+        "mainCode": maincode,
+        "urlsView": urls_view,
+        "billing": billing_summary,
+        "verification": verification,
         "readerViews": [
-            "main","code360","strings","codeview","transparent","trace","routes","map","codebrains","targetcodes",
+            "main","code360","maincode","strings","codeview","transparent","trace","traces","routes","map","codebrains","targetcodes",
+            "urls","verify","callback","fallback","recheck","subscribes","payment","etc",
             "overview","manifest","permissions","components","source","resources","dex",
             "urls","api","keys","certs","native","webview","crypto","risk","files"
         ],
@@ -357,6 +418,9 @@ def search_reader(data: dict[str, Any], query: str, limit: int = 200) -> list[di
         add("trace", str(x.get("relation","")), str(x.get("from",""))+" -> "+str(x.get("to","")), str(x.get("evidence","")))
     for x in data.get("routes", []):
         add("route", str(x.get("kind","route")), str(x.get("source","")), json.dumps(x,ensure_ascii=False))
+    for kind,group in (data.get("billing") or {}).items():
+        for x in group.get("items",[]) if isinstance(group,dict) else []:
+            add(kind,kind,x.get("location",""),x.get("preview",""))
 
     for section_name in ("urls","api","keys","webview","crypto","risk","components","permissions","native","certs"):
         sec = (data.get("sections") or {}).get(section_name, {})
