@@ -5,6 +5,8 @@ static analysis when installed; Frida remains an explicitly authorized attach-on
 runtime evidence source and is never required for ordinary extraction.
 """
 MODULES=[
+ {"id":"exfallback","mode":"bot-coordinator","purpose":"Continue unresolved EX4/EX5 diagnosis across available evidence bots and request optional evidence."},
+ {"id":"exevidence","mode":"evidence-request","purpose":"Show useful optional evidence for an unresolved EX4/EX5 case."},
  {"id":"exproblem","mode":"evidence-router","purpose":"Diagnose EX4/EX5 problems from bounded artifact, source-reference and local log evidence."},
  {"id":"exaskmt5","mode":"evidence-router-ai","purpose":"Route EX4/EX5 evidence through the configured MT5 AI after local diagnosis."},
  {"id":"mt5ai","mode":"mcp-client","purpose":"Send bounded MQL/EX evidence questions to an explicitly configured MetaTrader 5 MCP AI tool."},
@@ -100,6 +102,7 @@ MODULES=[
 ]
 
 ALIASES={
+ "/exfallback":"exfallback","/exbots":"exfallback","/autofallback":"exfallback","/exevidence":"exevidence","/giveevidence":"exevidence",
  "/exproblem":"exproblem","/ex4problem":"exproblem","/ex5problem":"exproblem","/exdiagnose":"exproblem","/exaskmt5":"exaskmt5",
  "/mt5ai":"mt5ai","/askmt5":"mt5ai","/mt5mcp":"mt5mcp","/mt5aidiscover":"mt5mcp",
  "/metatrader":"metatrader","/mt4":"metatrader","/mt5":"metatrader","/mtcheck":"mtcheck","/mqlcheck":"mtcheck","/mtcompile":"mtcompile","/mqlcompile":"mtcompile","/help":"help",
