@@ -5,6 +5,18 @@ static analysis when installed; Frida remains an explicitly authorized attach-on
 runtime evidence source and is never required for ordinary extraction.
 """
 MODULES=[
+ {"id":"dex","mode":"static","purpose":"DEX header/table evidence."},
+ {"id":"class","mode":"static","purpose":"Java class header/constant-pool evidence."},
+ {"id":"jar","mode":"static","purpose":"JAR package inventory."},
+ {"id":"apk","mode":"static","purpose":"APK package inventory."},
+ {"id":"aab","mode":"static","purpose":"Android App Bundle inventory."},
+ {"id":"wasm","mode":"static","purpose":"WebAssembly header evidence."},
+ {"id":"sqlite","mode":"static","purpose":"SQLite read-only schema inventory."},
+ {"id":"json","mode":"static","purpose":"JSON structural inventory."},
+ {"id":"protobuf","mode":"static","purpose":"Schema-less protobuf wire inventory."},
+ {"id":"pak","mode":"static","purpose":"PAK raw-container evidence."},
+ {"id":"img","mode":"static","purpose":"IMG raw-container evidence."},
+ {"id":"iso","mode":"static","purpose":"ISO raw-container evidence."},
  {"id":"exe","mode":"static-native","purpose":"PE/EXE header and section evidence; target is never loaded."},
  {"id":"so","mode":"static-native","purpose":"ELF/shared-object header and section evidence; target is never loaded."},
  {"id":"dat","mode":"static","purpose":"Generic DAT/raw classification by content, signatures, chunks and strings."},
@@ -43,6 +55,9 @@ MODULES=[
 ]
 
 ALIASES={
+ "/*.dex":"dex","/*.class":"class","/*.jar":"jar","/*.apk":"apk","/*.aab":"aab","/*.wasm":"wasm",
+ "/*.db":"sqlite","/*.sqlite":"sqlite","/*.sqlite3":"sqlite","/*.json":"json","/*.pb":"protobuf","/*.protobuf":"protobuf",
+ "/*.pak":"pak","/*.img":"img","/*.iso":"iso",
  "/*.exe":"exe","/*.dll":"exe","/*.so":"so","/*.elf":"so","/*.dat":"dat","/*.bin":"dat",
  "/codecli":"codecli","/c++":"cpp","/cpp":"cpp","/c":"c","/vector":"vector",
  "/base64":"base64","/base44":"base44","/zip":"zip","/rar":"rar","/7zip":"7zip",
