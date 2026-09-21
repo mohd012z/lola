@@ -56,9 +56,10 @@ def run_apk(args: argparse.Namespace, target: Path) -> int:
     if args.decompile and "decompile" not in checks:
         checks.append("decompile")
     target_record=register_target(target,target.name)
-    set_plan(target_record["id"],checks,mode,{
-        "decompile":args.decompile,"keepDecompiled":args.keep_decompiled,"cleanup":args.cleanup
-    })
+    if "store_target" in checks:
+        set_plan(target_record["id"],checks,mode,{
+            "decompile":args.decompile,"keepDecompiled":args.keep_decompiled,"cleanup":args.cleanup
+        })
     analysis = Path(args.apk_analysis).resolve()
     html_report = Path(args.apk_report).resolve()
 
@@ -101,10 +102,11 @@ def run_apk(args: argparse.Namespace, target: Path) -> int:
         analysis_data=json.loads(analysis.read_text(encoding="utf-8-sig"))
     except Exception:
         analysis_data={}
-    complete_scan(
-        target_record["id"],"complete",mode,checks,analysis_data,
-        {"analysis":str(analysis),"report":str(html_report)}
-    )
+    if "store_target" in checks:
+        complete_scan(
+            target_record["id"],"complete",mode,checks,analysis_data,
+            {"analysis":str(analysis),"report":str(html_report)}
+        )
 
     if not args.no_open:
         try:
