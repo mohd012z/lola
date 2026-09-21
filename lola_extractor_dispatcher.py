@@ -17,12 +17,17 @@ from lola_metatrader_bot import capabilities as mt_capabilities, bot as mt_bot, 
 from lola_mt5_mcp_bridge import configuration as mt5_mcp_configuration, discover as mt5_mcp_discover, ask as mt5_ai_ask
 from lola_ex_problem_router import diagnose as ex_diagnose
 from lola_ex_fallback_bots import fallback_plan as ex_fallback_plan, run_fallback as ex_run_fallback
+from lola_python_path_doctor import analyze as py_path_analyze
 
 def run(command,target=None,arg=None):
     cmd=(command or "").strip().lower()
     mod=resolve(cmd)
     if not mod:return {"ok":False,"error":"unknown command","command":command}
     if cmd=="/codecli":return {"ok":True,"modules":catalog()}
+    if cmd in ("/pypath","/pyprocess","/pyusage","/pyscript"):
+        root=Path(target or ".")
+        if not root.exists():return {"ok":False,"error":"Python inspection target does not exist"}
+        return {"ok":True,"python_path":py_path_analyze(root if root.is_dir() else root.parent)}
     if cmd in ("/exfallback","/exbots","/autofallback","/exevidence","/giveevidence"):
         if not target:return {"ok":False,"error":"EX4/EX5 target required","help":mt_help(reason="missing fallback target")}
         p=Path(target)
