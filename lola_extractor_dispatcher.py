@@ -7,6 +7,7 @@ from lola_deep_extractor import deep_extract, graph
 from lola_native_extractors import native_summary
 from lola_extended_extractors import extended_summary
 from lola_universal_converter import detect as detect_format, python_summary, plan as conversion_plan, available_tools
+from lola_document_converter import conversion_plan as document_conversion_plan, matrix as document_matrix
 
 def run(command,target=None,arg=None):
     mod=resolve(command)
@@ -26,6 +27,11 @@ def run(command,target=None,arg=None):
         return {"ok":True,"module":mod,"format":detect_format(p),"python":python_summary(p),"evidence":extract(p)}
     if command in ("/**.***","/convertany","/anyformat"):
         return {"ok":True,"module":mod,"format":detect_format(p),"conversion":conversion_plan(p,arg or "evidence360"),"tools":available_tools(),"evidence":extract(p)}
+    if command=="/documentconvert":
+        return {"ok":True,"module":mod,"matrix":document_matrix(),"tools":available_tools()}
+    doc_targets={"/pdf2word":"docx","/pdf2docx":"docx","/pdf2excel":"xlsx","/pdf2xlsx":"xlsx","/word2pdf":"pdf","/docx2pdf":"pdf","/excel2pdf":"pdf","/xlsx2pdf":"pdf","/word2excel":"xlsx","/excel2word":"docx"}
+    if command in doc_targets:
+        return {"ok":True,"module":mod,"conversion":document_conversion_plan(p,doc_targets[command]),"evidence":extract(p,include_numbers=False)}
     if command=="/base64":
         return decode_base64(p.read_text(encoding="utf-8",errors="replace").strip())
     if command=="/base44":return decode_base44(p.read_text(encoding="utf-8",errors="replace").strip())
