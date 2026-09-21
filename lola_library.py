@@ -34,6 +34,11 @@ COMMANDS = [
     {"id":"/apkcode","group":"APK","label":"Code / JADX","purpose":"Optional JADX decompilation status/source","platform":["Android","Windows","Linux"],"cost":"high","tools":["jadx"],"outputs":[".lola-apk/decompiled"]},
     {"id":"/apkrisk","group":"APK","label":"Risk Review","purpose":"Consolidated static review findings","platform":["Android","Windows","Linux"],"cost":"low","tools":["python"],"outputs":["apk-analysis.json"]},
     {"id":"/apktools","group":"APK","label":"Tools","purpose":"Show locally available APK analysis tools","platform":["Android","Windows","Linux"],"cost":"low","tools":[],"outputs":[]},
+    {"id":"/androidreader","group":"Android Reader","label":"Android Code Reader","purpose":"Browse manifest, DEX strings, resources, decompiled source, URLs/APIs, WebView, crypto, native libraries and findings from one target library","platform":["Android","Windows","Linux"],"cost":"medium","tools":["python"],"outputs":["android-code-reader.json"]},
+    {"id":"/readersearch","group":"Android Reader","label":"Reader Search","purpose":"Search the built-in Android code reader across redacted source/resource/DEX evidence","platform":["Android","Windows","Linux"],"cost":"medium","tools":["python"],"outputs":["android-code-reader.json"]},
+    {"id":"/readersource","group":"Android Reader","label":"Reader Source","purpose":"Browse retained JADX source previews by file and extension","platform":["Android","Windows","Linux"],"cost":"high","tools":["jadx recommended"],"outputs":["android-code-reader.json",".lola-apk/decompiled"]},
+    {"id":"/readerresources","group":"Android Reader","label":"Reader Resources","purpose":"Browse text resources/assets extracted from the APK container","platform":["Android","Windows","Linux"],"cost":"medium","tools":["python"],"outputs":["android-code-reader.json"]},
+    {"id":"/readerdex","group":"Android Reader","label":"Reader DEX Strings","purpose":"Search redacted printable strings recovered from classes*.dex","platform":["Android","Windows","Linux"],"cost":"medium","tools":["python"],"outputs":["android-code-reader.json"]},
 
     # Security
     {"id":"/360","group":"Security","label":"360 Overview","purpose":"Whole source/security surface","platform":["Windows","Linux"],"cost":"medium","tools":["semgrep","python"],"outputs":["semgrep-report.html"]},
@@ -97,8 +102,36 @@ APK_PLAN = [
     {"id":"files","label":"File inventory","description":"APK ZIP entries, sizes and CRCs","default":True,"cost":"low"},
     {"id":"risk","label":"Risk review","description":"Static review signals and summary","default":True,"cost":"low"},
     {"id":"decompile","label":"JADX decompile","description":"Resource-heavy optional source extraction","default":False,"cost":"high"},
-    {"id":"store_target","label":"Store target in Library","description":"Save identity, plan, history and output links","default":True,"cost":"low"},
+    {"id":"android_reader","label":"Build Android Code Reader","description":"Create searchable manifest/DEX/resource/source/library index","default":True,"cost":"medium"},
+    {"id":"store_target","label":"Keep APK in Target Library","description":"Retain one library copy of the APK by SHA-256 target ID","default":False,"cost":"storage"},
+    {"id":"store_analysis","label":"Store analysis detail","description":"Save target-specific apk-analysis.json in the target library","default":True,"cost":"low"},
+    {"id":"store_report","label":"Store visual report","description":"Save target-specific apk-report.html in the target library","default":True,"cost":"low"},
+    {"id":"store_decompiled","label":"Store JADX source in Library","description":"Retain decompiled source under the target library when JADX runs","default":False,"cost":"high-storage"},
 ]
+
+FUNCTIONS = [
+    {"id":"register_target","group":"Library Function","label":"Register Target","purpose":"Compute SHA-256 target ID and create/update persistent target metadata","module":"lola_library.py","outputs":["target.json"]},
+    {"id":"set_plan","group":"Library Function","label":"Save Target Plan","purpose":"Persist selected pre-scan checks, report mode and options","module":"lola_library.py","outputs":["target.json"]},
+    {"id":"complete_scan","group":"Library Function","label":"Complete Scan","purpose":"Append scan history and summarize APK results","module":"lola_library.py","outputs":["target.json"]},
+    {"id":"archive_artifacts","group":"Library Function","label":"Archive Artifacts","purpose":"Copy selected APK/analysis/report/reader/decompiled artifacts into the target folder","module":"lola_library.py","outputs":["target artifact folder"]},
+    {"id":"analyze-apk.py","group":"Analyzer Function","label":"APK Analyzer","purpose":"Perform selected APK package/static-analysis checks with secret redaction","module":"analyze-apk.py","outputs":["apk-analysis.json"]},
+    {"id":"build-apk-report.py","group":"Report Function","label":"APK Report Builder","purpose":"Create interactive APK HTML report","module":"build-apk-report.py","outputs":["apk-report.html"]},
+    {"id":"android_code_reader.py","group":"Reader Function","label":"Android Code Reader Indexer","purpose":"Build searchable redacted Android code/resource/DEX library","module":"android_code_reader.py","outputs":["android-code-reader.json"]},
+    {"id":"lola_mobile.py","group":"UI Function","label":"Lola Mobile Server","purpose":"Android localhost UI, upload, target plan, live scan, library and reader APIs","module":"lola_mobile.py","outputs":["localhost UI"]}
+]
+
+STORAGE = {
+    "root": ".lola-library",
+    "index": ".lola-library/library.json",
+    "targetPattern": ".lola-library/targets/<target-id>/target.json",
+    "targetApk": ".lola-library/targets/<target-id>/target.apk",
+    "analysis": ".lola-library/targets/<target-id>/apk-analysis.json",
+    "report": ".lola-library/targets/<target-id>/apk-report.html",
+    "reader": ".lola-library/targets/<target-id>/android-code-reader.json",
+    "decompiled": ".lola-library/targets/<target-id>/decompiled/",
+    "temporaryUpload": ".lola-mobile/uploads/",
+    "targetId": "first 24 hex characters of the APK SHA-256"
+}
 
 def _now() -> int:
     return int(time.time())
@@ -116,17 +149,38 @@ def sha256_file(path: Path) -> str:
     return h.hexdigest()
 
 def catalog() -> dict[str, Any]:
-    return {"commands":COMMANDS,"apkPlan":APK_PLAN}
+    return {"commands":COMMANDS,"functions":FUNCTIONS,"apkPlan":APK_PLAN,"storage":STORAGE}
 
 def target_id_from_sha(sha256: str) -> str:
     return sha256[:24]
 
+def target_folder(target_id: str) -> Path:
+    return TARGET_DIR / target_id
+
 def target_path(target_id: str) -> Path:
+    return target_folder(target_id) / "target.json"
+
+def legacy_target_path(target_id: str) -> Path:
     return TARGET_DIR / f"{target_id}.json"
+
+def artifact_paths(target_id: str) -> dict[str, str]:
+    folder=target_folder(target_id)
+    return {
+        "folder":str(folder),
+        "record":str(folder/"target.json"),
+        "apk":str(folder/"target.apk"),
+        "analysis":str(folder/"apk-analysis.json"),
+        "report":str(folder/"apk-report.html"),
+        "reader":str(folder/"android-code-reader.json"),
+        "decompiled":str(folder/"decompiled"),
+    }
 
 def load_target(target_id: str) -> dict[str, Any] | None:
     _ensure()
     p=target_path(target_id)
+    legacy=legacy_target_path(target_id)
+    if not p.exists() and legacy.exists():
+        p=legacy
     if not p.exists(): return None
     try:return json.loads(p.read_text(encoding="utf-8"))
     except Exception:return None
@@ -134,7 +188,14 @@ def load_target(target_id: str) -> dict[str, Any] | None:
 def save_target(record: dict[str, Any]) -> dict[str, Any]:
     _ensure()
     tid=record["id"]
+    folder=target_folder(tid)
+    folder.mkdir(parents=True,exist_ok=True)
+    record["storage"]=artifact_paths(tid)
     target_path(tid).write_text(json.dumps(record,indent=2,ensure_ascii=False),encoding="utf-8")
+    legacy=legacy_target_path(tid)
+    if legacy.exists():
+        try: legacy.unlink()
+        except Exception: pass
     idx=json.loads(INDEX_FILE.read_text(encoding="utf-8"))
     refs=[x for x in idx.get("targets",[]) if x.get("id")!=tid]
     refs.append({
@@ -203,6 +264,43 @@ def complete_scan(target_id: str, status: str, mode: str, checks: list[str], ana
     })
     rec["scans"]=rec["scans"][-100:]
     return save_target(rec)
+
+def archive_artifacts(
+    target_id: str,
+    source_apk: Path | None=None,
+    analysis: Path | None=None,
+    report: Path | None=None,
+    reader: Path | None=None,
+    decompiled: Path | None=None,
+    keep_apk: bool=False,
+    keep_analysis: bool=True,
+    keep_report: bool=True,
+    keep_reader: bool=True,
+    keep_decompiled: bool=False,
+) -> dict[str,str]:
+    import shutil
+    rec=load_target(target_id)
+    if not rec:return {}
+    folder=target_folder(target_id)
+    folder.mkdir(parents=True,exist_ok=True)
+    stored={}
+    def copy_file(src: Path | None, dst: Path, enabled: bool):
+        if not enabled or not src or not src.exists() or not src.is_file(): return
+        shutil.copy2(src,dst)
+        stored[dst.name]=str(dst)
+    copy_file(source_apk, folder/"target.apk", keep_apk)
+    copy_file(analysis, folder/"apk-analysis.json", keep_analysis)
+    copy_file(report, folder/"apk-report.html", keep_report)
+    copy_file(reader, folder/"android-code-reader.json", keep_reader)
+    if keep_decompiled and decompiled and decompiled.exists() and decompiled.is_dir():
+        dst=folder/"decompiled"
+        if dst.exists(): shutil.rmtree(dst,ignore_errors=True)
+        shutil.copytree(decompiled,dst)
+        stored["decompiled"]=str(dst)
+    rec["outputs"]={**rec.get("outputs",{}),**stored}
+    rec["lastSeen"]=_now()
+    save_target(rec)
+    return stored
 
 def list_targets() -> list[dict[str,Any]]:
     _ensure()
