@@ -34,6 +34,17 @@
     <button data-mode="map">/map</button>
     <button data-mode="visible">/visible</button>
     <button data-mode="realip">/realip</button>
+    <button data-mode="preflight">/preflight</button>
+    <button data-mode="viewextraction">/viewextraction</button>
+    <button data-mode="viewurls">/viewurls</button>
+    <button data-mode="routes">/routes</button>
+    <button data-mode="api">/api</button>
+    <button data-mode="keys">/keys</button>
+    <button data-mode="hiddentraces">/hiddentraces</button>
+    <button data-mode="hidemodes">/hidemodes</button>
+    <button data-mode="hidelog">/hidelog</button>
+    <button data-mode="ipmirror">/ipmirror</button>
+    <button data-mode="certs">/certs</button>
   </div>
 
   <div class="grid">
@@ -78,6 +89,7 @@
 <script>
 const $=id=>document.getElementById(id);
 let NET={summary:{},trace:{items:[]},route:{items:[]},map:{nodes:[],edges:[]},visible:{},realip:{}};
+let PREFLIGHT={summary:{},viewextraction:{},viewurls:{items:[]},map:{nodes:[],edges:[]},routes:{items:[]},api:{items:[]},keys:{items:[]},hiddentraces:{items:[]},hidemodes:{items:[]},hidelog:{items:[]},ipmirror:{items:[]},certs:{items:[],copies:[]}};
 let EVENTS={status:'idle',events:[]};
 let MODE='normal';
 
@@ -93,7 +105,7 @@ function textItem(root,title,meta,body=''){
 }
 function renderFeeds(){
   const root=$('feeds');root.replaceChildren();
-  const stages=['start','target-discovery','manifest','url-map','code-analysis','semgrep','mode-analysis','network-analysis','report','complete'];
+  const stages=['start','target-discovery','manifest','url-map','code-analysis','preflight','semgrep','mode-analysis','network-analysis','report','complete'];
   stages.forEach(stage=>{
     const ev=[...(EVENTS.events||[])].reverse().find(x=>x.stage===stage);
     const d=document.createElement('div');d.className='feed';
@@ -128,8 +140,50 @@ function renderMode(){
     (NET.trace?.items||[]).forEach(x=>textItem(r,x.sourceUrl||'URL',x.host||'',x.finalUrl&&x.finalUrl!==x.sourceUrl?'Final: '+x.finalUrl:''));
   }else if(MODE==='map'){
     $('leftTitle').textContent='/map — logical nodes';$('rightTitle').textContent='Map edges';
-    (NET.map?.nodes||[]).slice(0,300).forEach(x=>textItem(l,x.kind+' · '+x.label,x.id,''));
-    (NET.map?.edges||[]).slice(0,500).forEach(x=>textItem(r,x.label||'link',x.from+' → '+x.to,''));
+    const mp=(NET.map?.nodes||[]).length?NET.map:PREFLIGHT.map;
+    (mp?.nodes||[]).slice(0,300).forEach(x=>textItem(l,x.kind+' · '+x.label,x.id,''));
+    (mp?.edges||[]).slice(0,500).forEach(x=>textItem(r,x.label||'link',x.from+' → '+x.to,''));
+  }else if(MODE==='preflight'){
+    $('leftTitle').textContent='/preflight — before Semgrep';$('rightTitle').textContent='Pre-scan summary';
+    Object.entries(PREFLIGHT.summary||{}).forEach(([k,v])=>textItem(l,k,'',String(v)));
+    textItem(r,'Phase',PREFLIGHT.phase||'before-semgrep',PREFLIGHT.target||'');
+  }else if(MODE==='viewextraction'){
+    $('leftTitle').textContent='/viewextraction';$('rightTitle').textContent='Routes / environment';
+    const x=PREFLIGHT.viewextraction||{};
+    (x.functions||[]).slice(0,150).forEach(v=>textItem(l,'Function '+(v.name||''),(v.path||'')+':'+(v.line||'?'),''));
+    (x.classes||[]).slice(0,100).forEach(v=>textItem(l,'Class '+(v.name||''),(v.path||'')+':'+(v.line||'?'),''));
+    (x.imports||[]).slice(0,150).forEach(v=>textItem(l,'Import '+(v.module||''),(v.path||'')+':'+(v.line||'?'),''));
+    (x.environment||[]).slice(0,150).forEach(v=>textItem(r,'Environment/config',(v.path||'')+':'+(v.line||'?'),v.preview||''));
+    (x.routes||[]).slice(0,150).forEach(v=>textItem(r,(v.method||'')+' '+(v.route||''),(v.path||'')+':'+(v.line||'?'),''));
+  }else if(MODE==='viewurls'){
+    $('leftTitle').textContent='/viewurls';$('rightTitle').textContent='Final destinations';
+    (PREFLIGHT.viewurls?.items||[]).forEach(v=>textItem(l,v.sourceUrl||'URL',(v.host||'')+' · '+(v.destinationClass||''),''));
+    (PREFLIGHT.viewurls?.items||[]).filter(v=>v.finalUrl&&v.finalUrl!==v.sourceUrl).forEach(v=>textItem(r,v.host||'host','status '+(v.status||'-'),v.finalUrl||''));
+  }else if(MODE==='routes'){
+    $('leftTitle').textContent='/routes';$('rightTitle').textContent='Source';
+    (PREFLIGHT.routes?.items||[]).forEach(v=>textItem(l,(v.method||'')+' '+(v.route||''),(v.path||'')+':'+(v.line||'?'),''));
+  }else if(MODE==='api'){
+    $('leftTitle').textContent='/api';$('rightTitle').textContent='API references';
+    (PREFLIGHT.api?.items||[]).forEach(v=>textItem(l,v.kind||'api',(v.path||'')+':'+(v.line||'?'),v.preview||''));
+  }else if(MODE==='keys'){
+    $('leftTitle').textContent='/keys — redacted';$('rightTitle').textContent='Key references';
+    (PREFLIGHT.keys?.items||[]).forEach(v=>textItem(l,v.name||v.kind||'key',(v.path||'')+':'+(v.line||'?'),'Masked: '+(v.masked||'<redacted>')));
+  }else if(MODE==='hiddentraces'){
+    $('leftTitle').textContent='/hiddentraces — detection';$('rightTitle').textContent='Evidence';
+    (PREFLIGHT.hiddentraces?.items||[]).forEach(v=>textItem(l,v.kind||'hidden-trace',(v.path||'')+':'+(v.line||'?'),v.preview||''));
+  }else if(MODE==='hidemodes'){
+    $('leftTitle').textContent='/hidemodes — detection';$('rightTitle').textContent='Evidence';
+    (PREFLIGHT.hidemodes?.items||[]).forEach(v=>textItem(l,v.kind||'hidden-mode',(v.path||'')+':'+(v.line||'?'),v.preview||''));
+  }else if(MODE==='hidelog'){
+    $('leftTitle').textContent='/hidelog — logging suppression detection';$('rightTitle').textContent='Evidence';
+    (PREFLIGHT.hidelog?.items||[]).forEach(v=>textItem(l,v.kind||'log-suppression',(v.path||'')+':'+(v.line||'?'),v.preview||''));
+  }else if(MODE==='ipmirror'){
+    $('leftTitle').textContent='/ipmirror — app destination IPs';$('rightTitle').textContent='Source URLs';
+    (PREFLIGHT.ipmirror?.items||[]).forEach(v=>textItem(l,v.host||'host',(v.destinationClass||'')+' · '+((v.resolvedIps||[]).join(', ')||'-'),v.sourceUrl||''));
+  }else if(MODE==='certs'){
+    $('leftTitle').textContent='/certs';$('rightTitle').textContent='Public cert copies';
+    (PREFLIGHT.certs?.items||[]).forEach(v=>textItem(l,v.kind||'certificate',v.path||'',(v.sha256||'')+' · '+(v.bytes||0)+' bytes'));
+    (PREFLIGHT.certs?.copies||[]).forEach(v=>textItem(r,'Public certificate copy',v.source||'',v.copy||v.error||''));
   }else if(MODE==='visible'){
     $('leftTitle').textContent='/visible — public hosts/IPs';$('rightTitle').textContent='Network findings';
     (NET.visible?.publicHosts||[]).forEach(x=>textItem(l,'Host '+x.host,'references '+x.references,''));
@@ -157,6 +211,7 @@ function renderMode(){
 }
 async function refresh(){
   EVENTS=await loadJson('scan-events.json',EVENTS);
+  PREFLIGHT=await loadJson('preflight-analysis.json',PREFLIGHT);
   NET=await loadJson('network-analysis.json',NET);
   const s=NET.summary||{};
   $('status').textContent=EVENTS.status||'idle';$('urls').textContent=s.urls||0;$('domains').textContent=s.domains||0;$('publicIps').textContent=s.publicIps||0;$('redirects').textContent=s.redirectHops||0;$('tls').textContent=s.tlsEndpoints||0;
