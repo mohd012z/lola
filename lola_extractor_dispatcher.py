@@ -13,12 +13,20 @@ from lola_office_html import convert as html_convert, matrix as html_matrix
 from lola_pdf_html_rich import pdf_rich, batch_convert
 from lola_pdf_ocr import capabilities as ocr_capabilities, readiness as ocr_readiness, ocr_pages, searchable_pdf\nfrom lola_code_inspector import run_mode as code_inspect
 from lola_code_integration import task as integration_task, merge_plan
+from lola_metatrader_bot import capabilities as mt_capabilities, bot as mt_bot, help_packet as mt_help
 
 def run(command,target=None,arg=None):
     cmd=(command or "").strip().lower()
     mod=resolve(cmd)
     if not mod:return {"ok":False,"error":"unknown command","command":command}
     if cmd=="/codecli":return {"ok":True,"modules":catalog()}
+    if cmd in ("/metatrader","/mt4","/mt5") and target is None:return {"ok":True,"metatrader":mt_capabilities()}
+    if cmd in ("/mtcheck","/mqlcheck","/mtcompile","/mqlcompile"):
+        if not target:return {"ok":False,"error":"MQL4/MQL5 source target required","help":mt_help(reason="missing source target")}
+        p=Path(target)
+        if not p.is_file():return {"ok":False,"error":"target is not a readable file","help":mt_help(target,"target unavailable")}
+        return {"ok":True,"metatrader":mt_bot(p,compile=cmd in ("/mtcompile","/mqlcompile"))}
+    if cmd=="/help":return {"ok":True,"help":mt_help(target,arg)}
     integration_cmds={"/codeidea","/codeintelligent","/codewrap","/codescriptidea","/codecompile","/compilecode","/codeextract","/extractcode","/codeconvert","/convertcode","/codeencrypt","/codedecrypt"}
     if cmd in integration_cmds:
         if not target:return {"ok":False,"error":"target required"}
