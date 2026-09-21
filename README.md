@@ -817,3 +817,176 @@ scan-events.json
 semgrep-report.html
 network-monitor.html
 ~~~
+
+
+## Before-scan anonymous/privacy preflight
+
+Lola now performs a **preflight analysis before the main Semgrep scan**.
+
+Order:
+
+~~~text
+/target
+   ↓
+target discovery + SHA-256 manifest
+   ↓
+URL/DNS inventory
+   ↓
+deep code analysis
+   ↓
+PRE-SCAN PRIVACY / ANONYMOUS PREFLIGHT
+   ↓
+Semgrep security scan
+   ↓
+post-scan modes / network analysis / final HTML
+~~~
+
+Generated pre-scan evidence:
+
+~~~text
+preflight-analysis.json
+~~~
+
+### Pre-scan views
+
+~~~text
+/preflight
+/viewextraction
+/viewurls
+/map
+/routes
+/api
+/keys
+/hiddentraces
+/hidemodes
+/hidelog
+/ipmirror
+/certs
+~~~
+
+These are available in both:
+- `network-monitor.html` during the scan
+- `semgrep-report.html` after the scan
+
+### /viewextraction
+Shows imports, functions, classes, environment/config reads and route declarations discovered before Semgrep.
+
+### /viewurls
+Shows source URLs, hosts, destination classification, status and final URLs when public resolution is enabled.
+
+### /map
+Shows the logical file → route/URL → host → DNS IP graph.
+
+During the pre-scan stage, the live monitor uses the preflight graph. After the main network analysis is ready, the richer network graph is available.
+
+### /routes
+Shows application route declarations with source file and line.
+
+### /api
+Detects API/client usage references such as:
+- `/api`
+- fetch
+- Axios
+- XMLHttpRequest
+- WebSocket
+- GraphQL/gRPC references
+- common API endpoint/base variables
+
+### /keys
+Shows password/token/key/credential **references only**.
+
+Values are:
+- masked, or
+- not collected.
+
+Private-key blocks are never copied into the report.
+
+### /hiddentraces
+Detection-only view for hidden/stealth-like code references such as private/incognito/background/hidden UI modes.
+
+It does not enable concealment.
+
+### /hidemodes
+Detection-only view for hidden/private/silent mode switches in application code.
+
+### /hidelog
+Detection-only view for code that appears to suppress, disable, truncate or clear logging/history.
+
+Lola does **not** use this to erase application, OS, browser, security or audit logs.
+
+### /ipmirror
+Mirrors application destination DNS/IP resolution:
+
+~~~text
+source URL → host → resolved IP(s) → destination class
+~~~
+
+It does not infer a user's physical location.
+
+### /certs
+Inventories certificate/key-container files with path, size and SHA-256.
+
+Optional public-certificate copy:
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\MyApp" -CopyPublicCerts
+~~~
+
+Copies are stored under:
+
+~~~text
+.lola-preflight\certs
+~~~
+
+Only public certificate formats are copied by the helper. Private-key containers are never copied.
+
+### Capture all source for local review
+
+Optional:
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\MyApp" -CaptureAllCode
+~~~
+
+Lola writes redacted source snapshots under:
+
+~~~text
+.lola-preflight\code
+~~~
+
+Password/token/key assignments and private-key material are redacted in the generated snapshot.
+
+This is intended for local review of a project you are authorized to inspect.
+
+### Event-log privacy
+
+To avoid keeping the Lola process-event JSON after a non-live scan:
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\MyApp" -NoPersistEvents
+~~~
+
+When the live monitor is enabled, the event file must exist temporarily so the browser can display progress.
+
+### Safe cleanup after completion
+
+Use:
+
+~~~powershell
+.\scan-security.ps1 "C:\Projects\MyApp" -CaptureAllCode -CleanupLolaTemp
+~~~
+
+`-CleanupLolaTemp` removes only Lola-generated temporary items:
+- `scan-events.json`
+- optional `.lola-preflight\code` redacted source snapshots
+
+It deliberately does **not** delete:
+- application logs
+- Windows/macOS/Linux system logs
+- browser history/logs
+- security/antivirus/EDR logs
+- audit trails
+- server access logs
+- target-project logs
+
+There is therefore no destructive `/deletelogs` feature. For privacy, Lola minimizes its own persistent temporary data instead of erasing external evidence.
