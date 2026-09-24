@@ -5,22 +5,44 @@ user-owned data encryption/decryption into one auditable task graph. Protected
 third-party binaries are never decrypted or bypassed.
 """
 from __future__ import annotations
-import hashlib, json, shutil
+import hashlib, json, platform, shutil
 from pathlib import Path
 from lola_universal_converter import detect, plan as conversion_plan, available_tools
 
 SOURCE={
- ".py":"python",".js":"javascript",".ts":"typescript",".tsx":"typescript",
- ".java":"java",".kt":"kotlin",".c":"c",".cpp":"cpp",".cc":"cpp",".cs":"csharp",
+ ".py":"python",".js":"javascript",".mjs":"javascript",".cjs":"javascript",
+ ".ts":"typescript",".tsx":"typescript",
+ ".java":"java",".kt":"kotlin",".c":"c",".h":"cpp",".cpp":"cpp",".cc":"cpp",".cxx":"cpp",".hpp":"cpp",
+ ".cs":"csharp",".vbs":"vbscript",".wsf":"vbscript",
  ".sh":"shell",".ps1":"powershell",".mq4":"mql4",".mq5":"mql5",".smali":"smali"
 }
-COMPILE={
- "python":["python -m py_compile"],
- "javascript":["node --check"],"typescript":["tsc --noEmit"],
- "java":["javac"],"kotlin":["kotlinc"],"c":["cc"],"cpp":["c++"],
- "csharp":["dotnet build"],"shell":["bash -n"],"powershell":["pwsh parser"],
- "mql4":["MetaEditor compile"],"mql5":["MetaEditor compile"],"smali":["smali assemble"]
-}
+
+def _available(tool_names):
+    out=[]
+    for name in tool_names:
+        path=shutil.which(name)
+        if path:
+            out.append({"tool":name,"path":path})
+    return out
+
+def runtime_inventory():
+    is_windows=platform.system().lower().startswith("win")
+    return {
+        "python":_available(["python","python3"]),
+        "javascript":_available(["node"]),
+        "typescript":_available(["tsc"]),
+        "java":_available(["javac"]),
+        "kotlin":_available(["kotlinc"]),
+        "c":_available(["cc","clang","gcc"]),
+        "cpp":_available(["g++","clang++","cl.exe","cl"]),
+        "csharp":_available(["dotnet"]),
+        "vbscript":_available(["cscript.exe","cscript"]) if is_windows else [],
+        "shell":_available(["bash"]),
+        "powershell":_available(["pwsh","powershell","powershell.exe"]),
+        "mql4":_available(["metaeditor64.exe","metaeditor.exe"]),
+        "mql5":_available(["metaeditor64.exe","metaeditor.exe"]),
+        "smali":_available(["smali"]),
+    }
 
 def sha256(path):
     h=hashlib.sha256()
@@ -34,14 +56,50 @@ def identify(path):
             "format":info,"sha256":sha256(p)}
 
 def compile_plan(path):
-    item=identify(path);lang=item["language"]
-    return {"supported":lang in COMPILE,"language":lang,"routes":COMPILE.get(lang,[]),
+    item=identify(path);lang=item["language"];inventory=runtime_inventory()
+    if lang=="cpp":
+        tools=inventory["cpp"]
+        route=[f'{x["tool"]} -fsyntax-only <file>' for x in tools if x["tool"] in ("g++","clang++")]
+        if any(x["tool"] in ("cl.exe","cl") for x in tools):route.append('cl /Zs <file>')
+        if item["extension"] in (".h",".hpp"):route.append("Header/static-only review when no translation unit is available")
+        return {"supported":bool(tools),"language":lang,"available":tools,"routes":route or ["No supported C++ compiler detected"],
+                "windowsOnly":False,
+                "note":"Plan only; detect g++, clang++, and MSVC without compiling unknown code automatically."}
+    if lang=="javascript":
+        tools=inventory["javascript"]
+        return {"supported":bool(tools),"language":lang,"available":tools,"routes":["node --check <file>"] if tools else ["Node.js not detected"],
+                "packageHints":["package.json","package-lock.json","npm-shrinkwrap.json","yarn.lock","pnpm-lock.yaml"],
+                "note":"Plan only; Node.js syntax checks and package metadata discovery only."}
+    if lang=="vbscript":
+        tools=inventory["vbscript"];windows=platform.system().lower().startswith("win")
+        return {"supported":bool(tools) and windows,"language":lang,"available":tools,"routes":["cscript //nologo <file>"] if tools and windows else [],
+                "windowsOnly":True,
+                "note":"VBScript support is Windows-only. Lola detects cscript but does not execute unknown scripts automatically." if windows else "VBScript is unsupported on this platform; use static inspection only."}
+    compile_map={
+        "python":{"tools":inventory["python"],"routes":["python -m py_compile <file>"]},
+        "typescript":{"tools":inventory["typescript"],"routes":["tsc --noEmit <file>"]},
+        "java":{"tools":inventory["java"],"routes":["javac <file>"]},
+        "kotlin":{"tools":inventory["kotlin"],"routes":["kotlinc <file>"]},
+        "c":{"tools":inventory["c"],"routes":["cc -fsyntax-only <file>","clang -fsyntax-only <file>","gcc -fsyntax-only <file>"]},
+        "csharp":{"tools":inventory["csharp"],"routes":["dotnet build"]},
+        "shell":{"tools":inventory["shell"],"routes":["bash -n <file>"]},
+        "powershell":{"tools":inventory["powershell"],"routes":["pwsh -NoProfile -Command [scriptblock]::Create(...)"]},
+        "mql4":{"tools":inventory["mql4"],"routes":["MetaEditor compile"]},
+        "mql5":{"tools":inventory["mql5"],"routes":["MetaEditor compile"]},
+        "smali":{"tools":inventory["smali"],"routes":["smali assemble"]},
+    }
+    meta=compile_map.get(lang,{"tools":[],"routes":[]})
+    return {"supported":bool(meta["tools"]),"language":lang,"available":meta["tools"],"routes":meta["routes"],
             "note":"Plan only; use the language's installed compiler in a controlled workspace."}
 
 def extraction_plan(path):
     p=Path(path);ext=p.suffix.lower()
     if ext in (".zip",".apk",".aab",".jar"):route=["bounded archive inventory","safe workspace extraction","recursive evidence"]
-    elif ext in SOURCE:route=["syntax/static source inspection","symbols/imports/calls","specialist checks"]
+    elif ext in SOURCE:
+        route=["syntax/static source inspection","symbols/imports/calls","specialist checks"]
+        if ext in (".js",".mjs",".cjs"):route.append("package.json + lockfile inventory")
+        if ext in (".cpp",".cc",".cxx",".h",".hpp"):route.append("compiler/include plan + build-file detection")
+        if ext in (".vbs",".wsf"):route.append("Windows Script Host/COM static marker review")
     elif ext in (".exe",".dll",".so",".elf"):route=["header/section inventory","strings/signatures","optional static native analysis"]
     else:route=["fingerprint","strings/signatures","bounded chunks","evidence export"]
     return {"route":route,"read_only":True,"target_execution":False}
