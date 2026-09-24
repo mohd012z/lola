@@ -1318,6 +1318,153 @@ python lola.py "C:\Projects\MyApp" --mode /anonymus --live-monitor
 
 You do not need to edit the Python file each time. Pass the target on the command line so paths with spaces and different APK/project locations are handled safely.
 
+## in_ai / MSA One local handoff adapter
+
+Lola now includes a versioned local handoff contract for **`mohd012z/in_ai`** and **MSA One / MSA Patcher**.
+
+- Contract in: `Lola-HandoffJob-1.0`
+- Contract out: `Lola-HandoffResult-1.0`
+- Entry points:
+  - `python lola.py --handoff-manifest HANDOFF.json`
+  - `python lola_handoff_adapter.py HANDOFF.json`
+
+The adapter is local-only:
+
+- no automatic uploads
+- no remote model/API calls
+- no secret collection
+- no DRM/license bypass
+- no stealth/concealment
+- no unauthorized APK patching or third-party app modification
+
+Unsupported work is marked **unsupported** in the result artifact instead of pretending to complete it.
+
+### Safe handoff job types
+
+```text
+coding
+office
+apk-creator
+development
+deep-dive
+security
+apk-analysis
+```
+
+- `development`, `coding`, `deep-dive`, and `security` can route to Lola's existing local project/security scan path.
+- `apk-analysis` can route to Lola's existing local APK analysis path.
+- `office` and `apk-creator` are accepted for provenance/manual workflow tracking, but Lola keeps them manual and returns an explicit unsupported/manual-only result.
+
+### Example handoff manifest from MSA One to Lola
+
+```json
+{
+  "schema": "Lola-HandoffJob-1.0",
+  "sender": {
+    "app": "msa_one",
+    "workflow": "manual-handoff"
+  },
+  "job": {
+    "id": "msa-dev-001",
+    "type": "development",
+    "target": {
+      "path": "C:\\Projects\\MyApp"
+    },
+    "notes": "Run the existing local Lola security/development scan only.",
+    "lola": {
+      "mode": "/360",
+      "options": {
+        "resolveUrls": true,
+        "noOpen": true
+      }
+    }
+  },
+  "researchBrief": {
+    "path": "C:\\handoff\\notebooklm-brief.md",
+    "format": "markdown"
+  },
+  "assistantConfig": {
+    "provider": "qwen-compatible",
+    "baseUrl": "http://127.0.0.1:8000/v1",
+    "model": "qwen2.5-coder-7b-instruct",
+    "apiKeyEnv": "QWEN_API_KEY"
+  },
+  "result": {
+    "path": "C:\\handoff\\lola-result.json"
+  }
+}
+```
+
+Run it manually:
+
+```powershell
+python lola.py --handoff-manifest "C:\handoff\msa-one-to-lola.json" --handoff-result "C:\handoff\lola-result.json"
+```
+
+or:
+
+```powershell
+python lola_handoff_adapter.py "C:\handoff\msa-one-to-lola.json" --result "C:\handoff\lola-result.json"
+```
+
+### Example APK handoff
+
+```json
+{
+  "schema": "Lola-HandoffJob-1.0",
+  "sender": {
+    "app": "in_ai",
+    "workflow": "manual-handoff"
+  },
+  "job": {
+    "id": "apk-001",
+    "type": "apk-analysis",
+    "target": {
+      "path": "C:\\Apps\\sample.apk"
+    },
+    "lola": {
+      "mode": "/apk360",
+      "checks": ["identity", "manifest", "permissions", "risk"],
+      "options": {
+        "noOpen": true
+      }
+    }
+  }
+}
+```
+
+This writes a structured local result artifact with:
+
+```text
+schema
+status
+warnings
+provenance
+startedAt / finishedAt / durationSeconds
+outputPaths
+resultPath
+```
+
+### Manual handoff back to in_ai
+
+1. Export a **NotebookLM-style research brief** manually to a local Markdown or JSON file.
+2. Point the manifest `researchBrief.path` at that local file.
+3. Run Lola locally with `--handoff-manifest`.
+4. Give the generated `Lola-HandoffResult-1.0` file back to `in_ai` manually.
+
+Lola records the research-brief path for provenance only. It does not upload the brief or fetch remote notebook content.
+
+### Optional Qwen-compatible configuration
+
+If you want `in_ai` to use a Qwen-compatible model, pass only explicit user configuration metadata in the manifest:
+
+- `provider`
+- `baseUrl`
+- `model`
+- `apiKeyEnv`
+
+Do **not** place raw API keys, tokens, or passwords in the handoff manifest. Lola records this configuration for manual workflow provenance only and does not contact the endpoint.
+
 
 ## Button-based desktop UI
 

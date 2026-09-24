@@ -66,6 +66,7 @@ COMMANDS = [
     {"id":"/ghidra","group":"Toolchain","label":"Ghidra 12.1.3","purpose":"Pinned checksum-verified desktop/native-binary analysis tool; requires JDK 25","platform":["Windows","Linux","macOS"],"cost":"very-high","tools":["java 25"],"outputs":[".lola-tools/ghidra"]},
     {"id":"/hermes","group":"Toolchain","label":"Hermes / hermesc","purpose":"Detect the target React Native project's matching Hermes compiler/runtime; no blind cross-version install","platform":["Android","Windows","Linux","macOS"],"cost":"low","tools":["project toolchain"],"outputs":[]},
     {"id":"/toolstatus","group":"Toolchain","label":"Tool Status","purpose":"Show managed/system/project-detected tool availability, path, version and Java compatibility","platform":["Android","Windows","Linux","macOS"],"cost":"low","tools":["python"],"outputs":[]},
+    {"id":"/handoff","group":"Integration","label":"in_ai / MSA One Handoff","purpose":"Validate a versioned local JSON handoff manifest, execute only Lola's authorized local analysis paths, and write a structured result artifact","platform":["Windows","Linux","macOS"],"cost":"low","tools":["python","PowerShell optional for source/project scans"],"outputs":["*.result.json"]},
 
     # Security
     {"id":"/360","group":"Security","label":"360 Overview","purpose":"Whole source/security surface","platform":["Windows","Linux"],"cost":"medium","tools":["semgrep","python"],"outputs":["semgrep-report.html"]},
@@ -149,7 +150,8 @@ FUNCTIONS = [
     {"id":"apk_runtime_monitor.py","group":"Runtime Function","label":"APK Runtime Observer","purpose":"Read-only ADB/logcat observer for an authorized installed/running package; no billing state changes or network interception","module":"apk_runtime_monitor.py","outputs":["runtime-analysis.json","runtime-events.jsonl"]},
     {"id":"frida_library.py","group":"Frida Function","label":"Frida Probe Library","purpose":"Built-in safe Frida modes, related-tool catalog and observation-only Java probes","module":"frida_library.py","outputs":[]},
     {"id":"frida_runtime.py","group":"Frida Function","label":"Frida Runtime Runner","purpose":"Attach-only authorized Frida runner supporting root/frida-server and non-root Gadget backends","module":"frida_runtime.py","outputs":["frida-analysis.json","frida-events.jsonl"]},
-    {"id":"lola_toolchain.py","group":"Toolchain Function","label":"Managed Toolchain","purpose":"Download/checksum/cache/status/remove pinned Apktool, Gradle and Ghidra and detect Hermes/JADX/Android SDK tools","module":"lola_toolchain.py","outputs":[".lola-tools/installed.json"]}
+    {"id":"lola_toolchain.py","group":"Toolchain Function","label":"Managed Toolchain","purpose":"Download/checksum/cache/status/remove pinned Apktool, Gradle and Ghidra and detect Hermes/JADX/Android SDK tools","module":"lola_toolchain.py","outputs":[".lola-tools/installed.json"]},
+    {"id":"lola_handoff_adapter.py","group":"Integration Function","label":"Handoff Adapter","purpose":"Run a versioned local handoff manifest for in_ai and MSA One without uploading files or executing unsupported APK patching","module":"lola_handoff_adapter.py","outputs":["*.result.json"]}
 ]
 
 STORAGE = {
@@ -165,6 +167,7 @@ STORAGE = {
     "runtimeEvents": ".lola-library/targets/<target-id>/runtime-events.jsonl",
     "fridaAnalysis": ".lola-library/targets/<target-id>/frida-analysis.json",
     "fridaEvents": ".lola-library/targets/<target-id>/frida-events.jsonl",
+    "handoffResult": ".lola-library/targets/<target-id>/handoff-results/<job-id>.result.json",
     "temporaryUpload": ".lola-mobile/uploads/",
     "targetId": "first 24 hex characters of the APK SHA-256"
 }
@@ -174,7 +177,7 @@ def _now() -> int:
 
 def _ensure():
     TARGET_DIR.mkdir(parents=True, exist_ok=True)
-    data={"version":2,"commands":COMMANDS,"functions":FUNCTIONS,"apkPlan":APK_PLAN,"storage":STORAGE,"targets":[]}
+    data={"version":3,"commands":COMMANDS,"functions":FUNCTIONS,"apkPlan":APK_PLAN,"storage":STORAGE,"targets":[]}
     if INDEX_FILE.exists():
         try:
             old=json.loads(INDEX_FILE.read_text(encoding="utf-8"))
