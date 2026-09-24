@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""
+r"""
 Lola master launcher.
 
 Examples:
@@ -210,6 +210,18 @@ def build_parser() -> argparse.ArgumentParser:
     # Shared output behavior
     p.add_argument("--cleanup", action="store_true")
     p.add_argument("--no-open", action="store_true")
+    p.add_argument(
+        "--handoff-validate",
+        help="Validate a local handoff contract v1.0 JSON manifest.",
+    )
+    p.add_argument(
+        "--handoff-run",
+        help="Execute a local handoff contract v1.0 JSON manifest.",
+    )
+    p.add_argument(
+        "--handoff-result",
+        help="Optional output path for handoff result JSON.",
+    )
 
     return p
 
@@ -217,6 +229,32 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+
+    if args.handoff_validate and args.handoff_run:
+        parser.error("--handoff-validate and --handoff-run cannot be used together.")
+
+    if args.handoff_validate or args.handoff_run:
+        if args.target_option or args.target_positional:
+            parser.error(
+                "Handoff commands cannot be combined with --target or positional targets."
+            )
+        from lola_handoff_adapter import (
+            execute_handoff_manifest,
+            handoff_exit_code,
+            validate_handoff_manifest,
+        )
+
+        if args.handoff_validate:
+            payload, code = validate_handoff_manifest(Path(args.handoff_validate))
+            print(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True))
+            return code
+
+        result = execute_handoff_manifest(
+            Path(args.handoff_run),
+            Path(args.handoff_result).resolve() if args.handoff_result else None,
+        )
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return handoff_exit_code(result)
 
     raw_target = args.target_option or args.target_positional
     if not raw_target:

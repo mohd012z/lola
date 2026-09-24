@@ -1318,6 +1318,106 @@ python lola.py "C:\Projects\MyApp" --mode /anonymus --live-monitor
 
 You do not need to edit the Python file each time. Pass the target on the command line so paths with spaces and different APK/project locations are handled safely.
 
+## MyAI ↔ Lola ↔ MSA One handoff workflow
+
+Lola now accepts a **local-only** handoff contract for interoperability with **MyAI** (`mohd012z/in_ai`) and **MSA One / MSA Patcher** (`mohd012z/msa_one`).
+
+### Stable local CLI adapter
+
+~~~powershell
+python lola.py --handoff-validate handoff-job.json
+python lola.py --handoff-run handoff-job.json --handoff-result handoff-result.json
+python lola_handoff_adapter.py validate handoff-job.json
+python lola_handoff_adapter.py run handoff-job.json --result handoff-result.json
+~~~
+
+The handoff contract is versioned with:
+
+- `contractVersion: "1.0"` in the job manifest
+- `contractVersion: "1.0"` in the result artifact
+
+### Required manifest fields
+
+~~~json
+{
+  "contractVersion": "1.0",
+  "jobId": "job-001",
+  "source": "myai",
+  "target": "lola",
+  "taskType": "security-scan",
+  "request": "Run Lola's local security scan only.",
+  "project": {
+    "id": "proj-1",
+    "name": "Demo",
+    "rootPath": "C:\\Projects\\Demo"
+  },
+  "selectedFiles": [
+    {
+      "path": "src/main.js",
+      "size": 1234,
+      "sha256": "optional-metadata-only"
+    }
+  ],
+  "options": {
+    "noOpen": true
+  },
+  "authorization": {
+    "confirmed": true,
+    "scope": "user-owned-or-authorized-project"
+  },
+  "createdAt": "2026-09-24T04:00:00Z"
+}
+~~~
+
+`selectedFiles` are **metadata only**. Paths must stay relative to `project.rootPath`; Lola rejects traversal such as `../secret.txt`.
+
+### Result fields
+
+Lola writes a JSON result containing:
+
+- `contractVersion`
+- `jobId`
+- `status` (`completed`, `failed`, `partial`, or `unsupported`)
+- `provider`
+- `summary`
+- `sections`
+- `findings`
+- `artifacts`
+- `warnings`
+- `provenance`
+- `createdAt`
+
+### Exact manual workflow
+
+1. In **MyAI** or **MSA One**, create the JSON handoff manifest locally.
+2. Set `target` to `lola`, confirm `authorization.confirmed`, and keep `selectedFiles` relative to `project.rootPath`.
+3. Run `python lola.py --handoff-validate handoff-job.json`.
+4. Run `python lola.py --handoff-run handoff-job.json --handoff-result handoff-result.json`.
+5. Review the local artifact paths listed in the Lola result.
+6. Import `handoff-result.json` back into **MyAI** or **MSA One** manually.
+
+### Supported behavior and limitations
+
+- Lola calls only existing **local** analysis routes for authorized `security-scan` and `deep-dive` jobs.
+- APK handoffs use existing APK analysis/report generation only.
+- `coding` and `development` return a safe **planning** result when Lola cannot honestly execute the request.
+- `office` and `apk-creator` return explicit `unsupported` results.
+- Lola does **not** automatically upload source code, manifests, APKs, or result files.
+- Lola does **not** collect raw secrets. Exported summaries/warnings are redacted for secret-like values.
+- Lola does **not** implement DRM or license bypass, concealment/stealth behavior, credential theft, arbitrary third-party APK modification, or destructive log deletion.
+
+### Platform and language notes
+
+- Project/folder `security-scan` and `deep-dive` routes still depend on the existing PowerShell-based scanner, so Linux/macOS may return a safe fallback plan instead of pretending success when that path is unavailable.
+- VBScript (`.vbs`, `.wsf`) support is **Windows-only** and planning/static-only outside Windows.
+- C++ coverage includes `.cpp`, `.cc`, `.cxx`, `.h`, and `.hpp` compile planning with `g++`, `clang++`, and MSVC detection where available.
+- Node.js coverage includes `.js`, `.mjs`, and `.cjs` identification plus `node --check` planning and package/lockfile inventory hints.
+
+### NotebookLM Markdown and Qwen boundaries
+
+- NotebookLM is treated as a **manual Markdown handoff** only. Export the research brief manually, then pass the file through your own workflow.
+- Qwen-compatible configuration must stay explicit and local to the user. Lola records only contract metadata and does not call remote providers on your behalf.
+
 
 ## Button-based desktop UI
 
