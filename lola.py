@@ -210,6 +210,14 @@ def build_parser() -> argparse.ArgumentParser:
     # Shared output behavior
     p.add_argument("--cleanup", action="store_true")
     p.add_argument("--no-open", action="store_true")
+    p.add_argument(
+        "--handoff-manifest",
+        help="Run a Lola-HandoffJob-1.0 manifest for in_ai / MSA One integration.",
+    )
+    p.add_argument(
+        "--handoff-result",
+        help="Optional output path for the Lola-HandoffResult-1.0 artifact.",
+    )
 
     return p
 
@@ -217,6 +225,19 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     parser = build_parser()
     args = parser.parse_args()
+
+    if args.handoff_manifest:
+        if args.target_option or args.target_positional:
+            parser.error("--handoff-manifest cannot be combined with --target or positional targets.")
+        from lola_handoff_adapter import execute_handoff_manifest, handoff_exit_code
+
+        result = execute_handoff_manifest(
+            Path(args.handoff_manifest),
+            Path(args.handoff_result) if args.handoff_result else None,
+        )
+        print("HANDOFF STATUS :", result.get("status"))
+        print("HANDOFF RESULT :", result.get("resultPath"))
+        return handoff_exit_code(result)
 
     raw_target = args.target_option or args.target_positional
     if not raw_target:
