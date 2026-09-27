@@ -36,6 +36,8 @@ jobs:
           for p,e in bad: print("FAIL",p,e)
           if bad: raise SystemExit(1)
           PY
+      - name: Run unit tests
+        run: python -m unittest discover -s tests -p "test_*.py" -v
       - name: Bot health
         if: always()
         run: python lola_bot_health.py . --output bot-health-report.json

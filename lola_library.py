@@ -66,6 +66,7 @@ COMMANDS = [
     {"id":"/ghidra","group":"Toolchain","label":"Ghidra 12.1.3","purpose":"Pinned checksum-verified desktop/native-binary analysis tool; requires JDK 25","platform":["Windows","Linux","macOS"],"cost":"very-high","tools":["java 25"],"outputs":[".lola-tools/ghidra"]},
     {"id":"/hermes","group":"Toolchain","label":"Hermes / hermesc","purpose":"Detect the target React Native project's matching Hermes compiler/runtime; no blind cross-version install","platform":["Android","Windows","Linux","macOS"],"cost":"low","tools":["project toolchain"],"outputs":[]},
     {"id":"/toolstatus","group":"Toolchain","label":"Tool Status","purpose":"Show managed/system/project-detected tool availability, path, version and Java compatibility","platform":["Android","Windows","Linux","macOS"],"cost":"low","tools":["python"],"outputs":[]},
+    {"id":"/handoff","group":"System","label":"Handoff Adapter","purpose":"Validate or run a versioned local MyAI/MSA One handoff contract without uploading source or collecting secrets","platform":["Windows","Linux","macOS"],"cost":"low","tools":["python"],"outputs":["*.result.json"]},
 
     # Security
     {"id":"/360","group":"Security","label":"360 Overview","purpose":"Whole source/security surface","platform":["Windows","Linux"],"cost":"medium","tools":["semgrep","python"],"outputs":["semgrep-report.html"]},

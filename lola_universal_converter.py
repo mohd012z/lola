@@ -9,11 +9,11 @@ import ast, json, shutil
 from pathlib import Path
 
 TEXT_EXT={".txt",".md",".log",".csv",".json",".xml",".svg",".css",".html",".htm",
-          ".py",".js",".ts",".java",".c",".h",".cpp",".hpp",".cs",".vb",".vbs",
+          ".py",".js",".mjs",".cjs",".ts",".java",".c",".h",".cpp",".cc",".cxx",".hpp",".cs",".vb",".vbs",".wsf",
           ".sh",".ps1",".mq4",".mq5",".smali"}
-SOURCE_EXT={".py":"python",".js":"javascript",".ts":"typescript",".java":"java",
-            ".c":"c",".h":"c-header",".cpp":"cpp",".hpp":"cpp-header",".cs":"csharp",
-            ".vb":"visual-basic",".vbs":"vbscript",".sh":"shell",".ps1":"powershell",
+SOURCE_EXT={".py":"python",".js":"javascript",".mjs":"javascript",".cjs":"javascript",".ts":"typescript",".java":"java",
+            ".c":"c",".h":"cpp-header",".cpp":"cpp",".cc":"cpp",".cxx":"cpp",".hpp":"cpp-header",".cs":"csharp",
+            ".vb":"visual-basic",".vbs":"vbscript",".wsf":"vbscript",".sh":"shell",".ps1":"powershell",
             ".mq4":"mql4",".mq5":"mql5",".smali":"smali"}
 
 def detect(path):

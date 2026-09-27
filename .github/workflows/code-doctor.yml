@@ -73,6 +73,10 @@ jobs:
               raise SystemExit(1)
           PY
 
+      - name: Run unit tests
+        if: success() || failure()
+        run: python -m unittest discover -s tests -p "test_*.py" -v
+
       - name: Deep inspect Python paths and process launches
         if: success() || failure()
         run: python lola_python_path_doctor.py . --output python-path-report.json
