@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 from lola_provenance import derive_artifact
-from lola_security import TrustEnvelope, envelope
+from lola_security import TrustEnvelope, detect_flags, envelope
 from lola_security_contracts import ArtifactContext, Taint
 
 
@@ -22,6 +22,8 @@ class AnalyzerSecurityContext:
     trust: TrustEnvelope
 
     def metadata(self) -> dict[str, Any]:
+        text = self.trust.payload if isinstance(self.trust.payload, str) else repr(self.trust.payload)
+        reasons, risk_score = detect_flags(text)
         return {
             "artifact_id": self.artifact.artifact_id,
             "project_id": self.artifact.project_id,
@@ -32,9 +34,9 @@ class AnalyzerSecurityContext:
             "parent_content_hash": self.artifact.parent_content_hash,
             "transformation_chain": list(self.artifact.transformation_chain),
             "taints": sorted(x.value for x in self.artifact.taints),
-            "trust_state": self.trust.trust.value,
-            "risk_score": self.trust.risk_score,
-            "detector_reasons": list(self.trust.reasons),
+            "trust_state": self.trust.trust_level.value,
+            "risk_score": risk_score,
+            "detector_reasons": list(reasons),
         }
 
 
@@ -93,6 +95,7 @@ def secure_artifact(
         source_type,
         source_id,
         trusted=False,
+        externally_supplied=True,
     )
     return AnalyzerSecurityContext(artifact=artifact, trust=trust)
 
