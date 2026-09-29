@@ -47,3 +47,4 @@ jobs:
           tests/test_llm_security_protocol.py
           tests/test_llm_security_pipeline.py
           tests/test_llm_security_codegraph.py
+          tests/test_llm_security_evidence_chain.py
