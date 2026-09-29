@@ -73,9 +73,54 @@ jobs:
               raise SystemExit(1)
           PY
 
-      - name: Run unit tests
+      - name: Run unittest suite
         if: success() || failure()
         run: python -m unittest discover -s tests -p "test_*.py" -v
+
+      - name: Run LLM security pytest-style tests
+        if: success() || failure()
+        run: |
+          python - <<'PY'
+          import importlib.util
+          import inspect
+          import pathlib
+          import traceback
+
+          targets = [
+              pathlib.Path("tests/test_guardrail_analyzer.py"),
+              pathlib.Path("tests/test_llm_security_stage2.py"),
+          ]
+          failures = []
+          executed = 0
+          for path in targets:
+              if not path.exists():
+                  failures.append((str(path), "missing test module"))
+                  continue
+              spec = importlib.util.spec_from_file_location(path.stem, path)
+              module = importlib.util.module_from_spec(spec)
+              spec.loader.exec_module(module)
+              funcs = [
+                  (name, fn) for name, fn in inspect.getmembers(module, inspect.isfunction)
+                  if name.startswith("test_") and fn.__module__ == module.__name__
+              ]
+              if not funcs:
+                  failures.append((str(path), "no test_ functions discovered"))
+                  continue
+              for name, fn in funcs:
+                  executed += 1
+                  try:
+                      fn()
+                      print(f"PASS {path}:{name}")
+                  except Exception:
+                      failures.append((f"{path}:{name}", traceback.format_exc()))
+          print(f"LLM security tests executed: {executed}")
+          if executed < 8:
+              failures.append(("discovery", f"expected at least 8 LLM security tests, executed {executed}"))
+          if failures:
+              for name, error in failures:
+                  print(f"FAIL {name}\n{error}")
+              raise SystemExit(1)
+          PY
 
       - name: Deep inspect Python paths and process launches
         if: success() || failure()
