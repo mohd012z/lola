@@ -1,0 +1,8 @@
+{
+  "schema": "lola.guardrail.release-threshold/v1",
+  "status": "UNSET",
+  "policy": null,
+  "rationale": "Deliberately empty. Release thresholds are POLICY and are set in a separate reviewed change, only after the measured calibration distribution (fixtures/baseline_v1.measured.json) has been examined. Setting thresholds before measurement would tune the benchmark to a desired result. CI must not read this file as a gate while status is UNSET.",
+  "requires": "fixtures/baseline_v1.measured.json (status=MEASURED, total>0, both classes present)",
+  "history": []
+}

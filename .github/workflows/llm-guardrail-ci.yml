@@ -8,6 +8,8 @@ on:
     paths:
       - 'llm_security/**'
       - 'tests/test_llm_security_*.py'
+      - 'fixtures/**'
+      - 'scripts/llm_security_calibration_gate.py'
       - '.github/workflows/llm-guardrail-ci.yml'
 
 permissions:
@@ -41,4 +43,7 @@ jobs:
         run: python -m compileall -q llm_security
 
       - name: Run guardrail tests
-        run: python -m pytest -q tests/test_llm_security_regression.py tests/test_llm_security_protocol.py tests/test_llm_security_pipeline.py tests/test_llm_security_codegraph.py tests/test_llm_security_evidence_chain.py
+        run: python -m pytest -q tests/test_llm_security_regression.py tests/test_llm_security_protocol.py tests/test_llm_security_pipeline.py tests/test_llm_security_codegraph.py tests/test_llm_security_evidence_chain.py tests/test_llm_security_calibration.py
+
+      - name: Calibration corpus structural gate (no numeric thresholds)
+        run: python scripts/llm_security_calibration_gate.py
