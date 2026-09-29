@@ -4,7 +4,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .guardrail_analyzer import Analysis, analyse
-from .protocol import WorkerResult
+from .protocol import ProtocolError, WorkerResult
 
 
 @dataclass(frozen=True)
@@ -22,6 +22,13 @@ class SecondaryVerifier:
     def verify(self, results: list[WorkerResult]) -> tuple[float, tuple[str, ...]]:
         if not results:
             return 0.0, ()
+        try:
+            for result in results:
+                result.validate()
+        except ProtocolError as exc:
+            # Invalid secondary evidence cannot lower or authorize a decision.
+            # Escalate to REVIEW while preserving a non-sensitive reason.
+            return 0.30, (f"secondary:invalid_evidence:{type(exc).__name__}",)
         score = max(r.max_score for r in results)
         reasons = tuple(
             f"{finding.worker}:{finding.kind}@{finding.locator}"
