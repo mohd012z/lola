@@ -77,7 +77,7 @@ jobs:
         if: success() || failure()
         run: python -m unittest discover -s tests -p "test_*.py" -v
 
-      - name: Run LLM security pytest-style tests
+      - name: Run all LLM security pytest-style tests
         if: success() || failure()
         run: |
           python - <<'PY'
@@ -86,16 +86,18 @@ jobs:
           import pathlib
           import traceback
 
-          targets = [
-              pathlib.Path("tests/test_guardrail_analyzer.py"),
-              pathlib.Path("tests/test_llm_security_stage2.py"),
-          ]
+          targets = sorted(pathlib.Path("tests").glob("test_llm_security_*.py"))
+          guardrail = pathlib.Path("tests/test_guardrail_analyzer.py")
+          if guardrail.exists():
+              targets.insert(0, guardrail)
+
           failures = []
           executed = 0
+          modules = 0
+          if not targets:
+              failures.append(("discovery", "no LLM security test modules discovered"))
+
           for path in targets:
-              if not path.exists():
-                  failures.append((str(path), "missing test module"))
-                  continue
               spec = importlib.util.spec_from_file_location(path.stem, path)
               module = importlib.util.module_from_spec(spec)
               spec.loader.exec_module(module)
@@ -106,6 +108,7 @@ jobs:
               if not funcs:
                   failures.append((str(path), "no test_ functions discovered"))
                   continue
+              modules += 1
               for name, fn in funcs:
                   executed += 1
                   try:
@@ -113,9 +116,13 @@ jobs:
                       print(f"PASS {path}:{name}")
                   except Exception:
                       failures.append((f"{path}:{name}", traceback.format_exc()))
+
+          print(f"LLM security modules discovered: {modules}")
           print(f"LLM security tests executed: {executed}")
-          if executed < 8:
-              failures.append(("discovery", f"expected at least 8 LLM security tests, executed {executed}"))
+          if modules < 6:
+              failures.append(("discovery", f"expected at least 6 LLM security modules, discovered {modules}"))
+          if executed < 15:
+              failures.append(("discovery", f"expected at least 15 LLM security tests, executed {executed}"))
           if failures:
               for name, error in failures:
                   print(f"FAIL {name}\n{error}")
