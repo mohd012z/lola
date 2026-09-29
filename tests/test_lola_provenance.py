@@ -7,12 +7,13 @@ from lola_security_contracts import ArtifactContext, Taint, content_digest
 
 class ProvenanceTests(unittest.TestCase):
     def setUp(self):
+        binary_marker = "apk-content"
         self.root = ArtifactContext.from_payload(
             artifact_id="apk-1",
             project_id="project-1",
             source_type="APK",
             source_id="sample.apk",
-            payload=binary_marker := "apk-content",
+            payload=binary_marker,
             taints=frozenset({Taint.UNTRUSTED, Taint.EXTERNAL}),
         )
         self.assertEqual(self.root.content_hash, content_digest(binary_marker))
