@@ -296,3 +296,25 @@ def test_gate_script_passes_and_fails_on_drift(tmp_path):
     fresh2 = _measure(_cases())
     fresh2["corpus"]["sha256"] = "0" * 64
     assert "corpus.sha256" in baseline_drift(committed, fresh2)
+
+
+# --------------------------------------------------------------------------
+# Review artifact: calibration report (no raw prompt text, reproducible)
+# --------------------------------------------------------------------------
+
+def test_report_reproduces_and_never_leaks_corpus_text():
+    import subprocess
+    report = FIX / "calibration_report_v1.md"
+    before = report.read_text(encoding="utf-8")
+    ok = subprocess.run([sys.executable, str(ROOT / "scripts" / "llm_security_calibration_report.py")],
+                        capture_output=True, text=True, cwd=ROOT)
+    assert ok.returncode == 0, ok.stdout + ok.stderr
+    after = report.read_text(encoding="utf-8")
+    assert after == before  # committed report reproduces byte-for-byte
+    # no raw corpus text anywhere in the artifact
+    for c in _cases():
+        assert c.prompt not in after
+        assert c.prompt[:30] not in after
+    # it is explicitly a calibration artifact, not an authoritative benchmark
+    assert "not an authoritative production benchmark" in after
+    assert "status = UNSET" in after
