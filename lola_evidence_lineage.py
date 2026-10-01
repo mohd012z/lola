@@ -9,9 +9,9 @@ class EvidenceNode:
 
 class EvidenceLineageGraph:
     def __init__(self,nodes):
-        self.nodes={n.evidence_id:n for n in nodes}
-        if len(self.nodes)!=len(list(nodes)) if not isinstance(nodes,(list,tuple)) else False:
-            raise ValueError("duplicate evidence id")
+        materialized=tuple(nodes)
+        self.nodes={n.evidence_id:n for n in materialized}
+        if len(self.nodes)!=len(materialized): raise ValueError("duplicate evidence id")
         for n in self.nodes.values():
             for p in n.parent_ids:
                 if p not in self.nodes: raise ValueError("unknown evidence parent")
