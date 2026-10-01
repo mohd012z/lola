@@ -10,8 +10,9 @@ class AgentEpisodeTests(unittest.TestCase):
     def test_handoff_preserves_ancestry(self):
         ep=build_agent_episode([self._event("1","agent.handoff",{"handoff_id":"x","parent_agent":"kernel","child_agent":"build","requested_capability":"compile","inherited_evidence_ids":["e1","e2"],"inherited_assumptions":["a1"],"unresolved_unknowns":["u1"]})],"build","tr"); self.assertEqual(ep.handoffs[0].parent_agent,"kernel"); self.assertEqual(ep.handoffs[0].inherited_evidence_ids,("e1","e2"))
     def test_handoff_is_visible_to_child_even_when_event_agent_is_parent(self):
-        event=self._event("1","agent.handoff",{"handoff_id":"x","parent_agent":"kernel","child_agent":"build","inherited_evidence_ids":["e1"]},agent="kernel")
-        ep=build_agent_episode([event],"build","tr"); self.assertEqual(len(ep.handoffs),1)
+        event=self._event("1","agent.handoff",{"handoff_id":"x","parent_agent":"kernel","child_agent":"build","inherited_evidence_ids":["e1"]},agent="kernel"); ep=build_agent_episode([event],"build","tr"); self.assertEqual(len(ep.handoffs),1)
+    def test_parent_handoff_does_not_import_parent_failure_into_child(self):
+        events=[self._event("1","agent.handoff",{"handoff_id":"x","parent_agent":"kernel","child_agent":"build"},agent="kernel"),self._event("2","agent.failure",{"reason":"kernel failure"},agent="kernel",ts="2026-10-02T00:00:01+00:00")]; ep=build_agent_episode(events,"build","tr"); self.assertEqual(ep.failures,())
     def test_filters_foreign_agent_and_trace(self):
         events=[self._event("1","agent.failure",{"reason":"mine"}),self._event("2","agent.failure",{"reason":"other"},agent="repo"),self._event("3","agent.failure",{"reason":"trace"},trace="other")]; ep=build_agent_episode(events,"build","tr"); self.assertEqual([e["id"] for e in ep.events],["1"])
     def test_agent_complete_cannot_self_verify(self):
