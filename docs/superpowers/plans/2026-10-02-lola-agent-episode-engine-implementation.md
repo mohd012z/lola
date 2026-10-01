@@ -1,50 +1,36 @@
-# Lola Agent Episode Engine — Implementation Plan
+# Lola Agent Episode Engine — Implementation Plan / Ledger
 
 ## Binding specs
 - `docs/superpowers/specs/2026-10-02-lola-episode-engine-v2-design.md`
 - `docs/superpowers/specs/2026-10-02-lola-agent-episode-engine-design.md`
 
 ## Rollback baseline
-Green implementation checkpoint: `43c2eb3ed1ba9bf3cfc5048ab2a8c9ce1f98b85e`.
-Design-only commits after that checkpoint must not be treated as behavior verification.
+Green R3 checkpoint: `43c2eb3ed1ba9bf3cfc5048ab2a8c9ce1f98b85e`. Later design commits are not behavior verification.
 
-## Execution contract
-Each release follows RED -> GREEN -> regression. Preserve M0 as source of truth; no agent self-verification; no repetition-based independence inflation.
+## Invariants
+M0 remains source of truth. Agent self-report cannot verify itself. Repetition cannot inflate independence. Derived candidates have no execution authority. Counterexamples remain visible.
 
-## Status ledger
-- AEE-1 AgentEpisode replay: IMPLEMENTED, CI NOT YET VERIFIED.
-- AEE-2 Repeated Agent Experience: IMPLEMENTED, CI NOT YET VERIFIED.
-- AEE-3 ExperienceCompiler: IMPLEMENTED minimal deterministic core, deeper ancestry/transfer metrics pending, CI NOT YET VERIFIED.
-- AEE-4 AX/AR1/AP1: contextual candidate core IMPLEMENTED; aggregate AX builder pending, CI NOT YET VERIFIED.
-- AEE-5 Consolidation: separate agent governance boundary IMPLEMENTED; integration into legacy `lola_cognitive_learning.py` intentionally deferred until regression evidence is green.
-- EpisodeOrchestrator + typed EpisodeJoiner: IMPLEMENTED minimal deterministic core, CI NOT YET VERIFIED.
+## Implemented batches (pending CI verification)
+- AEE-1 `lola_agent_episode.py`: DecisionPoint/result separation, handoff ancestry, filtering, external verification, failure/recovery, unresolved decision handling.
+- AEE-2 `lola_repeated_episode.py`: deterministic fingerprints; SUCCESS/FAILURE/RECOVERY/STAGNATION/CONDITIONAL/ECHO pattern analysis; effective origin counting.
+- AEE-3 `lola_experience_compiler.py`: duplicate collapse, shared-origin collapse, deterministic pattern compilation, counterexample retention, no direct promotion.
+- AEE-4 `lola_agent_routing.py`: contextual capability components, AR1 advisory routing, AP1 anti-pattern candidates.
+- AEE-5 `lola_agent_consolidation.py`: independent-origin, recurrence, applicability and counterexample governance with explicit no-authority result.
+- Multi-engine: `lola_episode_orchestrator.py` + `lola_episode_joiner.py` compact deterministic projection dispatch and typed episode links.
 
-## AEE-1 — AgentEpisode replay
-Tests cover DecisionPoint snapshots/results, handoff ancestry, filtering, self-verification rejection, external verification, recovery order and unresolved decisions. Implementation: `lola_agent_episode.py`.
+## Rulings
+- Keep agent consolidation in a separate boundary until CI is green; modifying legacy `lola_cognitive_learning.py` before regression evidence would unnecessarily risk the verified R3 contract.
+- Treat a governance pass as candidate eligibility, never as memory truth or execution permission.
+- Keep context fingerprint deterministic and order-insensitive for collection-valued context fields.
+- Stagnation classification is explicit when any comparable episode is marked stagnated unless the whole cluster is a stronger echo/recovery/failure/success class.
 
-## AEE-2 — Repeated Agent Experience
-Tests cover deterministic context fingerprints, same-origin independence collapse, failure/recovery/echo pattern classification. Implementation: `lola_repeated_episode.py`.
-
-## AEE-3 — ExperienceCompiler
-Tests cover duplicate episode collapse, shared-origin collapse, deterministic output, counterexample retention and no direct memory promotion. Implementation: `lola_experience_compiler.py`.
-
-## AEE-4 — AX / AR1 / AP1
-Tests cover inspectable capability components, advisory routing and recovery-preserving anti-patterns. Implementation: `lola_agent_routing.py`.
-
-## AEE-5 — Consolidation integration
-Agent governance tests cover independence, unresolved counterexamples and execution-authority separation. Implementation: `lola_agent_consolidation.py`. Legacy consolidation integration remains gated on green CI to avoid disturbing the verified R3 boundary prematurely.
-
-## Multi-engine core
-`lola_episode_orchestrator.py` performs compact deterministic dispatch. `lola_episode_joiner.py` supports typed links and deliberately excludes voting semantics.
-
-## Final verification required before claiming behavior complete
-- JSON/schema validation where applicable.
-- `python -m compileall` for changed Python modules.
-- full unit suite.
-- repository smoke checks.
-- CI status and logs inspected.
-- compare branch against green baseline for unexpected deletions/API regressions.
-- final review of evidence lineage, permission boundary and backward compatibility.
+## Required verification before completion claim
+1. compile changed Python modules;
+2. run full unit suite including new agent/repeated/compiler/routing/governance/orchestrator/joiner tests;
+3. repository smoke checks;
+4. inspect CI jobs/logs;
+5. compare against green baseline for unexpected API deletion/regression;
+6. only then integrate deeper ancestry DAG/transfer metrics or legacy consolidation.
 
 ## Completion definition
-IMPLEMENTED + TESTED + BEHAVIOR VERIFIED + REGRESSION CHECKED. Current new implementation is NOT behavior-verified until CI executes green.
+IMPLEMENTED + TESTED + BEHAVIOR VERIFIED + REGRESSION CHECKED. Current code is implemented with test contracts but remains UNVERIFIED until CI executes.
