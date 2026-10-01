@@ -78,6 +78,35 @@ class CognitiveFabricTests(unittest.TestCase):
         self.fabric.registry.register("b", ["runtime.logs"], reliability=0.95)
         self.assertEqual("b", self.fabric.registry.select("runtime.logs")[0].source_id)
 
+    def test_trace_context_is_propagated_to_durable_event(self):
+        event = self.event(id="trace-event", trace_id="trace-1", span_id="span-1", parent_span_id="root")
+        self.fabric.ingest(event)
+        saved = self.fabric.events.replay("t1")[0]
+        self.assertEqual("trace-1", saved["trace_id"])
+        self.assertEqual("span-1", saved["span_id"])
+        self.assertEqual("root", saved["parent_span_id"])
+
+    def test_rank_unknowns_prefers_high_information_low_cost_probe(self):
+        state = self.fabric.state("t1")
+        state.unknowns.update({"artifact.packaged", "runtime.visible"})
+        self.fabric.registry.register("artifact", ["artifact.packaged"], reliability=0.98)
+        self.fabric.registry.register("runtime", ["runtime.visible"], reliability=0.80)
+        ranked = self.fabric.rank_unknowns("t1", costs={"artifact.packaged": 0.1, "runtime.visible": 0.8})
+        self.assertEqual("artifact.packaged", ranked[0]["unknown"])
+        self.assertGreater(ranked[0]["score"], ranked[1]["score"])
+
+    def test_hypothesis_requires_evidence_before_verification(self):
+        self.fabric.propose_hypothesis("t1", "h1", "artifact packaging failed", predicts={"pipeline.artifact": False})
+        self.assertNotIn("h1", self.fabric.snapshot("t1")["verified_claims"])
+        self.fabric.ingest(self.event(
+            id="artifact-false",
+            topic="evidence.artifact",
+            payload={"entity": "pipeline", "property": "artifact", "value": False},
+        ))
+        result = self.fabric.evaluate_hypothesis("t1", "h1")
+        self.assertEqual("SUPPORTED", result["status"])
+        self.assertIn("h1", self.fabric.snapshot("t1")["verified_claims"])
+
 
 if __name__ == "__main__":
     unittest.main()
