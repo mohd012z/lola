@@ -65,6 +65,39 @@ class ProspectiveResultSelectionLockBindingTests(unittest.TestCase):
         lock["selection_lock_digest_sha256"] = _digest(lock)
         return lock
 
+    def _authorization(
+        self,
+        lock,
+        *,
+        anchor_sha=ANCHOR_SHA,
+        failure_sha="1" * 40,
+        selection_sha="2" * 40,
+    ):
+        authorization = {
+            "schema_version": "prospective-repair-authorization-v1",
+            "registration_id": REGISTRATION_ID,
+            "phase": "REPAIR_AUTHORIZATION",
+            "status": "AUTHORIZED_AWAITING_REPAIR",
+            "preregistration_anchor_sha": anchor_sha,
+            "preregistration_seal_sha256": PREREGISTRATION_SEAL,
+            "failure_commit_sha": failure_sha,
+            "selection_lock_commit_sha": selection_sha,
+            "selection_lock_digest_sha256": lock["selection_lock_digest_sha256"],
+            "authorizer_id": "repair-authorizer-explicit",
+            "authorization_mode": "AUTOMATED_REPAIR",
+            "authorization_reason": "Repair the independently selected prospective holdout.",
+            "repair_authorized": True,
+            "automated_repair_authorized": True,
+            "repair_outcome": "UNKNOWN",
+            "fix_commit_sha": None,
+            "result_commit_sha": None,
+            "prospective_claim": False,
+            "blind_holdout_claim": False,
+            "production_world_claim": False,
+        }
+        authorization["repair_authorization_digest_sha256"] = _digest(authorization)
+        return authorization
+
     def _baseline(self):
         return {
             "task_id": "prospective-baseline",
@@ -97,7 +130,17 @@ class ProspectiveResultSelectionLockBindingTests(unittest.TestCase):
             "regression_failures": 0,
         }
 
-    def _result_evidence(self, lock, *, anchor_sha=ANCHOR_SHA, failure_sha="1" * 40):
+    def _result_evidence(
+        self,
+        lock,
+        authorization,
+        *,
+        anchor_sha=ANCHOR_SHA,
+        failure_sha="1" * 40,
+        selection_sha="2" * 40,
+        authorization_sha="3" * 40,
+        fix_sha="4" * 40,
+    ):
         evidence = {
             "schema_version": "prospective-result-evidence-v1",
             "registration_id": REGISTRATION_ID,
@@ -106,9 +149,13 @@ class ProspectiveResultSelectionLockBindingTests(unittest.TestCase):
             "preregistration_anchor_sha": anchor_sha,
             "preregistration_seal_sha256": PREREGISTRATION_SEAL,
             "selection_lock_digest_sha256": lock["selection_lock_digest_sha256"],
+            "repair_authorization_digest_sha256": authorization[
+                "repair_authorization_digest_sha256"
+            ],
             "failure_commit_sha": failure_sha,
-            "selection_lock_commit_sha": "2" * 40,
-            "fix_commit_sha": "3" * 40,
+            "selection_lock_commit_sha": selection_sha,
+            "repair_authorization_commit_sha": authorization_sha,
+            "fix_commit_sha": fix_sha,
             "repair_outcome": "VERIFIED",
             "after_evidence_refs": ["ci:after-run-456"],
             "baseline": self._baseline(),
@@ -122,6 +169,7 @@ class ProspectiveResultSelectionLockBindingTests(unittest.TestCase):
 
     def _payload(self):
         lock = self._lock()
+        authorization = self._authorization(lock)
         baseline = self._baseline()
         learned = self._learned()
         return {
@@ -133,13 +181,16 @@ class ProspectiveResultSelectionLockBindingTests(unittest.TestCase):
             "selection": dict(lock["selection"]),
             "selection_lock_path": "evidence/prospective-selection-lock.json",
             "selection_lock_artifact": lock,
+            "repair_authorization_path": "evidence/prospective-repair-authorization.json",
+            "repair_authorization_artifact": authorization,
             "result_evidence_path": "evidence/prospective-result-evidence.json",
-            "result_evidence_artifact": self._result_evidence(lock),
+            "result_evidence_artifact": self._result_evidence(lock, authorization),
             "chronology": {
                 "failure_commit_sha": "1" * 40,
                 "selection_lock_commit_sha": "2" * 40,
-                "fix_commit_sha": "3" * 40,
-                "result_commit_sha": "4" * 40,
+                "repair_authorization_commit_sha": "3" * 40,
+                "fix_commit_sha": "4" * 40,
+                "result_commit_sha": "5" * 40,
                 "git_ancestry_verified": True,
             },
             "baseline": baseline,
@@ -182,95 +233,152 @@ class ProspectiveResultSelectionLockBindingTests(unittest.TestCase):
         self.assertTrue(result["valid_contract"])
         self.assertTrue(result["prospective_claim"])
         self.assertTrue(result["selection_lock_verified"])
+        self.assertTrue(result["repair_authorization_verified"])
         self.assertTrue(result["result_evidence_verified"])
 
+    def _init_repo(self):
+        tmp = tempfile.TemporaryDirectory()
+        repo = Path(tmp.name)
+        subprocess.run(["git", "init", "-q", str(repo)], check=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True)
+        subprocess.run(["git", "-C", str(repo), "config", "user.name", "LOLA Test"], check=True)
+        return tmp, repo
+
+    def _commit(self, repo, label, files=None):
+        (repo / "state.txt").write_text(label, encoding="utf-8")
+        if files:
+            for relpath, content in files.items():
+                path = repo / relpath
+                path.parent.mkdir(parents=True, exist_ok=True)
+                path.write_text(
+                    json.dumps(content, indent=2, sort_keys=True) + "\n",
+                    encoding="utf-8",
+                )
+        subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+        subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", label], check=True)
+        return subprocess.check_output(
+            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
+        ).strip()
+
+    def _finish_chain(self, repo, anchor, failure, selection_commit, valid_lock):
+        authorization = self._authorization(
+            valid_lock,
+            anchor_sha=anchor,
+            failure_sha=failure,
+            selection_sha=selection_commit,
+        )
+        authorization_commit = self._commit(
+            repo,
+            "authorization",
+            {"evidence/prospective-repair-authorization.json": authorization},
+        )
+        fix = self._commit(repo, "fix")
+        evidence = self._result_evidence(
+            valid_lock,
+            authorization,
+            anchor_sha=anchor,
+            failure_sha=failure,
+            selection_sha=selection_commit,
+            authorization_sha=authorization_commit,
+            fix_sha=fix,
+        )
+        result_commit = self._commit(
+            repo,
+            "result",
+            {"evidence/prospective-result-evidence.json": evidence},
+        )
+        return authorization, authorization_commit, fix, result_commit, evidence
+
+    def _production_payload(
+        self,
+        anchor,
+        failure,
+        selection_commit,
+        authorization_commit,
+        fix,
+        result_commit,
+        valid_lock,
+        authorization,
+        evidence,
+    ):
+        payload = self._payload()
+        payload["preregistration_anchor_sha"] = anchor
+        payload["selection_lock_artifact"] = valid_lock
+        payload["repair_authorization_artifact"] = authorization
+        payload["result_evidence_artifact"] = evidence
+        payload["chronology"] = {
+            "failure_commit_sha": failure,
+            "selection_lock_commit_sha": selection_commit,
+            "repair_authorization_commit_sha": authorization_commit,
+            "fix_commit_sha": fix,
+            "result_commit_sha": result_commit,
+            "git_ancestry_verified": True,
+        }
+        return payload
+
     def test_production_missing_lock_at_selection_commit_is_invalid(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            repo = Path(tmp)
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
-            subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True)
-            subprocess.run(["git", "-C", str(repo), "config", "user.name", "LOLA Test"], check=True)
-
-            def commit(label):
-                (repo / "state.txt").write_text(label, encoding="utf-8")
-                subprocess.run(["git", "-C", str(repo), "add", "state.txt"], check=True)
-                subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", label], check=True)
-                return subprocess.check_output(
-                    ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
-                ).strip()
-
-            anchor = commit("anchor")
-            failure = commit("failure")
-            selection_commit = commit("selection-without-lock")
-            fix = commit("fix")
-            result_commit = commit("result")
-
-            payload = self._payload()
-            payload["preregistration_anchor_sha"] = anchor
-            payload["selection_lock_artifact"] = self._lock(failure, anchor_sha=anchor)
-            payload["chronology"] = {
-                "failure_commit_sha": failure,
-                "selection_lock_commit_sha": selection_commit,
-                "fix_commit_sha": fix,
-                "result_commit_sha": result_commit,
-                "git_ancestry_verified": True,
-            }
+        tmp, repo = self._init_repo()
+        try:
+            anchor = self._commit(repo, "anchor")
+            failure = self._commit(repo, "failure")
+            valid_lock = self._lock(failure, anchor_sha=anchor)
+            selection_commit = self._commit(repo, "selection-without-lock")
+            authorization, authorization_commit, fix, result_commit, evidence = self._finish_chain(
+                repo, anchor, failure, selection_commit, valid_lock
+            )
+            payload = self._production_payload(
+                anchor,
+                failure,
+                selection_commit,
+                authorization_commit,
+                fix,
+                result_commit,
+                valid_lock,
+                authorization,
+                evidence,
+            )
 
             with patch("lola_prospective_result.ANCHOR_SHA", anchor):
                 outcome = evaluate_prospective_result(payload, repository_root=repo)
+        finally:
+            tmp.cleanup()
 
         self.assertFalse(outcome["valid_contract"])
         self.assertFalse(outcome["prospective_claim"])
         self.assertIn("selection_lock_artifact_not_found_at_selection_commit", outcome["reasons"])
 
     def test_production_uses_committed_lock_not_embedded_copy(self):
-        with tempfile.TemporaryDirectory() as tmp:
-            repo = Path(tmp)
-            subprocess.run(["git", "init", "-q", str(repo)], check=True)
-            subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True)
-            subprocess.run(["git", "-C", str(repo), "config", "user.name", "LOLA Test"], check=True)
-
-            def commit(label, extra_path=None, extra_payload=None):
-                (repo / "state.txt").write_text(label, encoding="utf-8")
-                if extra_path is not None:
-                    path = repo / extra_path
-                    path.parent.mkdir(parents=True, exist_ok=True)
-                    path.write_text(
-                        json.dumps(extra_payload, indent=2, sort_keys=True) + "\n",
-                        encoding="utf-8",
-                    )
-                subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
-                subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", label], check=True)
-                return subprocess.check_output(
-                    ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
-                ).strip()
-
-            anchor = commit("anchor")
-            failure = commit("failure")
+        tmp, repo = self._init_repo()
+        try:
+            anchor = self._commit(repo, "anchor")
+            failure = self._commit(repo, "failure")
             valid_lock = self._lock(failure, anchor_sha=anchor)
             tampered_lock = json.loads(json.dumps(valid_lock))
             tampered_lock["selection"]["surface"] = "source"
-            selection_commit = commit(
+            selection_commit = self._commit(
+                repo,
                 "selection-with-tampered-lock",
-                "evidence/prospective-selection-lock.json",
-                tampered_lock,
+                {"evidence/prospective-selection-lock.json": tampered_lock},
             )
-            fix = commit("fix")
-            result_commit = commit("result")
-
-            payload = self._payload()
-            payload["preregistration_anchor_sha"] = anchor
-            payload["selection_lock_artifact"] = valid_lock
-            payload["chronology"] = {
-                "failure_commit_sha": failure,
-                "selection_lock_commit_sha": selection_commit,
-                "fix_commit_sha": fix,
-                "result_commit_sha": result_commit,
-                "git_ancestry_verified": True,
-            }
+            authorization, authorization_commit, fix, result_commit, evidence = self._finish_chain(
+                repo, anchor, failure, selection_commit, valid_lock
+            )
+            payload = self._production_payload(
+                anchor,
+                failure,
+                selection_commit,
+                authorization_commit,
+                fix,
+                result_commit,
+                valid_lock,
+                authorization,
+                evidence,
+            )
 
             with patch("lola_prospective_result.ANCHOR_SHA", anchor):
                 outcome = evaluate_prospective_result(payload, repository_root=repo)
+        finally:
+            tmp.cleanup()
 
         self.assertFalse(outcome["valid_contract"])
         self.assertFalse(outcome["prospective_claim"])
