@@ -65,6 +65,7 @@ class ProspectiveEligibilityReviewCliTests(unittest.TestCase):
                 "run_started_at": "2026-10-02T10:00:00Z",
                 "updated_at": "2026-10-02T10:01:00Z",
                 "attempt_api_url": observation["workflow_run"]["attempt_api_url"],
+                "git_ancestry_verified": True,
             }
             census = {
                 "schema_version": "prospective-event-census-v1",
