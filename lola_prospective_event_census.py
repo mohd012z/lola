@@ -20,6 +20,9 @@ _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _REVIEWABLE_CONCLUSIONS = frozenset(
     {"failure", "timed_out", "startup_failure", "action_required", "cancelled"}
 )
+_WATCHED_WORKFLOWS = frozenset(
+    {"Toolchain smoke check", "Lola Code Doctor", "Lola Bot Health"}
+)
 
 
 def _canonical_digest(value: Mapping[str, Any]) -> str:
@@ -46,6 +49,9 @@ def _event_key(event: Mapping[str, Any]) -> str | None:
 
 
 def _normalize_run(run: Mapping[str, Any]) -> dict[str, Any] | None:
+    workflow_name = str(run.get("name") or "")
+    if workflow_name not in _WATCHED_WORKFLOWS:
+        return None
     conclusion = str(run.get("conclusion") or "")
     if conclusion not in _REVIEWABLE_CONCLUSIONS:
         return None
@@ -69,7 +75,7 @@ def _normalize_run(run: Mapping[str, Any]) -> dict[str, Any] | None:
         "run_id": run_id,
         "run_attempt": attempt,
         "head_sha": head_sha,
-        "workflow_name": str(run.get("name") or ""),
+        "workflow_name": workflow_name,
         "conclusion": conclusion,
         "run_started_at": started,
         "updated_at": run.get("updated_at"),
@@ -204,8 +210,8 @@ def validate_event_census(
         seen_keys.add(key)
         if not _SHA40.fullmatch(str(item.get("head_sha") or "")):
             reasons.append("event_census_head_sha_invalid")
-        if not str(item.get("workflow_name") or "").strip():
-            reasons.append("event_census_workflow_missing")
+        if str(item.get("workflow_name") or "") not in _WATCHED_WORKFLOWS:
+            reasons.append("event_census_workflow_invalid")
         if str(item.get("conclusion") or "") not in _REVIEWABLE_CONCLUSIONS:
             reasons.append("event_census_conclusion_invalid")
         if not str(item.get("attempt_api_url") or "").strip():
