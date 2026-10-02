@@ -1,0 +1,49 @@
+name: Prospective holdout observer
+
+on:
+  workflow_run:
+    workflows: ["Toolchain smoke check", "Lola Code Doctor"]
+    types: [completed]
+
+permissions:
+  contents: read
+
+jobs:
+  observe-failure:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted observer code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Fetch failed commit as ancestry evidence only
+        env:
+          FAILED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          git fetch --no-tags origin "$FAILED_SHA"
+          git cat-file -e "$FAILED_SHA^{commit}"
+
+      - name: Observe failed workflow without selecting or repairing
+        run: |
+          python lola.py \
+            --prospective-holdout-observe "$GITHUB_EVENT_PATH" \
+            --holdout-observation-output prospective-holdout-observation.json
+
+      - name: Upload review-only observation
+        if: ${{ hashFiles('prospective-holdout-observation.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: prospective-holdout-observation-${{ github.event.workflow_run.id }}
+          path: prospective-holdout-observation.json
+          if-no-files-found: error
+          retention-days: 30
