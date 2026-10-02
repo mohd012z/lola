@@ -118,6 +118,15 @@ def observe_workflow_event(
         result["reason"] = "workflow_conclusion_not_reviewable"
         return result
 
+    run_attempt = workflow_run.get("run_attempt")
+    if isinstance(run_attempt, bool) or not isinstance(run_attempt, int) or run_attempt < 1:
+        result = _base("IGNORED_INVALID_EVENT")
+        result["preregistration_anchor_sha"] = expected_anchor_sha
+        result["failure_commit_sha"] = head_sha
+        result["git_ancestry_verified"] = False
+        result["reason"] = "workflow_run_attempt_invalid"
+        return result
+
     repo = Path(repository_root).resolve()
     ancestry_verified = _strictly_after_anchor(repo, expected_anchor_sha, head_sha)
     if not ancestry_verified:
@@ -130,7 +139,12 @@ def observe_workflow_event(
 
     run_id = workflow_run.get("id")
     run_url = str(workflow_run.get("html_url") or "")
-    evidence_ref = run_url.strip() or f"github-actions-run:{run_id}"
+    run_api_url = str(workflow_run.get("url") or "").strip()
+    attempt_api_url = (
+        f"{run_api_url.rstrip('/')}/attempts/{run_attempt}"
+        if run_api_url
+        else f"github-actions-run:{run_id}:attempt:{run_attempt}"
+    )
 
     result: dict[str, Any] = _base("OBSERVED_REVIEW_REQUIRED")
     result.update(
@@ -142,16 +156,19 @@ def observe_workflow_event(
             "source": "github_workflow_run",
             "workflow_run": {
                 "id": run_id,
+                "run_attempt": run_attempt,
                 "name": str(workflow_run.get("name") or ""),
                 "head_branch": str(workflow_run.get("head_branch") or ""),
                 "trigger_event": str(workflow_run.get("event") or ""),
                 "status": str(workflow_run.get("status") or ""),
                 "conclusion": conclusion,
                 "run_url": run_url,
+                "run_api_url": run_api_url,
+                "attempt_api_url": attempt_api_url,
                 "run_started_at": workflow_run.get("run_started_at"),
                 "updated_at": workflow_run.get("updated_at"),
             },
-            "before_evidence_refs": [evidence_ref],
+            "before_evidence_refs": [attempt_api_url],
             "review_fields": {field: None for field in _REVIEW_FIELDS},
             "repair_outcome": "UNKNOWN",
             "observer_boundary": (
