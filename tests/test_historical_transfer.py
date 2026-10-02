@@ -1,9 +1,16 @@
+import json
+import subprocess
+import sys
 import unittest
+from pathlib import Path
 
 from lola_historical_transfer import (
     load_historical_transfer_fixture,
     run_historical_transfer_suite,
 )
+
+
+ROOT = Path(__file__).resolve().parents[1]
 
 
 class HistoricalTransferTests(unittest.TestCase):
@@ -67,6 +74,21 @@ class HistoricalTransferTests(unittest.TestCase):
         )
         self.assertFalse(result["holdout"]["growth"]["passed"])
         self.assertFalse(result["historical_transfer_claim"])
+
+    def test_cli_runs_historical_transfer_without_target(self):
+        proc = subprocess.run(
+            [sys.executable, str(ROOT / "lola.py"), "--historical-transfer-benchmark"],
+            cwd=ROOT,
+            capture_output=True,
+            text=True,
+            check=False,
+        )
+        self.assertEqual(proc.returncode, 0, proc.stderr or proc.stdout)
+        payload = json.loads(proc.stdout)
+        self.assertEqual(payload["mode"], "HISTORICAL-TRANSFER")
+        self.assertTrue(payload["historical_transfer_claim"])
+        self.assertFalse(payload["blind_holdout_claim"])
+        self.assertFalse(payload["production_world_claim"])
 
 
 if __name__ == "__main__":
