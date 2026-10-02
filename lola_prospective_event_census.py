@@ -1,21 +1,25 @@
 """Deterministic evidence census for LOLA's prospective first-eligible rule.
 
-The census is evidence-only.  It cannot decide semantic eligibility, select a
-holdout, authorize repair, or make a prospective claim.  Its job is narrower:
-prove which reviewable workflow events came before the candidate and require a
-digest-bound rejection verdict for every earlier event.
+The census is evidence-only. It cannot decide semantic eligibility, select a
+holdout, authorize repair, or make a prospective claim. It proves which
+reviewable GitHub Actions events existed through the candidate. Independent
+rejection verdicts for earlier events remain separate review inputs so the
+history census itself stays immutable/read-only.
 """
 from __future__ import annotations
 
 import hashlib
 import json
 import re
-from typing import Any, Mapping
+from typing import Any, Iterable, Mapping
 
 from lola_prospective_result import ANCHOR_SHA, PREREGISTRATION_SEAL, REGISTRATION_ID
 
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_REVIEWABLE_CONCLUSIONS = frozenset(
+    {"failure", "timed_out", "startup_failure", "action_required", "cancelled"}
+)
 
 
 def _canonical_digest(value: Mapping[str, Any]) -> str:
@@ -41,11 +45,109 @@ def _event_key(event: Mapping[str, Any]) -> str | None:
     return f"{started}|{run_id:020d}|{attempt:06d}"
 
 
+def _normalize_run(run: Mapping[str, Any]) -> dict[str, Any] | None:
+    conclusion = str(run.get("conclusion") or "")
+    if conclusion not in _REVIEWABLE_CONCLUSIONS:
+        return None
+    run_id = run.get("id")
+    attempt = run.get("run_attempt")
+    started = str(run.get("run_started_at") or "").strip()
+    if isinstance(run_id, bool) or not isinstance(run_id, int) or run_id < 1:
+        raise ValueError("workflow run id must be a positive integer")
+    if isinstance(attempt, bool) or not isinstance(attempt, int) or attempt < 1:
+        raise ValueError("workflow run attempt must be a positive integer")
+    if not started:
+        raise ValueError("workflow run start time is required")
+    head_sha = str(run.get("head_sha") or "")
+    if not _SHA40.fullmatch(head_sha):
+        raise ValueError("workflow run head sha must be 40 lowercase hex characters")
+    run_api_url = str(run.get("url") or "").strip()
+    if not run_api_url:
+        raise ValueError("workflow run API URL is required")
+
+    event = {
+        "run_id": run_id,
+        "run_attempt": attempt,
+        "head_sha": head_sha,
+        "workflow_name": str(run.get("name") or ""),
+        "conclusion": conclusion,
+        "run_started_at": started,
+        "updated_at": run.get("updated_at"),
+        "attempt_api_url": f"{run_api_url.rstrip('/')}/attempts/{attempt}",
+    }
+    key = _event_key(event)
+    if key is None:
+        raise ValueError("workflow run cannot be normalized")
+    event["event_key"] = key
+    return event
+
+
+def build_event_census(
+    workflow_runs: Iterable[Mapping[str, Any]],
+    *,
+    candidate_run_id: int,
+    candidate_run_attempt: int,
+    history_complete: bool,
+) -> dict[str, Any]:
+    """Build an immutable census from a complete read-only Actions history export."""
+
+    if history_complete is not True:
+        raise ValueError("workflow history must be complete through the candidate")
+    if isinstance(candidate_run_id, bool) or not isinstance(candidate_run_id, int) or candidate_run_id < 1:
+        raise ValueError("candidate run id must be a positive integer")
+    if (
+        isinstance(candidate_run_attempt, bool)
+        or not isinstance(candidate_run_attempt, int)
+        or candidate_run_attempt < 1
+    ):
+        raise ValueError("candidate run attempt must be a positive integer")
+
+    events = []
+    for run in workflow_runs:
+        if not isinstance(run, Mapping):
+            raise ValueError("workflow history entries must be objects")
+        event = _normalize_run(run)
+        if event is not None:
+            events.append(event)
+    events.sort(key=lambda item: item["event_key"])
+
+    candidate = next(
+        (
+            item
+            for item in events
+            if item["run_id"] == candidate_run_id
+            and item["run_attempt"] == candidate_run_attempt
+        ),
+        None,
+    )
+    if candidate is None:
+        raise ValueError("candidate workflow attempt is absent from reviewable history")
+
+    candidate_key = candidate["event_key"]
+    events_through_candidate = [item for item in events if item["event_key"] <= candidate_key]
+    census: dict[str, Any] = {
+        "schema_version": "prospective-event-census-v1",
+        "registration_id": REGISTRATION_ID,
+        "preregistration_anchor_sha": ANCHOR_SHA,
+        "preregistration_seal_sha256": PREREGISTRATION_SEAL,
+        "source": "github_actions_history",
+        "candidate_event_key": candidate_key,
+        "ordered_events": events_through_candidate,
+        "history_complete_through_candidate": True,
+        "prospective_claim": False,
+        "blind_holdout_claim": False,
+        "production_world_claim": False,
+    }
+    census["event_census_digest_sha256"] = _canonical_digest(census)
+    return census
+
+
 def validate_event_census(
     census: Mapping[str, Any],
     observation: Mapping[str, Any],
+    prior_event_verdicts: Any,
 ) -> dict[str, Any]:
-    """Validate ordering/accounting without deciding the candidate's semantics."""
+    """Validate immutable history plus separate rejection verdict accounting."""
 
     payload = dict(census)
     obs = dict(observation)
@@ -63,6 +165,8 @@ def validate_event_census(
         reasons.append("event_census_source_invalid")
     if payload.get("history_complete_through_candidate") is not True:
         reasons.append("event_census_history_incomplete")
+    if "prior_event_verdicts" in payload:
+        reasons.append("event_census_must_not_embed_review_verdicts")
     if payload.get("prospective_claim") is not False:
         reasons.append("event_census_prospective_claim_forbidden")
     if payload.get("blind_holdout_claim") is not False:
@@ -98,13 +202,12 @@ def validate_event_census(
             reasons.append("event_census_duplicate_event")
             continue
         seen_keys.add(key)
-        head_sha = str(item.get("head_sha") or "")
-        if not _SHA40.fullmatch(head_sha):
+        if not _SHA40.fullmatch(str(item.get("head_sha") or "")):
             reasons.append("event_census_head_sha_invalid")
         if not str(item.get("workflow_name") or "").strip():
             reasons.append("event_census_workflow_missing")
-        if not str(item.get("conclusion") or "").strip():
-            reasons.append("event_census_conclusion_missing")
+        if str(item.get("conclusion") or "") not in _REVIEWABLE_CONCLUSIONS:
+            reasons.append("event_census_conclusion_invalid")
         if not str(item.get("attempt_api_url") or "").strip():
             reasons.append("event_census_attempt_evidence_missing")
         normalized.append((key, item))
@@ -141,9 +244,8 @@ def validate_event_census(
                 break
 
     prior_keys = [key for key in keys if candidate_key and key < candidate_key]
-    verdicts_raw = payload.get("prior_event_verdicts")
-    verdicts = verdicts_raw if isinstance(verdicts_raw, list) else []
-    if not isinstance(verdicts_raw, list):
+    verdicts = prior_event_verdicts if isinstance(prior_event_verdicts, list) else []
+    if not isinstance(prior_event_verdicts, list):
         reasons.append("event_census_prior_verdicts_missing")
 
     verdict_map: dict[str, Mapping[str, Any]] = {}
@@ -168,8 +270,7 @@ def validate_event_census(
             reasons.append("prior_event_review_digest_invalid")
 
     if set(verdict_map) != set(prior_keys):
-        extra = set(verdict_map) - set(prior_keys)
-        if extra:
+        if set(verdict_map) - set(prior_keys):
             reasons.append("event_census_prior_verdict_scope_invalid")
 
     valid = not reasons
