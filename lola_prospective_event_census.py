@@ -2,7 +2,7 @@
 
 The census is evidence-only. It cannot decide semantic eligibility, select a
 holdout, authorize repair, or make a prospective claim. It proves which
-reviewable GitHub Actions events existed through the candidate. Independent
+reviewable GitHub Actions attempts existed through the candidate. Independent
 rejection verdicts for earlier events remain separate review inputs so the
 history census itself stays immutable/read-only.
 """
@@ -11,7 +11,9 @@ from __future__ import annotations
 import hashlib
 import json
 import re
-from typing import Any, Iterable, Mapping
+import subprocess
+from pathlib import Path
+from typing import Any, Callable, Iterable, Mapping
 
 from lola_prospective_result import ANCHOR_SHA, PREREGISTRATION_SEAL, REGISTRATION_ID
 
@@ -88,14 +90,98 @@ def _normalize_run(run: Mapping[str, Any]) -> dict[str, Any] | None:
     return event
 
 
+def _git_commit_exists(repo: Path, sha: str) -> bool:
+    if not _SHA40.fullmatch(sha):
+        return False
+    completed = subprocess.run(
+        ["git", "-C", str(repo), "cat-file", "-e", f"{sha}^{{commit}}"],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return completed.returncode == 0
+
+
+def _strictly_after_anchor(repo: Path, anchor_sha: str, head_sha: str) -> bool:
+    if not (_SHA40.fullmatch(anchor_sha) and _SHA40.fullmatch(head_sha)):
+        return False
+    if anchor_sha == head_sha:
+        return False
+    if not _git_commit_exists(repo, anchor_sha) or not _git_commit_exists(repo, head_sha):
+        raise ValueError("workflow history commit unavailable for ancestry verification")
+    completed = subprocess.run(
+        ["git", "-C", str(repo), "merge-base", "--is-ancestor", anchor_sha, head_sha],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    return completed.returncode == 0
+
+
+def expand_workflow_attempt_history(
+    workflow_runs: Iterable[Mapping[str, Any]],
+    *,
+    fetch_attempt: Callable[[int, int], Mapping[str, Any]],
+) -> list[dict[str, Any]]:
+    """Expand watched reruns so an earlier failed attempt cannot disappear.
+
+    GitHub's repository workflow-run listing exposes one run object with the
+    latest ``run_attempt``. For watched runs with multiple attempts, fetch each
+    exact attempt. Single-attempt runs are already complete and are copied
+    directly without an extra API request.
+    """
+
+    expanded: list[dict[str, Any]] = []
+    for raw in workflow_runs:
+        if not isinstance(raw, Mapping):
+            raise ValueError("workflow history entries must be objects")
+        run = dict(raw)
+        if str(run.get("name") or "") not in _WATCHED_WORKFLOWS:
+            continue
+        run_id = run.get("id")
+        max_attempt = run.get("run_attempt")
+        if isinstance(run_id, bool) or not isinstance(run_id, int) or run_id < 1:
+            raise ValueError("workflow run id must be a positive integer")
+        if (
+            isinstance(max_attempt, bool)
+            or not isinstance(max_attempt, int)
+            or max_attempt < 1
+        ):
+            raise ValueError("workflow run attempt must be a positive integer")
+
+        if max_attempt == 1:
+            expanded.append(run)
+            continue
+
+        for attempt in range(1, max_attempt + 1):
+            payload = fetch_attempt(run_id, attempt)
+            if not isinstance(payload, Mapping):
+                raise ValueError("workflow attempt response must be an object")
+            item = dict(payload)
+            if item.get("id") != run_id or item.get("run_attempt") != attempt:
+                raise ValueError("workflow attempt identity mismatch")
+            if str(item.get("name") or "") != str(run.get("name") or ""):
+                raise ValueError("workflow attempt name mismatch")
+            expanded.append(item)
+    return expanded
+
+
 def build_event_census(
     workflow_runs: Iterable[Mapping[str, Any]],
     *,
     candidate_run_id: int,
     candidate_run_attempt: int,
     history_complete: bool,
+    repository_root: Path | str | None = None,
+    expected_anchor_sha: str = ANCHOR_SHA,
+    trust_post_anchor_flag: bool = False,
 ) -> dict[str, Any]:
-    """Build an immutable census from a complete read-only Actions history export."""
+    """Build an immutable census from complete read-only Actions attempt history.
+
+    Production use must supply ``repository_root`` so every reviewable event is
+    checked against the sealed anchor in the local Git graph. The explicit
+    ``trust_post_anchor_flag`` exists only for isolated synthetic unit fixtures.
+    """
 
     if history_complete is not True:
         raise ValueError("workflow history must be complete through the candidate")
@@ -107,14 +193,27 @@ def build_event_census(
         or candidate_run_attempt < 1
     ):
         raise ValueError("candidate run attempt must be a positive integer")
+    if repository_root is None and trust_post_anchor_flag is not True:
+        raise ValueError("post-anchor Git ancestry verification is required")
+    if repository_root is not None and not _SHA40.fullmatch(expected_anchor_sha):
+        raise ValueError("expected anchor sha must be 40 lowercase hex characters")
 
-    events = []
+    repo = Path(repository_root).resolve() if repository_root is not None else None
+    events: list[dict[str, Any]] = []
     for run in workflow_runs:
         if not isinstance(run, Mapping):
             raise ValueError("workflow history entries must be objects")
         event = _normalize_run(run)
-        if event is not None:
-            events.append(event)
+        if event is None:
+            continue
+
+        if repo is not None:
+            if not _strictly_after_anchor(repo, expected_anchor_sha, event["head_sha"]):
+                continue
+            event["git_ancestry_verified"] = True
+        else:
+            event["git_ancestry_verified"] = True
+        events.append(event)
     events.sort(key=lambda item: item["event_key"])
 
     candidate = next(
@@ -127,7 +226,7 @@ def build_event_census(
         None,
     )
     if candidate is None:
-        raise ValueError("candidate workflow attempt is absent from reviewable history")
+        raise ValueError("candidate workflow attempt is absent from post-anchor reviewable history")
 
     candidate_key = candidate["event_key"]
     events_through_candidate = [item for item in events if item["event_key"] <= candidate_key]
@@ -214,6 +313,8 @@ def validate_event_census(
             reasons.append("event_census_workflow_invalid")
         if str(item.get("conclusion") or "") not in _REVIEWABLE_CONCLUSIONS:
             reasons.append("event_census_conclusion_invalid")
+        if item.get("git_ancestry_verified") is not True:
+            reasons.append("event_census_ancestry_not_verified")
         if not str(item.get("attempt_api_url") or "").strip():
             reasons.append("event_census_attempt_evidence_missing")
         normalized.append((key, item))
