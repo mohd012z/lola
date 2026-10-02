@@ -65,8 +65,65 @@ class ProspectiveResultSelectionLockBindingTests(unittest.TestCase):
         lock["selection_lock_digest_sha256"] = _digest(lock)
         return lock
 
+    def _baseline(self):
+        return {
+            "task_id": "prospective-baseline",
+            "family": "historical-preflight-validity",
+            "transfer_distance": 0,
+            "model_id": "kernel-historical-inspector-v2",
+            "hardware_id": "frozen-fixture-runtime",
+            "verified": True,
+            "false_solved": False,
+            "intellectual_level": 4,
+            "actions": 4,
+            "escalations": 0,
+            "external_ai_used": False,
+            "regression_failures": 0,
+        }
+
+    def _learned(self):
+        return {
+            "task_id": "prospective-holdout",
+            "family": "historical-preflight-validity",
+            "transfer_distance": 3,
+            "model_id": "kernel-historical-inspector-v2",
+            "hardware_id": "frozen-fixture-runtime",
+            "verified": True,
+            "false_solved": False,
+            "intellectual_level": 1,
+            "actions": 1,
+            "escalations": 0,
+            "external_ai_used": False,
+            "regression_failures": 0,
+        }
+
+    def _result_evidence(self, lock, *, anchor_sha=ANCHOR_SHA, failure_sha="1" * 40):
+        evidence = {
+            "schema_version": "prospective-result-evidence-v1",
+            "registration_id": REGISTRATION_ID,
+            "phase": "RESULT_EVIDENCE",
+            "status": "VERIFIED_RESULT_EVIDENCE",
+            "preregistration_anchor_sha": anchor_sha,
+            "preregistration_seal_sha256": PREREGISTRATION_SEAL,
+            "selection_lock_digest_sha256": lock["selection_lock_digest_sha256"],
+            "failure_commit_sha": failure_sha,
+            "selection_lock_commit_sha": "2" * 40,
+            "fix_commit_sha": "3" * 40,
+            "repair_outcome": "VERIFIED",
+            "after_evidence_refs": ["ci:after-run-456"],
+            "baseline": self._baseline(),
+            "learned": self._learned(),
+            "prospective_claim": False,
+            "blind_holdout_claim": False,
+            "production_world_claim": False,
+        }
+        evidence["result_evidence_digest_sha256"] = _digest(evidence)
+        return evidence
+
     def _payload(self):
         lock = self._lock()
+        baseline = self._baseline()
+        learned = self._learned()
         return {
             "schema_version": "prospective-transfer-result-v1",
             "registration_id": REGISTRATION_ID,
@@ -76,6 +133,8 @@ class ProspectiveResultSelectionLockBindingTests(unittest.TestCase):
             "selection": dict(lock["selection"]),
             "selection_lock_path": "evidence/prospective-selection-lock.json",
             "selection_lock_artifact": lock,
+            "result_evidence_path": "evidence/prospective-result-evidence.json",
+            "result_evidence_artifact": self._result_evidence(lock),
             "chronology": {
                 "failure_commit_sha": "1" * 40,
                 "selection_lock_commit_sha": "2" * 40,
@@ -83,34 +142,8 @@ class ProspectiveResultSelectionLockBindingTests(unittest.TestCase):
                 "result_commit_sha": "4" * 40,
                 "git_ancestry_verified": True,
             },
-            "baseline": {
-                "task_id": "prospective-baseline",
-                "family": "historical-preflight-validity",
-                "transfer_distance": 0,
-                "model_id": "kernel-historical-inspector-v2",
-                "hardware_id": "frozen-fixture-runtime",
-                "verified": True,
-                "false_solved": False,
-                "intellectual_level": 4,
-                "actions": 4,
-                "escalations": 0,
-                "external_ai_used": False,
-                "regression_failures": 0,
-            },
-            "learned": {
-                "task_id": "prospective-holdout",
-                "family": "historical-preflight-validity",
-                "transfer_distance": 3,
-                "model_id": "kernel-historical-inspector-v2",
-                "hardware_id": "frozen-fixture-runtime",
-                "verified": True,
-                "false_solved": False,
-                "intellectual_level": 1,
-                "actions": 1,
-                "escalations": 0,
-                "external_ai_used": False,
-                "regression_failures": 0,
-            },
+            "baseline": baseline,
+            "learned": learned,
         }
 
     def test_missing_selection_lock_binding_is_invalid(self):
@@ -149,6 +182,7 @@ class ProspectiveResultSelectionLockBindingTests(unittest.TestCase):
         self.assertTrue(result["valid_contract"])
         self.assertTrue(result["prospective_claim"])
         self.assertTrue(result["selection_lock_verified"])
+        self.assertTrue(result["result_evidence_verified"])
 
     def test_production_missing_lock_at_selection_commit_is_invalid(self):
         with tempfile.TemporaryDirectory() as tmp:
