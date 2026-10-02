@@ -1,9 +1,14 @@
+import io
 import json
 import subprocess
+import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
+from lola import main
 from lola_prospective_holdout import (
     ANCHOR_SHA,
     PREREGISTRATION_SEAL,
@@ -107,6 +112,33 @@ class ProspectiveHoldoutLockTests(unittest.TestCase):
             )
             self.assertFalse(verdict["valid_candidate"])
             self.assertIn("failure_not_after_anchor", verdict["reasons"])
+
+    def test_cli_rejects_candidate_without_real_ancestry_and_writes_no_lock(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            tmpdir = Path(tmp)
+            candidate_path = tmpdir / "candidate.json"
+            output_path = tmpdir / "selection-lock.json"
+            candidate_path.write_text(json.dumps(self._candidate()), encoding="utf-8")
+            stdout = io.StringIO()
+            with patch.object(
+                sys,
+                "argv",
+                [
+                    "lola.py",
+                    "--prospective-holdout-lock",
+                    str(candidate_path),
+                    "--holdout-lock-output",
+                    str(output_path),
+                ],
+            ):
+                with redirect_stdout(stdout):
+                    rc = main()
+
+        self.assertEqual(rc, 2)
+        payload = json.loads(stdout.getvalue())
+        self.assertFalse(payload["valid_candidate"])
+        self.assertIn("failure_not_after_anchor", payload["reasons"])
+        self.assertFalse(output_path.exists())
 
 
 if __name__ == "__main__":
