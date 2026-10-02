@@ -18,6 +18,7 @@ on:
       - "lola_historical_transfer.py"
       - "lola_prospective_prereg.py"
       - "lola_prospective_holdout.py"
+      - "lola_prospective_holdout_observer.py"
       - "lola_prospective_result.py"
       - "lola_toolchain.py"
       - "lola_handoff_adapter.py"
@@ -30,6 +31,7 @@ on:
       - "frida_runtime.py"
       - "tests/test_*.py"
       - ".github/workflows/toolchain-check.yml"
+      - ".github/workflows/prospective-holdout-observer.yml"
   pull_request:
     paths:
       - "toolchain.json"
@@ -47,6 +49,7 @@ on:
       - "lola_historical_transfer.py"
       - "lola_prospective_prereg.py"
       - "lola_prospective_holdout.py"
+      - "lola_prospective_holdout_observer.py"
       - "lola_prospective_result.py"
       - "lola_toolchain.py"
       - "lola_handoff_adapter.py"
@@ -59,6 +62,7 @@ on:
       - "frida_runtime.py"
       - "tests/test_*.py"
       - ".github/workflows/toolchain-check.yml"
+      - ".github/workflows/prospective-holdout-observer.yml"
   workflow_dispatch:
 
 jobs:
@@ -89,6 +93,7 @@ jobs:
             lola_historical_transfer.py \
             lola_prospective_prereg.py \
             lola_prospective_holdout.py \
+            lola_prospective_holdout_observer.py \
             lola_prospective_result.py \
             lola_cognitive_transaction.py \
             lola_toolchain.py \
