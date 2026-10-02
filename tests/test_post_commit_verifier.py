@@ -16,7 +16,7 @@ class PostCommitVerifierTests(unittest.TestCase):
 
     def test_readback_fingerprint_mismatch_fails(self):
         h=[{"knowledge_id":"k1","version":2,"state":"ACTIVE","fingerprint":"wrong"}]
-        r=verify_committed_knowledge(h,"k1",2,"expected_fingerprint="fp2")
+        r=verify_committed_knowledge(h,"k1",2,expected_fingerprint="fp2")
         self.assertEqual(r.status,"READBACK_MISMATCH")
 
 if __name__ == "__main__": unittest.main()
