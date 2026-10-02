@@ -17,6 +17,7 @@ on:
       - "lola_historical_replay.py"
       - "lola_historical_transfer.py"
       - "lola_prospective_prereg.py"
+      - "lola_prospective_holdout.py"
       - "lola_prospective_result.py"
       - "lola_toolchain.py"
       - "lola_handoff_adapter.py"
@@ -45,6 +46,7 @@ on:
       - "lola_historical_replay.py"
       - "lola_historical_transfer.py"
       - "lola_prospective_prereg.py"
+      - "lola_prospective_holdout.py"
       - "lola_prospective_result.py"
       - "lola_toolchain.py"
       - "lola_handoff_adapter.py"
@@ -86,6 +88,7 @@ jobs:
             lola_historical_replay.py \
             lola_historical_transfer.py \
             lola_prospective_prereg.py \
+            lola_prospective_holdout.py \
             lola_prospective_result.py \
             lola_cognitive_transaction.py \
             lola_toolchain.py \

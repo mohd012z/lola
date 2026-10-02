@@ -13,6 +13,7 @@ Examples:
     python lola.py --historical-replay-scanner-cwd
     python lola.py --historical-transfer-benchmark
     python lola.py --prospective-transfer-prereg
+    python lola.py --prospective-holdout-lock candidate.json --holdout-lock-output selection-lock.json
     python lola.py --prospective-transfer-result result.json
 """
 
@@ -235,6 +236,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate the sealed prospective transfer preregistration; this never claims success before holdout reveal.",
     )
     p.add_argument(
+        "--prospective-holdout-lock",
+        help="Validate the first eligible natural failure and create a pre-repair selection lock using real Git ancestry.",
+    )
+    p.add_argument(
+        "--holdout-lock-output",
+        help="Output JSON path for --prospective-holdout-lock. Written only when the candidate is valid.",
+    )
+    p.add_argument(
         "--prospective-transfer-result",
         help="Validate a Phase-B prospective transfer result using the sealed anchor and real local Git ancestry.",
     )
@@ -283,6 +292,8 @@ def main() -> int:
 
     if args.handoff_validate and args.handoff_run:
         parser.error("--handoff-validate and --handoff-run cannot be used together.")
+    if args.holdout_lock_output and not args.prospective_holdout_lock:
+        parser.error("--holdout-lock-output requires --prospective-holdout-lock.")
 
     special_modes = sum(
         bool(value)
@@ -294,6 +305,7 @@ def main() -> int:
             args.historical_replay_scanner_cwd,
             args.historical_transfer_benchmark,
             args.prospective_transfer_prereg,
+            args.prospective_holdout_lock,
             args.prospective_transfer_result,
             args.handoff_validate,
             args.handoff_run,
@@ -371,6 +383,42 @@ def main() -> int:
         result = validate_preregistration(load_preregistration())
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("valid") else 2
+
+    if args.prospective_holdout_lock:
+        if args.target_option or args.target_positional:
+            parser.error("--prospective-holdout-lock must run without target inputs.")
+        if not args.holdout_lock_output:
+            parser.error("--prospective-holdout-lock requires --holdout-lock-output.")
+        from lola_prospective_holdout import build_selection_lock, validate_holdout_candidate
+
+        candidate_path = Path(args.prospective_holdout_lock)
+        candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+        if not isinstance(candidate, dict):
+            result = {
+                "valid_candidate": False,
+                "status": "REJECTED_HOLDOUT_CANDIDATE",
+                "reasons": ["candidate_must_be_json_object"],
+                "prospective_claim": False,
+                "blind_holdout_claim": False,
+                "production_world_claim": False,
+            }
+            print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+            return 2
+
+        verdict = validate_holdout_candidate(candidate, repository_root=ROOT)
+        if not verdict.get("valid_candidate"):
+            print(json.dumps(verdict, indent=2, ensure_ascii=False, sort_keys=True))
+            return 2
+
+        lock = build_selection_lock(candidate, repository_root=ROOT)
+        output_path = Path(args.holdout_lock_output).expanduser().resolve()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(lock, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(json.dumps(lock, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0
 
     if args.prospective_transfer_result:
         if args.target_option or args.target_positional:
