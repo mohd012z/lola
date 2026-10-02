@@ -9,6 +9,7 @@ on:
       - "lola.py"
       - "lola_sovereign_runtime.py"
       - "lola_tiny_beast_benchmark.py"
+      - "lola_controlled_transfer_benchmark.py"
       - "lola_toolchain.py"
       - "lola_handoff_adapter.py"
       - "lola_code_integration.py"
@@ -28,6 +29,7 @@ on:
       - "lola.py"
       - "lola_sovereign_runtime.py"
       - "lola_tiny_beast_benchmark.py"
+      - "lola_controlled_transfer_benchmark.py"
       - "lola_toolchain.py"
       - "lola_handoff_adapter.py"
       - "lola_code_integration.py"
@@ -59,6 +61,7 @@ jobs:
             lola.py \
             lola_sovereign_runtime.py \
             lola_tiny_beast_benchmark.py \
+            lola_controlled_transfer_benchmark.py \
             lola_cognitive_transaction.py \
             lola_toolchain.py \
             lola_handoff_adapter.py \
@@ -77,5 +80,7 @@ jobs:
         run: python lola.py --cognitive-smoke
       - name: Tiny-to-Beast harness smoke test
         run: python lola.py --tiny-beast-smoke
+      - name: Controlled T2/T3 transfer benchmark
+        run: python lola.py --controlled-transfer-benchmark
       - name: Toolchain status smoke test
         run: python lola_toolchain.py status
