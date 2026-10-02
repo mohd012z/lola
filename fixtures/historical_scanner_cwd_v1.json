@@ -1,0 +1,29 @@
+{
+  "schema_version": "historical-replay-v1",
+  "source": {
+    "repository": "mohd012z/lola",
+    "path": "scan-security.ps1",
+    "before_sha": "66d9bd02d5b9ed195aaccf6d922b8b08d522505e",
+    "fix_sha": "6b1929f587050e378bfb4ae86817d7c9a9370e10",
+    "before_blob_sha": "f433e44786574a5fa3d9f54d2812f7cc48059af5",
+    "fixed_blob_sha": "9ace16e38bfce25668558d9f5d3e6a5cd612e032"
+  },
+  "incident": {
+    "family": "scanner-path-resolution",
+    "known_root_cause": "critical config/helper paths resolved against caller CWD instead of the scanner script directory",
+    "transfer_evidence": false
+  },
+  "critical_helpers": [
+    "resolve-urls.py",
+    "analyze-code.py",
+    "preflight-analyze.py"
+  ],
+  "before": {
+    "excerpt_sha256": "35febfd651498505e4f26ca24c48bc0a6f7a15234e2f8b6f9cd17da71441c0e6",
+    "excerpt": "if (-not (Test-Path -LiteralPath $Config)) { Fail \"Config does not exist: $Config\" }\n\nif ($Python -and (Test-Path -LiteralPath \"resolve-urls.py\")) {\n  $UrlArgs = @(\"resolve-urls.py\",\"--manifest\",$Manifest,\"--output\",$UrlReport)\n  & $Python.Source @UrlArgs\n}\n\nif ($Python -and (Test-Path -LiteralPath \"analyze-code.py\")) {\n  & $Python.Source \"analyze-code.py\" --manifest $Manifest --urls $UrlReport --output $CodeReport\n}\n\nif ($Python -and (Test-Path -LiteralPath \"preflight-analyze.py\")) {\n  $PreflightArgs = @(\"preflight-analyze.py\",\"--manifest\",$Manifest,\"--urls\",$UrlReport,\"--code\",$CodeReport,\"--output\",$PreflightReport)\n  & $Python.Source @PreflightArgs\n}"
+  },
+  "after": {
+    "excerpt_sha256": "88b8ac06fe3c7e3d0432bb21e6103943b4283efdd73f1f731d03904f7debc866",
+    "excerpt": "if (-not (Test-Path -LiteralPath $Config)) {\n    $Fallback = Join-Path $PSScriptRoot $Config\n    if (Test-Path -LiteralPath $Fallback) { $Config = $Fallback }\n}\nif (-not (Test-Path -LiteralPath $Config)) { Fail \"Config does not exist: $Config\" }\n\nfunction Resolve-LolaHelper([string]$Name) {\n  $Near = Join-Path $PSScriptRoot $Name\n  if (Test-Path -LiteralPath $Near) { return $Near }\n  return $Name\n}\n\nif ($Python -and (Test-Path -LiteralPath (Resolve-LolaHelper \"resolve-urls.py\"))) {\n  $UrlArgs = @((Resolve-LolaHelper \"resolve-urls.py\"),\"--manifest\",$Manifest,\"--output\",$UrlReport)\n  & $Python.Source @UrlArgs\n}\n\nif ($Python -and (Test-Path -LiteralPath (Resolve-LolaHelper \"analyze-code.py\"))) {\n  & $Python.Source (Resolve-LolaHelper \"analyze-code.py\") --manifest $Manifest --urls $UrlReport --output $CodeReport\n}\n\nif ($Python -and (Test-Path -LiteralPath (Resolve-LolaHelper \"preflight-analyze.py\"))) {\n  $PreflightArgs = @((Resolve-LolaHelper \"preflight-analyze.py\"),\"--manifest\",$Manifest,\"--urls\",$UrlReport,\"--code\",$CodeReport,\"--output\",$PreflightReport)\n  & $Python.Source @PreflightArgs\n}"
+  }
+}
