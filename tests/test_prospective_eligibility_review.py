@@ -84,7 +84,6 @@ class ProspectiveEligibilityReviewTests(unittest.TestCase):
             "source": "github_actions_history",
             "candidate_event_key": event["event_key"],
             "ordered_events": [event],
-            "prior_event_verdicts": [],
             "history_complete_through_candidate": True,
             "prospective_claim": False,
             "blind_holdout_claim": False,
@@ -102,6 +101,7 @@ class ProspectiveEligibilityReviewTests(unittest.TestCase):
             "reviewer_independent": True,
             "review_completed_before_repair": True,
             "event_census": self._census(observation),
+            "prior_event_verdicts": [],
             "review_fields": {
                 "surface": "workflow",
                 "naturally_occurring": True,
@@ -130,6 +130,7 @@ class ProspectiveEligibilityReviewTests(unittest.TestCase):
         self.assertFalse(result["blind_holdout_claim"])
         self.assertFalse(result["production_world_claim"])
         self.assertEqual(result["repair_outcome"], "UNKNOWN")
+        self.assertRegex(result["event_census_digest_sha256"], r"^[0-9a-f]{64}$")
         self.assertRegex(result["eligibility_review_digest_sha256"], r"^[0-9a-f]{64}$")
 
     def test_missing_census_proof_is_rejected(self):
@@ -165,6 +166,38 @@ class ProspectiveEligibilityReviewTests(unittest.TestCase):
 
         self.assertFalse(result["valid_review"])
         self.assertIn("prior_event_unreviewed", result["reasons"])
+
+    def test_rejected_prior_event_allows_candidate_to_be_derived_first_eligible(self):
+        observation = self._observation()
+        review = self._review(observation)
+        earlier = {
+            "event_key": "2026-10-02T09:00:00Z|00000000000000004000|000001",
+            "run_id": 4000,
+            "run_attempt": 1,
+            "head_sha": "2" * 40,
+            "workflow_name": "Lola Code Doctor",
+            "conclusion": "failure",
+            "run_started_at": "2026-10-02T09:00:00Z",
+            "updated_at": "2026-10-02T09:01:00Z",
+            "attempt_api_url": "https://api.github.com/repos/example/lola/actions/runs/4000/attempts/1",
+        }
+        census = review["event_census"]
+        census["ordered_events"].insert(0, earlier)
+        census.pop("event_census_digest_sha256")
+        census["event_census_digest_sha256"] = canonical_digest(census)
+        review["prior_event_verdicts"] = [
+            {
+                "event_key": earlier["event_key"],
+                "status": "REVIEW_REJECTED",
+                "eligibility_review_digest_sha256": "a" * 64,
+            }
+        ]
+        review["review_fields"]["prior_post_anchor_failures_reviewed"] = [earlier["event_key"]]
+
+        result = review_observation(observation, review)
+
+        self.assertTrue(result["valid_review"])
+        self.assertEqual(result["status"], "REVIEW_ELIGIBLE")
 
     def test_tampered_census_is_rejected(self):
         observation = self._observation()
