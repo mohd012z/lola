@@ -19,6 +19,7 @@ on:
       - "lola_prospective_prereg.py"
       - "lola_prospective_holdout.py"
       - "lola_prospective_holdout_observer.py"
+      - "lola_prospective_eligibility_review.py"
       - "lola_prospective_result.py"
       - "lola_toolchain.py"
       - "lola_handoff_adapter.py"
@@ -50,6 +51,7 @@ on:
       - "lola_prospective_prereg.py"
       - "lola_prospective_holdout.py"
       - "lola_prospective_holdout_observer.py"
+      - "lola_prospective_eligibility_review.py"
       - "lola_prospective_result.py"
       - "lola_toolchain.py"
       - "lola_handoff_adapter.py"
@@ -94,6 +96,7 @@ jobs:
             lola_prospective_prereg.py \
             lola_prospective_holdout.py \
             lola_prospective_holdout_observer.py \
+            lola_prospective_eligibility_review.py \
             lola_prospective_result.py \
             lola_cognitive_transaction.py \
             lola_toolchain.py \
