@@ -19,6 +19,7 @@ on:
       - "lola_prospective_prereg.py"
       - "lola_prospective_holdout.py"
       - "lola_prospective_holdout_observer.py"
+      - "lola_prospective_observer_coverage.py"
       - "lola_prospective_eligibility_review.py"
       - "lola_prospective_candidate.py"
       - "lola_prospective_result.py"
@@ -52,6 +53,7 @@ on:
       - "lola_prospective_prereg.py"
       - "lola_prospective_holdout.py"
       - "lola_prospective_holdout_observer.py"
+      - "lola_prospective_observer_coverage.py"
       - "lola_prospective_eligibility_review.py"
       - "lola_prospective_candidate.py"
       - "lola_prospective_result.py"
@@ -98,6 +100,7 @@ jobs:
             lola_prospective_prereg.py \
             lola_prospective_holdout.py \
             lola_prospective_holdout_observer.py \
+            lola_prospective_observer_coverage.py \
             lola_prospective_eligibility_review.py \
             lola_prospective_candidate.py \
             lola_prospective_result.py \
