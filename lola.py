@@ -9,6 +9,7 @@ Examples:
     python lola.py --cognitive-smoke
     python lola.py --tiny-beast-smoke
     python lola.py --tiny-beast-benchmark benchmark.json
+    python lola.py --controlled-transfer-benchmark
 """
 
 from __future__ import annotations
@@ -210,6 +211,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Evaluate a JSON baseline/learned benchmark pair with fixed-model rules.",
     )
     p.add_argument(
+        "--controlled-transfer-benchmark",
+        action="store_true",
+        help="Run the controlled empirical T2/T3 transfer suite through Lola learning governance.",
+    )
+    p.add_argument(
         "--require-sovereign",
         action="store_true",
         help="Require the learned benchmark trial to use no external AI.",
@@ -261,6 +267,7 @@ def main() -> int:
             args.cognitive_smoke,
             args.tiny_beast_smoke,
             args.tiny_beast_benchmark,
+            args.controlled_transfer_benchmark,
             args.handoff_validate,
             args.handoff_run,
         )
@@ -301,6 +308,15 @@ def main() -> int:
         payload["empirical_beast_claim"] = bool(result.passed)
         print(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.passed else 2
+
+    if args.controlled_transfer_benchmark:
+        if args.target_option or args.target_positional:
+            parser.error("--controlled-transfer-benchmark must run without target inputs.")
+        from lola_controlled_transfer_benchmark import run_controlled_transfer_suite
+
+        result = run_controlled_transfer_suite()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("controlled_empirical_claim") else 2
 
     if args.handoff_validate or args.handoff_run:
         if args.target_option or args.target_positional:
