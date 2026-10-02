@@ -14,7 +14,8 @@ class ProspectiveHoldoutObserverWorkflowTests(unittest.TestCase):
         self.assertIn('"Lola Code Doctor"', text)
         self.assertIn('"Lola Bot Health"', text)
         self.assertIn("types: [completed]", text)
-        self.assertIn("github.event.workflow_run.conclusion == 'failure'", text)
+        for conclusion in ("failure", "timed_out", "startup_failure", "action_required", "cancelled"):
+            self.assertIn(conclusion, text)
         self.assertIn("contents: read", text)
         self.assertNotIn("contents: write", text)
 
