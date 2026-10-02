@@ -1,8 +1,14 @@
+import io
+import json
 import subprocess
+import sys
 import tempfile
 import unittest
+from contextlib import redirect_stdout
 from pathlib import Path
+from unittest.mock import patch
 
+from lola import main
 from lola_prospective_result import (
     ANCHOR_SHA,
     PREREGISTRATION_SEAL,
@@ -122,6 +128,21 @@ class ProspectiveResultGateTests(unittest.TestCase):
 
             self.assertTrue(verify_commit_order(repo, *shas))
             self.assertFalse(verify_commit_order(repo, shas[0], shas[2], shas[1], shas[3], shas[4]))
+
+    def test_cli_uses_real_git_ancestry_and_rejects_synthetic_result(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "result.json"
+            path.write_text(json.dumps(self._valid_payload()), encoding="utf-8")
+            stdout = io.StringIO()
+            with patch.object(sys, "argv", ["lola.py", "--prospective-transfer-result", str(path)]):
+                with redirect_stdout(stdout):
+                    rc = main()
+
+        self.assertEqual(rc, 2)
+        payload = json.loads(stdout.getvalue())
+        self.assertFalse(payload["prospective_claim"])
+        self.assertFalse(payload["git_ancestry_verified"])
+        self.assertIn("git_ancestry_not_verified", payload["reasons"])
 
 
 if __name__ == "__main__":
