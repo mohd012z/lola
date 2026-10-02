@@ -10,6 +10,7 @@ Examples:
     python lola.py --tiny-beast-smoke
     python lola.py --tiny-beast-benchmark benchmark.json
     python lola.py --controlled-transfer-benchmark
+    python lola.py --historical-replay-scanner-cwd
 """
 
 from __future__ import annotations
@@ -216,6 +217,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the controlled empirical T2/T3 transfer suite through Lola learning governance.",
     )
     p.add_argument(
+        "--historical-replay-scanner-cwd",
+        action="store_true",
+        help="Replay the provenance-pinned historical scanner CWD path-resolution incident.",
+    )
+    p.add_argument(
         "--require-sovereign",
         action="store_true",
         help="Require the learned benchmark trial to use no external AI.",
@@ -268,6 +274,7 @@ def main() -> int:
             args.tiny_beast_smoke,
             args.tiny_beast_benchmark,
             args.controlled_transfer_benchmark,
+            args.historical_replay_scanner_cwd,
             args.handoff_validate,
             args.handoff_run,
         )
@@ -317,6 +324,15 @@ def main() -> int:
         result = run_controlled_transfer_suite()
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("controlled_empirical_claim") else 2
+
+    if args.historical_replay_scanner_cwd:
+        if args.target_option or args.target_positional:
+            parser.error("--historical-replay-scanner-cwd must run without target inputs.")
+        from lola_historical_replay import run_scanner_cwd_historical_replay
+
+        result = run_scanner_cwd_historical_replay()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("historical_replay_claim") else 2
 
     if args.handoff_validate or args.handoff_run:
         if args.target_option or args.target_positional:
