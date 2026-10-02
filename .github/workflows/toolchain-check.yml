@@ -5,6 +5,7 @@ on:
     paths:
       - "toolchain.json"
       - "COGNITIVE_FABRIC.md"
+      - "docs/prospective-transfer-prereg-v1.md"
       - "fixtures/tiny_beast_benchmark.example.json"
       - "fixtures/historical_scanner_cwd_v1.json"
       - "fixtures/historical_transfer_v2.json"
@@ -31,6 +32,7 @@ on:
     paths:
       - "toolchain.json"
       - "COGNITIVE_FABRIC.md"
+      - "docs/prospective-transfer-prereg-v1.md"
       - "fixtures/tiny_beast_benchmark.example.json"
       - "fixtures/historical_scanner_cwd_v1.json"
       - "fixtures/historical_transfer_v2.json"
