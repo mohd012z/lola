@@ -6,6 +6,7 @@ Examples:
     python lola.py "C:\Apps\sample.apk"
     python lola.py --target "C:\Projects\MyApp"
     python lola.py "C:\Apps\sample.apk" --mode /apkpermissions
+    python lola.py --cognitive-smoke
 """
 
 from __future__ import annotations
@@ -192,6 +193,11 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Mode such as /apk360, /apkpermissions, /360, /deep-dive, /anonymus.",
     )
+    p.add_argument(
+        "--cognitive-smoke",
+        action="store_true",
+        help="Run the deterministic offline S0 sovereign cognitive smoke test.",
+    )
 
     # Shared / source-project options
     p.add_argument("--resolve-urls", action="store_true")
@@ -232,6 +238,17 @@ def main() -> int:
 
     if args.handoff_validate and args.handoff_run:
         parser.error("--handoff-validate and --handoff-run cannot be used together.")
+
+    if args.cognitive_smoke:
+        if args.handoff_validate or args.handoff_run or args.target_option or args.target_positional:
+            parser.error(
+                "--cognitive-smoke must run without handoff commands or target inputs."
+            )
+        from lola_sovereign_runtime import run_sovereign_smoke
+
+        result = run_sovereign_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
 
     if args.handoff_validate or args.handoff_run:
         if args.target_option or args.target_positional:
