@@ -12,6 +12,7 @@ Examples:
     python lola.py --controlled-transfer-benchmark
     python lola.py --historical-replay-scanner-cwd
     python lola.py --historical-transfer-benchmark
+    python lola.py --prospective-transfer-prereg
 """
 
 from __future__ import annotations
@@ -228,6 +229,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the multi-incident historical preflight-validity transfer benchmark.",
     )
     p.add_argument(
+        "--prospective-transfer-prereg",
+        action="store_true",
+        help="Validate the sealed prospective transfer preregistration; this never claims success before holdout reveal.",
+    )
+    p.add_argument(
         "--require-sovereign",
         action="store_true",
         help="Require the learned benchmark trial to use no external AI.",
@@ -282,6 +288,7 @@ def main() -> int:
             args.controlled_transfer_benchmark,
             args.historical_replay_scanner_cwd,
             args.historical_transfer_benchmark,
+            args.prospective_transfer_prereg,
             args.handoff_validate,
             args.handoff_run,
         )
@@ -349,6 +356,15 @@ def main() -> int:
         result = run_historical_transfer_suite()
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("historical_transfer_claim") else 2
+
+    if args.prospective_transfer_prereg:
+        if args.target_option or args.target_positional:
+            parser.error("--prospective-transfer-prereg must run without target inputs.")
+        from lola_prospective_prereg import load_preregistration, validate_preregistration
+
+        result = validate_preregistration(load_preregistration())
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("valid") else 2
 
     if args.handoff_validate or args.handoff_run:
         if args.target_option or args.target_positional:
