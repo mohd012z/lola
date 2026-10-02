@@ -74,7 +74,6 @@ class ProspectiveEligibilityReviewCliTests(unittest.TestCase):
                 "source": "github_actions_history",
                 "candidate_event_key": event["event_key"],
                 "ordered_events": [event],
-                "prior_event_verdicts": [],
                 "history_complete_through_candidate": True,
                 "prospective_claim": False,
                 "blind_holdout_claim": False,
@@ -90,6 +89,7 @@ class ProspectiveEligibilityReviewCliTests(unittest.TestCase):
                 "reviewer_independent": True,
                 "review_completed_before_repair": True,
                 "event_census": census,
+                "prior_event_verdicts": [],
                 "review_fields": {
                     "surface": "workflow",
                     "naturally_occurring": True,
