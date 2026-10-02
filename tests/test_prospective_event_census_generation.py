@@ -1,4 +1,4 @@
-# Integration contract: these tests pin complete attempt history and post-anchor ancestry.
+# Integration contract: pin complete rerun-attempt history plus real post-anchor ancestry.
 import inspect
 import json
 import os
