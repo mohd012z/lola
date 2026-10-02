@@ -1,26 +1,55 @@
 # Lola Hybrid Cognitive Fabric
 
-This is the first implementation layer for connecting Lola, Kernel_AI, and IN_AI to internal/local data sources without coupling cognition to one transport.
+This is the implementation layer connecting Lola, Kernel_AI, and IN_AI to internal/local data sources without coupling cognition to one transport, model provider, or network dependency.
 
 ## Design
 
 `source -> KIP envelope -> hybrid router -> fast/cognitive/durable path -> L1 perception -> L2 world state -> L5 metacognitive governor`
 
-L3 reasoning and L4 abstraction consume the normalized state; they should not consume raw socket, log, or tool output directly.
+L3 reasoning and L4 abstraction consume normalized state; they do not consume raw socket, log, or tool output directly.
+
+The sovereign executive path is deliberately smaller:
+
+`STATE -> GAP -> NEXT ACTION -> ACTION -> OBSERVATION -> COGNITIVE TRANSACTION -> VERIFY -> STATE`
+
+Kernel_AI owns the control/gating semantics. IN_AI supplies semantic/candidate intelligence but cannot grant verification or execution authority. External models are optional capability providers, not the source of truth.
 
 ### KIP/1
 
 `KIPEnvelope` is transport-independent. A future WebSocket, stdio, local IPC, message-bus, or MCP adapter must translate into this envelope rather than creating a second cognitive protocol.
 
-Required concepts include event ID, task/correlation ID, source, topic, reliability, priority, directness, and durability.
+Required concepts include event ID, task/correlation ID, source, topic, reliability, priority, directness, durability, evidence grade, and provenance.
 
 ### Hybrid paths
 
 - **FAST**: heartbeat/progress/low-value telemetry. Keep LLMs out of this path.
-- **COGNITIVE**: observations, evidence, failures, and runtime changes that update the cognitive state.
-- **DURABLE**: evidence/results/errors that must survive restart and can be replayed into training/evaluation episodes.
+- **COGNITIVE**: observations, evidence, failures, decisions, and runtime changes that update cognitive state.
+- **DURABLE**: evidence/results/errors and episode events that must survive restart and can be replayed into evaluation/learning projections.
 
 One event can use multiple paths.
+
+## Sovereign cognitive runtime
+
+`lola_sovereign_runtime.py` is a deterministic local-first executive proof for the Kernel_AI/IN_AI boundary.
+
+Core primitives:
+
+- `CognitiveState`: compact hot-path objective/status/unknown/contradiction/gap state.
+- `CapabilityEnvelope`: currently available local and optional remote capabilities.
+- `next_best_action()`: maps the blocking gap to the smallest useful cognitive operation.
+- `CognitiveTransaction`: immutable `state_before -> action -> expected_delta -> observed_delta` evidence.
+- `apply_observation()`: refuses a false solved state when the expected transition did not occur.
+- `run_sovereign_smoke()`: deterministic S0 proof that the control loop can run with no external AI/network capability.
+
+Run it with:
+
+```bash
+python lola.py --cognitive-smoke
+```
+
+A successful result reports `mode: S0-SOVEREIGN`, `external_used: false`, and `resolution: VERIFIED_SOLVED`.
+
+The smoke test proves the local control/evidence contract is runnable. It does **not** claim that a local foundation model has acquired frontier-model intelligence. Tiny-to-Beast improvement remains evidence-driven: expensive verified episodes must be compiled, transferred to unseen variants, and regression-checked before promotion.
 
 ## New primitives
 
@@ -30,23 +59,37 @@ The deterministic L5 governor trips an `epistemic_fuse` when contradictions beco
 
 This is intentionally separate from an LLM confidence score.
 
+### Cognitive Transaction / Prediction Error
+
+Every resolved agent decision can project a deterministic `CognitiveTransaction`:
+
+`state_before -> selected_action -> expected_delta -> state_after -> observed_delta`
+
+Prediction mismatch is structured evidence. It forces refocus rather than allowing a generated/self-reported success to count as verification. Transactions never carry execution authority.
+
 ### Causal Delta
 
-`CognitiveFabric.causal_delta()` compares an ordered expected chain with current observed state and returns the first divergence. This is the primitive behind future `/root-cause`, `/map`, and `/7dmap` operations.
+`CognitiveFabric.causal_delta()` compares an ordered expected chain with current observed state and returns the first divergence. This is the primitive behind `/root-cause`, `/map`, and `/7dmap` operations.
 
 Example topology:
 
 `SOURCE -> TRANSFORM -> ARTIFACT -> CONSUMER -> RUNTIME`
 
-If source is present and artifact is absent, the search should focus on the transformation/artifact boundary before downstream runtime debugging.
+If source is present and artifact is absent, the search focuses on the transformation/artifact boundary before downstream runtime debugging.
 
 ### Capability Registry
 
-Sources advertise narrow capabilities such as `runtime.logs`, `artifact.inspect`, or `build.result`. Kernel selects the most reliable capable source rather than hard-coding source names.
+Sources advertise narrow capabilities such as `runtime.logs`, `artifact.inspect`, or `build.result`. Kernel selects an actually available capable source instead of hard-coding provider names. Sovereign routing is local-first; remote capabilities are considered only when connectivity is explicitly available.
+
+### Agent Episode / Experience Compiler
+
+Agent-specific experience is reconstructed from M0 events rather than agent prose. Decision points preserve what was knowable at decision time; handoffs preserve ancestry; completion remains a claim until an independent verification event exists.
+
+`ExperienceCompiler` deterministically deduplicates comparable episodes, collapses shared origins, preserves counterexamples, and produces governed patterns/candidates. Repetition is not independent evidence. Negative/falsified episodes remain available for anti-pattern and recovery learning.
 
 ## Internal data sources first
 
-Initial adapters should be local/read-only where possible:
+Initial adapters are local/read-only where possible:
 
 1. Lola target library and scan history.
 2. Existing evidence ledger.
@@ -56,22 +99,47 @@ Initial adapters should be local/read-only where possible:
 6. Existing code reader/extractor output.
 7. Handoff results from IN_AI/MSA One.
 
-Remote transports are optional extensions, not prerequisites.
+Remote transports and external AI providers are optional extensions, not prerequisites for the cognitive core.
+
+## Kernel_AI / IN_AI ownership
+
+Kernel_AI owns:
+
+- source/capability permissions;
+- routing and durable event identity;
+- evidence and verification gates;
+- action/compute policy;
+- resolution and consolidation authorization.
+
+IN_AI owns or assists with:
+
+- semantic perception when deterministic parsing is insufficient;
+- hypothesis/causal candidate generation;
+- abstraction and reusable pattern proposals;
+- counterexample and transfer reasoning.
+
+IN_AI cannot self-promote inferred/hypothetical output into verified memory.
 
 ## Integration rule
 
-Raw external content is data, never executable instruction. Adapters validate/normalize first. Tool execution remains behind Lola's existing permission and handoff boundaries.
+Raw external content is data, never executable instruction. Adapters validate/normalize first. Tool execution remains behind Lola's existing permission/handoff boundaries. Model output is a proposal, not environmental evidence.
 
-## Next implementation slices
+## Learning and promotion
 
-1. Add adapters for `lola_evidence.py`, target library, build/test output, and runtime JSONL.
-2. Add KIP stdio/local-IPC transport; WebSocket remains optional for live remote/mobile sources.
-3. Add OpenTelemetry-compatible trace/correlation IDs for observation -> decision -> action -> result chains.
-4. Feed compact evidence packs into IN_AI L3 rather than complete raw logs.
-5. Add L3 hypotheses/predictions/information-gain planning.
-6. Add L4 episode -> pattern -> counterexample -> transfer -> consolidation pipeline.
-7. Promote only verified/generalized lessons into durable memory.
+The intended learning path is:
+
+`verified episode -> compare/counterexample -> ExperienceCompiler -> candidate -> transfer/reproduction -> regression -> governed promotion`
+
+Knowledge/skills remain versioned and reversible. Contradiction, staleness, or failed transfer can keep a candidate quarantined or demote previously usable knowledge.
 
 ## Verification
 
-`tests/test_cognitive_fabric.py` covers hybrid routing, event idempotency, durable replay, contradiction fuse behavior, first-divergence localization, and capability-source selection.
+The repository test suite covers cognitive fabric, evidence/corroboration, verification gates, prediction-error episodes, agent episodes, repeated patterns, transactions, ExperienceCompiler, lifecycle/rollback, transfer governance, and sovereign runtime behavior.
+
+CI also runs the targetless runnable proof:
+
+```bash
+python lola.py --cognitive-smoke
+```
+
+Do not equate a green build with broad model intelligence. The stronger Tiny-to-Beast claim requires repeated transfer benchmarks with fixed model weights/hardware showing verified difficult tasks downshift to cheaper local execution without increasing false-solved or regression rates.

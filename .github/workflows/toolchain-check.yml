@@ -4,6 +4,9 @@ on:
   push:
     paths:
       - "toolchain.json"
+      - "COGNITIVE_FABRIC.md"
+      - "lola.py"
+      - "lola_sovereign_runtime.py"
       - "lola_toolchain.py"
       - "lola_handoff_adapter.py"
       - "lola_code_integration.py"
@@ -18,6 +21,9 @@ on:
   pull_request:
     paths:
       - "toolchain.json"
+      - "COGNITIVE_FABRIC.md"
+      - "lola.py"
+      - "lola_sovereign_runtime.py"
       - "lola_toolchain.py"
       - "lola_handoff_adapter.py"
       - "lola_code_integration.py"
@@ -44,6 +50,9 @@ jobs:
       - name: Compile Lola Python modules
         run: |
           python -m py_compile \
+            lola.py \
+            lola_sovereign_runtime.py \
+            lola_cognitive_transaction.py \
             lola_toolchain.py \
             lola_handoff_adapter.py \
             lola_code_integration.py \
@@ -57,5 +66,7 @@ jobs:
             apk_runtime_monitor.py
       - name: Run unit tests
         run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Sovereign cognitive smoke test
+        run: python lola.py --cognitive-smoke
       - name: Toolchain status smoke test
         run: python lola_toolchain.py status
