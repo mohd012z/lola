@@ -1,5 +1,11 @@
+import io
+import json
+import sys
 import unittest
+from contextlib import redirect_stdout
+from unittest.mock import patch
 
+from lola import main
 from lola_controlled_transfer_benchmark import (
     build_verified_learning_episodes,
     run_controlled_transfer_suite,
@@ -55,6 +61,18 @@ class ControlledTransferBenchmarkTests(unittest.TestCase):
             self.assertFalse(trial["growth"]["passed"])
             self.assertIn("no_intellectual_downshift", trial["growth"]["reasons"])
             self.assertEqual(trial["learned"]["actions"], trial["baseline"]["actions"])
+
+    def test_cli_runs_controlled_transfer_suite_without_target(self):
+        stdout = io.StringIO()
+        with patch.object(sys, "argv", ["lola.py", "--controlled-transfer-benchmark"]):
+            with redirect_stdout(stdout):
+                rc = main()
+
+        self.assertEqual(rc, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["mode"], "CONTROLLED-EMPIRICAL")
+        self.assertTrue(payload["controlled_empirical_claim"])
+        self.assertFalse(payload["production_world_claim"])
 
 
 if __name__ == "__main__":
