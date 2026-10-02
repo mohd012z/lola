@@ -4,6 +4,7 @@ on:
   push:
     paths:
       - "toolchain.json"
+      - "COGNITIVE_FABRIC.md"
       - "lola.py"
       - "lola_sovereign_runtime.py"
       - "lola_toolchain.py"
@@ -20,6 +21,7 @@ on:
   pull_request:
     paths:
       - "toolchain.json"
+      - "COGNITIVE_FABRIC.md"
       - "lola.py"
       - "lola_sovereign_runtime.py"
       - "lola_toolchain.py"
