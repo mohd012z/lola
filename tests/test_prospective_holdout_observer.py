@@ -68,20 +68,39 @@ class ProspectiveHoldoutObserverTests(unittest.TestCase):
         self.assertIsNone(result["review_fields"]["first_eligible_confirmed"])
         self.assertRegex(result["observation_digest_sha256"], r"^[0-9a-f]{64}$")
 
-    def test_successful_workflow_is_ignored_and_never_becomes_candidate(self):
+    def test_abnormal_terminal_conclusions_are_review_required(self):
         tmp, repo, anchor, failure = self._repo_with_anchor_and_failure()
         self.addCleanup(tmp.cleanup)
 
-        result = observe_workflow_event(
-            self._event(failure, conclusion="success"),
-            repository_root=repo,
-            expected_anchor_sha=anchor,
-        )
+        for conclusion in ("failure", "timed_out", "startup_failure", "action_required", "cancelled"):
+            with self.subTest(conclusion=conclusion):
+                result = observe_workflow_event(
+                    self._event(failure, conclusion=conclusion),
+                    repository_root=repo,
+                    expected_anchor_sha=anchor,
+                )
+                self.assertEqual(result["status"], "OBSERVED_REVIEW_REQUIRED")
+                self.assertTrue(result["observation_created"])
+                self.assertEqual(result["workflow_run"]["conclusion"], conclusion)
+                self.assertFalse(result["selection_authorized"])
+                self.assertFalse(result["lock_authorized"])
+                self.assertFalse(result["automated_repair_authorized"])
 
-        self.assertEqual(result["status"], "IGNORED_NOT_FAILURE")
-        self.assertFalse(result["observation_created"])
-        self.assertFalse(result["selection_authorized"])
-        self.assertFalse(result["lock_authorized"])
+    def test_non_failure_terminal_conclusions_are_ignored(self):
+        tmp, repo, anchor, failure = self._repo_with_anchor_and_failure()
+        self.addCleanup(tmp.cleanup)
+
+        for conclusion in ("success", "skipped", "neutral", "stale"):
+            with self.subTest(conclusion=conclusion):
+                result = observe_workflow_event(
+                    self._event(failure, conclusion=conclusion),
+                    repository_root=repo,
+                    expected_anchor_sha=anchor,
+                )
+                self.assertEqual(result["status"], "IGNORED_NOT_REVIEWABLE")
+                self.assertFalse(result["observation_created"])
+                self.assertFalse(result["selection_authorized"])
+                self.assertFalse(result["lock_authorized"])
 
     def test_anchor_or_pre_anchor_failure_is_ignored(self):
         tmp, repo, anchor, _failure = self._repo_with_anchor_and_failure()
