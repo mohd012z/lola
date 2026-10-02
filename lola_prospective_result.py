@@ -3,9 +3,11 @@
 The Phase-A preregistration is immutable and anchored at ANCHOR_SHA. A future
 result is valid only when it references that prior anchor and seal, obeys the
 first-eligible selection policy, proves commit chronology, authenticates the
-selection-lock artifact committed before repair, and scores only a digest-bound
-result-evidence artifact committed with the recorded result. A valid failed
-trial remains evidence; it is never upgraded into a success claim.
+selection-lock artifact committed before repair, authenticates a distinct
+repair-authorization artifact committed after selection but before the fix,
+and scores only a digest-bound result-evidence artifact committed with the
+recorded result. A valid failed trial remains evidence; it is never upgraded
+into a success claim.
 """
 from __future__ import annotations
 
@@ -28,6 +30,7 @@ FAMILY = "historical-preflight-validity"
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _ALLOWED_SURFACES = {"source", "workflow", "config", "runtime-integration"}
+_ALLOWED_REPAIR_MODES = {"MANUAL_REPAIR", "AUTOMATED_REPAIR"}
 
 
 def _git_is_ancestor(repo: Path, older: str, newer: str) -> bool:
@@ -47,13 +50,21 @@ def verify_commit_order(
     anchor_sha: str,
     failure_sha: str,
     selection_lock_sha: str,
+    repair_authorization_sha: str,
     fix_sha: str,
     result_sha: str,
 ) -> bool:
-    """Require strict anchor -> failure -> selection -> fix -> result ancestry."""
+    """Require strict anchor -> failure -> selection -> authorization -> fix -> result."""
 
     repo = Path(repository_root).resolve()
-    chain = (anchor_sha, failure_sha, selection_lock_sha, fix_sha, result_sha)
+    chain = (
+        anchor_sha,
+        failure_sha,
+        selection_lock_sha,
+        repair_authorization_sha,
+        fix_sha,
+        result_sha,
+    )
     if len(set(chain)) != len(chain):
         return False
     if not all(_SHA40.fullmatch(value) for value in chain):
@@ -181,11 +192,82 @@ def _selection_lock_reasons(
     return reasons
 
 
+def _repair_authorization_reasons(
+    authorization: Mapping[str, Any],
+    *,
+    expected_anchor_sha: str,
+    expected_failure_sha: str,
+    expected_selection_lock_sha: str,
+    expected_selection_lock_digest: str,
+) -> list[str]:
+    reasons: list[str] = []
+    payload = dict(authorization)
+
+    if payload.get("schema_version") != "prospective-repair-authorization-v1":
+        reasons.append("repair_authorization_schema_invalid")
+    if payload.get("registration_id") != REGISTRATION_ID:
+        reasons.append("repair_authorization_registration_mismatch")
+    if payload.get("phase") != "REPAIR_AUTHORIZATION":
+        reasons.append("repair_authorization_phase_invalid")
+    if payload.get("status") != "AUTHORIZED_AWAITING_REPAIR":
+        reasons.append("repair_authorization_status_invalid")
+    if payload.get("preregistration_anchor_sha") != expected_anchor_sha:
+        reasons.append("repair_authorization_anchor_mismatch")
+    if payload.get("preregistration_seal_sha256") != PREREGISTRATION_SEAL:
+        reasons.append("repair_authorization_seal_mismatch")
+    if payload.get("failure_commit_sha") != expected_failure_sha:
+        reasons.append("repair_authorization_failure_mismatch")
+    if payload.get("selection_lock_commit_sha") != expected_selection_lock_sha:
+        reasons.append("repair_authorization_selection_commit_mismatch")
+    if payload.get("selection_lock_digest_sha256") != expected_selection_lock_digest:
+        reasons.append("repair_authorization_selection_lock_mismatch")
+
+    supplied_digest = str(payload.get("repair_authorization_digest_sha256") or "")
+    if not _SHA256.fullmatch(supplied_digest):
+        reasons.append("repair_authorization_digest_missing_or_invalid")
+    else:
+        unsigned = dict(payload)
+        unsigned.pop("repair_authorization_digest_sha256", None)
+        if _canonical_digest(unsigned) != supplied_digest:
+            reasons.append("repair_authorization_digest_mismatch")
+
+    if not str(payload.get("authorizer_id") or "").strip():
+        reasons.append("repair_authorization_authorizer_missing")
+    if not str(payload.get("authorization_reason") or "").strip():
+        reasons.append("repair_authorization_reason_missing")
+
+    mode = payload.get("authorization_mode")
+    if mode not in _ALLOWED_REPAIR_MODES:
+        reasons.append("repair_authorization_mode_invalid")
+    if payload.get("repair_authorized") is not True:
+        reasons.append("repair_authorization_not_authorized")
+    if mode == "AUTOMATED_REPAIR" and payload.get("automated_repair_authorized") is not True:
+        reasons.append("repair_authorization_automation_mismatch")
+    if mode == "MANUAL_REPAIR" and payload.get("automated_repair_authorized") is not False:
+        reasons.append("repair_authorization_automation_mismatch")
+
+    if payload.get("repair_outcome") != "UNKNOWN":
+        reasons.append("repair_authorization_outcome_known")
+    if payload.get("fix_commit_sha") is not None:
+        reasons.append("repair_authorization_fix_already_known")
+    if payload.get("result_commit_sha") is not None:
+        reasons.append("repair_authorization_result_already_known")
+    if payload.get("prospective_claim") is not False:
+        reasons.append("repair_authorization_prospective_claim_forbidden")
+    if payload.get("blind_holdout_claim") is not False:
+        reasons.append("repair_authorization_blind_claim_forbidden")
+    if payload.get("production_world_claim") is not False:
+        reasons.append("repair_authorization_production_claim_forbidden")
+
+    return reasons
+
+
 def _result_evidence_reasons(
     evidence: Mapping[str, Any],
     *,
     expected_anchor_sha: str,
     expected_selection_lock_digest: str,
+    expected_repair_authorization_digest: str,
     chronology_values: list[str],
     result_baseline: Any,
     result_learned: Any,
@@ -207,9 +289,16 @@ def _result_evidence_reasons(
         reasons.append("result_evidence_seal_mismatch")
     if payload.get("selection_lock_digest_sha256") != expected_selection_lock_digest:
         reasons.append("result_evidence_selection_lock_mismatch")
+    if payload.get("repair_authorization_digest_sha256") != expected_repair_authorization_digest:
+        reasons.append("result_evidence_repair_authorization_mismatch")
 
     for index, field in enumerate(
-        ("failure_commit_sha", "selection_lock_commit_sha", "fix_commit_sha")
+        (
+            "failure_commit_sha",
+            "selection_lock_commit_sha",
+            "repair_authorization_commit_sha",
+            "fix_commit_sha",
+        )
     ):
         if payload.get(field) != chronology_values[index]:
             reasons.append(f"result_evidence_{field}_mismatch")
@@ -290,8 +379,9 @@ def evaluate_prospective_result(
     """Validate Phase-B governance and evaluate the fixed Tiny-to-Beast contract.
 
     Production callers must provide ``repository_root``. The evaluator reads
-    the selection lock from the recorded selection commit and result evidence
-    from the recorded result commit; caller-supplied embedded copies are not
+    the selection lock from the recorded selection commit, repair authorization
+    from its separately recorded authorization commit, and result evidence from
+    the recorded result commit; caller-supplied embedded copies are not
     authority. ``trust_ancestry_flag`` exists only for isolated unit testing,
     where digest-valid embedded artifacts may stand in for committed Git
     evidence; it must never be enabled by CLI or CI.
@@ -341,6 +431,7 @@ def evaluate_prospective_result(
     chronology_keys = (
         "failure_commit_sha",
         "selection_lock_commit_sha",
+        "repair_authorization_commit_sha",
         "fix_commit_sha",
         "result_commit_sha",
     )
@@ -394,6 +485,61 @@ def evaluate_prospective_result(
             "eligibility_reviewer_id": str(selection_lock.get("eligibility_reviewer_id") or ""),
         }
 
+    repair_authorization_path = _safe_repo_path(payload.get("repair_authorization_path"))
+    embedded_repair_authorization = payload.get("repair_authorization_artifact")
+    if repair_authorization_path is None:
+        reasons.append("repair_authorization_binding_missing")
+
+    repair_authorization: dict[str, Any] | None = None
+    if repair_authorization_path is not None:
+        if repository_root is not None and _SHA40.fullmatch(chronology_values[2]):
+            repair_authorization = _load_json_from_commit(
+                Path(repository_root).resolve(),
+                chronology_values[2],
+                repair_authorization_path,
+            )
+            if repair_authorization is None:
+                reasons.append(
+                    "repair_authorization_artifact_not_found_at_authorization_commit"
+                )
+        elif repository_root is None and trust_ancestry_flag:
+            if isinstance(embedded_repair_authorization, Mapping):
+                repair_authorization = dict(embedded_repair_authorization)
+            else:
+                reasons.append("repair_authorization_binding_missing")
+        elif repository_root is None:
+            reasons.append("repair_authorization_artifact_not_verified")
+
+    repair_authorization_verified = False
+    repair_authorization_digest = ""
+    repair_authorization_lineage: dict[str, str] = {}
+    if repair_authorization is not None:
+        authorization_reasons = _repair_authorization_reasons(
+            repair_authorization,
+            expected_anchor_sha=ANCHOR_SHA,
+            expected_failure_sha=chronology_values[0],
+            expected_selection_lock_sha=chronology_values[1],
+            expected_selection_lock_digest=selection_lock_digest,
+        )
+        reasons.extend(authorization_reasons)
+        repair_authorization_verified = not authorization_reasons
+        repair_authorization_digest = str(
+            repair_authorization.get("repair_authorization_digest_sha256") or ""
+        )
+        repair_authorization_lineage = {
+            "selection_lock_digest_sha256": str(
+                repair_authorization.get("selection_lock_digest_sha256") or ""
+            ),
+            "failure_commit_sha": str(repair_authorization.get("failure_commit_sha") or ""),
+            "selection_lock_commit_sha": str(
+                repair_authorization.get("selection_lock_commit_sha") or ""
+            ),
+            "authorizer_id": str(repair_authorization.get("authorizer_id") or ""),
+            "authorization_mode": str(
+                repair_authorization.get("authorization_mode") or ""
+            ),
+        }
+
     result_baseline = payload.get("baseline")
     result_learned = payload.get("learned")
     result_evidence_path = _safe_repo_path(payload.get("result_evidence_path"))
@@ -403,10 +549,10 @@ def evaluate_prospective_result(
 
     result_evidence: dict[str, Any] | None = None
     if result_evidence_path is not None:
-        if repository_root is not None and _SHA40.fullmatch(chronology_values[3]):
+        if repository_root is not None and _SHA40.fullmatch(chronology_values[4]):
             result_evidence = _load_json_from_commit(
                 Path(repository_root).resolve(),
-                chronology_values[3],
+                chronology_values[4],
                 result_evidence_path,
             )
             if result_evidence is None:
@@ -427,6 +573,7 @@ def evaluate_prospective_result(
             result_evidence,
             expected_anchor_sha=ANCHOR_SHA,
             expected_selection_lock_digest=selection_lock_digest,
+            expected_repair_authorization_digest=repair_authorization_digest,
             chronology_values=chronology_values,
             result_baseline=result_baseline,
             result_learned=result_learned,
@@ -438,9 +585,15 @@ def evaluate_prospective_result(
             "selection_lock_digest_sha256": str(
                 result_evidence.get("selection_lock_digest_sha256") or ""
             ),
+            "repair_authorization_digest_sha256": str(
+                result_evidence.get("repair_authorization_digest_sha256") or ""
+            ),
             "failure_commit_sha": str(result_evidence.get("failure_commit_sha") or ""),
             "selection_lock_commit_sha": str(
                 result_evidence.get("selection_lock_commit_sha") or ""
+            ),
+            "repair_authorization_commit_sha": str(
+                result_evidence.get("repair_authorization_commit_sha") or ""
             ),
             "fix_commit_sha": str(result_evidence.get("fix_commit_sha") or ""),
         }
@@ -460,7 +613,11 @@ def evaluate_prospective_result(
 
     baseline: BenchmarkTrial | None = None
     learned: BenchmarkTrial | None = None
-    if result_evidence_verified and result_evidence is not None:
+    if (
+        repair_authorization_verified
+        and result_evidence_verified
+        and result_evidence is not None
+    ):
         try:
             baseline_value = result_evidence.get("baseline")
             learned_value = result_evidence.get("learned")
@@ -519,6 +676,10 @@ def evaluate_prospective_result(
         "selection_lock_path": selection_lock_path or "",
         "selection_lock_digest_sha256": selection_lock_digest,
         "selection_lock_lineage": selection_lock_lineage,
+        "repair_authorization_verified": repair_authorization_verified,
+        "repair_authorization_path": repair_authorization_path or "",
+        "repair_authorization_digest_sha256": repair_authorization_digest,
+        "repair_authorization_lineage": repair_authorization_lineage,
         "result_evidence_verified": result_evidence_verified,
         "result_evidence_path": result_evidence_path or "",
         "result_evidence_digest_sha256": result_evidence_digest,
