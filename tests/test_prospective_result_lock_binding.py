@@ -189,6 +189,59 @@ class ProspectiveResultSelectionLockBindingTests(unittest.TestCase):
         self.assertFalse(outcome["prospective_claim"])
         self.assertIn("selection_lock_artifact_not_found_at_selection_commit", outcome["reasons"])
 
+    def test_production_uses_committed_lock_not_embedded_copy(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            repo = Path(tmp)
+            subprocess.run(["git", "init", "-q", str(repo)], check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.email", "test@example.com"], check=True)
+            subprocess.run(["git", "-C", str(repo), "config", "user.name", "LOLA Test"], check=True)
+
+            def commit(label, extra_path=None, extra_payload=None):
+                (repo / "state.txt").write_text(label, encoding="utf-8")
+                if extra_path is not None:
+                    path = repo / extra_path
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_text(
+                        json.dumps(extra_payload, indent=2, sort_keys=True) + "\n",
+                        encoding="utf-8",
+                    )
+                subprocess.run(["git", "-C", str(repo), "add", "."], check=True)
+                subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", label], check=True)
+                return subprocess.check_output(
+                    ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
+                ).strip()
+
+            anchor = commit("anchor")
+            failure = commit("failure")
+            valid_lock = self._lock(failure, anchor_sha=anchor)
+            tampered_lock = json.loads(json.dumps(valid_lock))
+            tampered_lock["selection"]["surface"] = "source"
+            selection_commit = commit(
+                "selection-with-tampered-lock",
+                "evidence/prospective-selection-lock.json",
+                tampered_lock,
+            )
+            fix = commit("fix")
+            result_commit = commit("result")
+
+            payload = self._payload()
+            payload["preregistration_anchor_sha"] = anchor
+            payload["selection_lock_artifact"] = valid_lock
+            payload["chronology"] = {
+                "failure_commit_sha": failure,
+                "selection_lock_commit_sha": selection_commit,
+                "fix_commit_sha": fix,
+                "result_commit_sha": result_commit,
+                "git_ancestry_verified": True,
+            }
+
+            with patch("lola_prospective_result.ANCHOR_SHA", anchor):
+                outcome = evaluate_prospective_result(payload, repository_root=repo)
+
+        self.assertFalse(outcome["valid_contract"])
+        self.assertFalse(outcome["prospective_claim"])
+        self.assertIn("selection_lock_digest_mismatch", outcome["reasons"])
+
 
 if __name__ == "__main__":
     unittest.main()
