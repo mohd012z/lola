@@ -1,0 +1,77 @@
+{
+  "schema_version": "historical-transfer-v1",
+  "hypothesis": {
+    "family": "artifact-integrity",
+    "abstract_strategy": "validate_structure_first",
+    "description": "Run the cheapest structural parser/schema validator before deeper semantic diagnosis when an edited artifact fails unexpectedly."
+  },
+  "training": [
+    {
+      "incident_id": "powershell-validateset-bracket",
+      "origin_domain": "history-powershell-475d5",
+      "validator_kind": "powershell_parser",
+      "source": {
+        "path": "scan-security.ps1",
+        "before_sha": "2d111721f88c794506c5e56a9471afee7474c635",
+        "fix_sha": "475d5cb2487334b282aa0b7616258f36e769c35d",
+        "before_blob_sha": "6bc9571cacf434e8898503467d08c7124cd3d1ae",
+        "fixed_blob_sha": "f433e44786574a5fa3d9f54d2812f7cc48059af5"
+      },
+      "before": {
+        "excerpt": "param(\n  [Parameter(Position=0)][string]$Target=\".\",\n  [string]$Config=\"codex-security.yaml\",\n  [string]$Report=\"semgrep-results.json\",\n  [string]$HtmlReport=\"semgrep-report.html\",\n  [string]$Manifest=\"target-manifest.json\",\n  [string]$UrlReport=\"url-report.json\",\n  [string]$ModeReport=\"scan-modes.json\",\n  [string]$CodeReport=\"code-analysis.json\",\n  [string]$NetworkReport=\"network-analysis.json\",\n  [string]$EventReport=\"scan-events.json\",\n  [string]$PreflightReport=\"preflight-analysis.json\",\n  [ValidateSet(\"360\",\"stepview\",\"protocol\",\"protocal\",\"hidden\",\"deep-dive\",\"deepdive\",\"securitycheck\",\"anonymous\",\"anonymus\",\"extraction\",\"codesummary\",\"codeview\",\"codepassword\",\"codestring\",\"codetransparent\",\"codemodification\",\"codefallback\",\"codeurls\",\"codeencryption\",\"hiddenmode\",\"deep-code\",\"deep-dive-code\",\"deep-dive code\",\"deep-network\",\"deep-dive-network\",\"deep-dive network\",\"trace\",\"route\",\"map\",\"visible\",\"realip\",\"cctv\",\"normal\",\"viewextraction\",\"viewurls\",\"routes\",\"api\",\"keys\",\"hiddentraces\",\"hidemodes\",\"hidelog\",\"ipmirror\",\"certs\",\"preflight\",\"cleanup\",\"apk360\",\"apkmanifest\",\"apkpermissions\",\"apkcomponents\",\"apkurls\",\"apkapi\",\"apkkeys\",\"apkcerts\",\"apknative\",\"apkwebview\",\"apkcrypto\",\"apkfiles\",\"apkcode\",\"apkrisk\",\"apktools\",\"/360\",\"/stepview\",\"/protocol\",\"/protocal\",\"/hidden\",\"/deep-dive\",\"/deepdive\",\"/securitycheck\",\"/anonymous\",\"/anonymus\",\"/extraction\",\"/codesummary\",\"/codeview\",\"/codepassword\",\"/codestring\",\"/codetransparent\",\"/codemodification\",\"/codefallback\",\"/codeurls\",\"/codeencryption\",\"/hiddenmode\",\"/deep-code\",\"/deep-dive-code\",\"/deep-dive code\",\"/deep-network\",\"/deep-dive-network\",\"/deep-dive network\",\"/trace\",\"/route\",\"/map\",\"/visible\",\"/realip\",\"/cctv\",\"/normal\",\"/viewextraction\",\"/viewurls\",\"/routes\",\"/api\",\"/keys\",\"/hiddentraces\",\"/hidemodes\",\"/hidelog\",\"/ipmirror\",\"/certs\",\"/preflight\",\"/cleanup\",\"/apk360\",\"/apkmanifest\",\"/apkpermissions\",\"/apkcomponents\",\"/apkurls\",\"/apkapi\",\"/apkkeys\",\"/apkcerts\",\"/apknative\",\"/apkwebview\",\"/apkcrypto\",\"/apkfiles\",\"/apkcode\",\"/apkrisk\",\"/apktools\")]]\n  [string]$Mode=\"/360\",\n  [switch]$ResolveUrls,\n  [switch]$LiveMonitor,\n  [int]$MonitorPort=8765,\n  [switch]$CaptureAllCode,\n  [switch]$CopyPublicCerts,\n  [switch]$CleanupLolaTemp,\n  [switch]$NoPersistEvents,\n  [switch]$Strict,",
+        "excerpt_sha256": "aec20c4ff2f20c21c1534415a263c164d5257b9629e93e2e7871eb15620e0513"
+      },
+      "after": {
+        "excerpt": "param(\n  [Parameter(Position=0)][string]$Target=\".\",\n  [string]$Config=\"codex-security.yaml\",\n  [string]$Report=\"semgrep-results.json\",\n  [string]$HtmlReport=\"semgrep-report.html\",\n  [string]$Manifest=\"target-manifest.json\",\n  [string]$UrlReport=\"url-report.json\",\n  [string]$ModeReport=\"scan-modes.json\",\n  [string]$CodeReport=\"code-analysis.json\",\n  [string]$NetworkReport=\"network-analysis.json\",\n  [string]$EventReport=\"scan-events.json\",\n  [string]$PreflightReport=\"preflight-analysis.json\",\n  [ValidateSet(\"360\",\"stepview\",\"protocol\",\"protocal\",\"hidden\",\"deep-dive\",\"deepdive\",\"securitycheck\",\"anonymous\",\"anonymus\",\"extraction\",\"codesummary\",\"codeview\",\"codepassword\",\"codestring\",\"codetransparent\",\"codemodification\",\"codefallback\",\"codeurls\",\"codeencryption\",\"hiddenmode\",\"deep-code\",\"deep-dive-code\",\"deep-dive code\",\"deep-network\",\"deep-dive-network\",\"deep-dive network\",\"trace\",\"route\",\"map\",\"visible\",\"realip\",\"cctv\",\"normal\",\"viewextraction\",\"viewurls\",\"routes\",\"api\",\"keys\",\"hiddentraces\",\"hidemodes\",\"hidelog\",\"ipmirror\",\"certs\",\"preflight\",\"cleanup\",\"apk360\",\"apkmanifest\",\"apkpermissions\",\"apkcomponents\",\"apkurls\",\"apkapi\",\"apkkeys\",\"apkcerts\",\"apknative\",\"apkwebview\",\"apkcrypto\",\"apkfiles\",\"apkcode\",\"apkrisk\",\"apktools\",\"/360\",\"/stepview\",\"/protocol\",\"/protocal\",\"/hidden\",\"/deep-dive\",\"/deepdive\",\"/securitycheck\",\"/anonymous\",\"/anonymus\",\"/extraction\",\"/codesummary\",\"/codeview\",\"/codepassword\",\"/codestring\",\"/codetransparent\",\"/codemodification\",\"/codefallback\",\"/codeurls\",\"/codeencryption\",\"/hiddenmode\",\"/deep-code\",\"/deep-dive-code\",\"/deep-dive code\",\"/deep-network\",\"/deep-dive-network\",\"/deep-dive network\",\"/trace\",\"/route\",\"/map\",\"/visible\",\"/realip\",\"/cctv\",\"/normal\",\"/viewextraction\",\"/viewurls\",\"/routes\",\"/api\",\"/keys\",\"/hiddentraces\",\"/hidemodes\",\"/hidelog\",\"/ipmirror\",\"/certs\",\"/preflight\",\"/cleanup\",\"/apk360\",\"/apkmanifest\",\"/apkpermissions\",\"/apkcomponents\",\"/apkurls\",\"/apkapi\",\"/apkkeys\",\"/apkcerts\",\"/apknative\",\"/apkwebview\",\"/apkcrypto\",\"/apkfiles\",\"/apkcode\",\"/apkrisk\",\"/apktools\")]\n  [string]$Mode=\"/360\",\n  [switch]$ResolveUrls,\n  [switch]$LiveMonitor,\n  [int]$MonitorPort=8765,\n  [switch]$CaptureAllCode,\n  [switch]$CopyPublicCerts,\n  [switch]$CleanupLolaTemp,\n  [switch]$NoPersistEvents,\n  [switch]$Strict,",
+        "excerpt_sha256": "5cfab210d8d9d05748289a7d8231621cf68e5988f6f761f81ca2f1e02929ff2a"
+      }
+    },
+    {
+      "incident_id": "python-office-import-syntax",
+      "origin_domain": "history-python-79c62",
+      "validator_kind": "python_ast",
+      "source": {
+        "path": "lola_office_layout.py",
+        "before_sha": "39425e889a26c769b3fe09d6f4eaaaeb0c3b20a6",
+        "fix_sha": "79c62b3cfbc002d800df09526c0451101758849a",
+        "before_blob_sha": "4c88d1f9e94439c3c7cf29bdbd269e028a26eec4",
+        "fixed_blob_sha": "52b41595f8d30282fd50d685f2bbebb34de4d693"
+      },
+      "before": {
+        "excerpt": "\"\"\"Document-order Word renderer and richer Excel layout metadata for Lola.\"\"\"\nfrom __future__ import annotations\nimport html\nfrom lola_office_html_styles import data_uri if False else None\n\ndef _tag(el):return el.tag.rsplit(\"}\",1)[-1]\n\ndef word_body_in_order(doc,data_uri_fn):\n    out=[]\n    rels=doc.part.rels\n    for el in doc.element.body.iterchildren():\n        tag=_tag(el)",
+        "excerpt_sha256": "a60412491b8247a24c9bf1e2583b6984db009104981f865dccf0544877a0ff8b"
+      },
+      "after": {
+        "excerpt": "\"\"\"Document-order Word renderer and richer Excel layout metadata for Lola.\"\"\"\nfrom __future__ import annotations\nimport html\n\ndef _tag(el):return el.tag.rsplit(\"}\",1)[-1]\n\ndef word_body_in_order(doc,data_uri_fn):\n    out=[]\n    rels=doc.part.rels\n    for el in doc.element.body.iterchildren():\n        tag=_tag(el)\n        if tag==\"p\":",
+        "excerpt_sha256": "6a403a03819c641a1b9313acf3195cb3b5042cc89dcc46ebb03bae91fcb0d87f"
+      }
+    }
+  ],
+  "holdout": {
+    "incident_id": "semgrep-forwarded-ip-rule-composition",
+    "origin_domain": "history-semgrep-bb8ef",
+    "validator_kind": "semgrep_rule_schema",
+    "blind": false,
+    "source": {
+      "path": "codex-security.yaml",
+      "before_sha": "77961cd0af3170963e076139877b9974eb06136b",
+      "fix_sha": "bb8ef837575d123894896be08c9efb217424195b",
+      "before_blob_sha": "3896857247dbda1a388fba2ef72a16c82bdc2291",
+      "fixed_blob_sha": "c4b6d085bcf7c5b6b342c8853be3570dc6648b07"
+    },
+    "baseline_diagnostic_order": [
+      "semantic_data_flow",
+      "runtime_proxy_state",
+      "rule_match_behavior",
+      "structural_validator"
+    ],
+    "before": {
+      "excerpt": "    pattern-either:\n      - pattern: $REQ.ip\n      - pattern: $REQ.ips\n      - pattern: $REQ.socket.remoteAddress\n      - pattern: $REQ.connection.remoteAddress\n      - pattern: $SOCKET.remoteAddress\n\n  - id: extract-forwarded-client-ip-header\n    languages: [javascript, typescript]\n    severity: INFO\n    message: \"Proxy/client-IP header read -> $HEADER\"\n    metadata: {category: ip, surface: client-ip, confidence: HIGH}\n    pattern-either:\n      - pattern: $REQ.headers[$HEADER]\n      - pattern: $REQ.get($HEADER)\n      - pattern: $REQ.header($HEADER)\n    metavariable-regex:\n      metavariable: $HEADER\n      regex: (?i)^[\"']?(x-forwarded-for|x-real-ip|cf-connecting-ip|true-client-ip|forwarded|fastly-client-ip|x-client-ip)[\"']?$\n\n  - id: audit-trust-proxy-all\n    languages: [javascript, typescript]\n    severity: WARNING\n    message: \"Express trust proxy is broadly enabled. Verify requests can only arrive through trusted proxies before using forwarded client-IP/protocol data.\"\n    metadata: {category: ip, surface: proxy-trust, cwe: \"CWE-441\", confidence: MEDIUM}\n    pattern-either:\n      - pattern: $APP.set(\"trust proxy\", true)\n      - pattern: $APP.enable(\"trust proxy\")\n\n  - id: audit-bind-all-interfaces",
+      "excerpt_sha256": "0eabdbdef1f58a80c869103a85f1a4b644d5cf7411ad65a1798e50ef1e906a8c"
+    },
+    "after": {
+      "excerpt": "    pattern-either:\n      - pattern: $REQ.ip\n      - pattern: $REQ.ips\n      - pattern: $REQ.socket.remoteAddress\n      - pattern: $REQ.connection.remoteAddress\n      - pattern: $SOCKET.remoteAddress\n\n  - id: extract-forwarded-client-ip-header\n    languages: [javascript, typescript]\n    severity: INFO\n    message: \"Proxy/client-IP header read -> $HEADER\"\n    metadata: {category: ip, surface: client-ip, confidence: HIGH}\n    patterns:\n      - pattern-either:\n          - pattern: $REQ.headers[$HEADER]\n          - pattern: $REQ.get($HEADER)\n          - pattern: $REQ.header($HEADER)\n      - metavariable-regex:\n          metavariable: $HEADER\n          regex: (?i)^[\"']?(x-forwarded-for|x-real-ip|cf-connecting-ip|true-client-ip|forwarded|fastly-client-ip|x-client-ip)[\"']?$\n\n  - id: audit-trust-proxy-all\n    languages: [javascript, typescript]\n    severity: WARNING\n    message: \"Express trust proxy is broadly enabled. Verify requests can only arrive through trusted proxies before using forwarded client-IP/protocol data.\"\n    metadata: {category: ip, surface: proxy-trust, cwe: \"CWE-441\", confidence: MEDIUM}\n    pattern-either:\n      - pattern: $APP.set(\"trust proxy\", true)\n      - pattern: $APP.enable(\"trust proxy\")\n\n  - id: audit-bind-all-interfaces",
+      "excerpt_sha256": "3d268ac0c8da4fae38d7333d05eab48cc5affb51ca395fa6cfa75d15a5edb5dd"
+    }
+  }
+}
