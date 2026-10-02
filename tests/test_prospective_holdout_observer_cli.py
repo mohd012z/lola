@@ -1,5 +1,4 @@
 import json
-import subprocess
 import sys
 import tempfile
 import unittest
@@ -11,24 +10,32 @@ from lola import main
 
 class ProspectiveHoldoutObserverCliTests(unittest.TestCase):
     def test_cli_writes_review_required_observation_without_selection(self):
-        repo = Path(__file__).resolve().parents[1]
-        head_sha = subprocess.check_output(
-            ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
-        ).strip()
         event = {
             "action": "completed",
             "workflow_run": {
                 "id": 9001,
                 "name": "Toolchain smoke check",
-                "head_sha": head_sha,
-                "head_branch": "feature/example",
-                "event": "push",
+                "head_sha": "1" * 40,
                 "status": "completed",
                 "conclusion": "failure",
-                "html_url": "https://github.com/example/lola/actions/runs/9001",
-                "run_started_at": "2026-10-02T10:00:00Z",
-                "updated_at": "2026-10-02T10:01:00Z",
             },
+        }
+        observed = {
+            "schema_version": "prospective-holdout-observation-v1",
+            "phase": "OBSERVER",
+            "status": "OBSERVED_REVIEW_REQUIRED",
+            "observation_created": True,
+            "failure_commit_sha": "1" * 40,
+            "git_ancestry_verified": True,
+            "repair_outcome": "UNKNOWN",
+            "selection_authorized": False,
+            "lock_authorized": False,
+            "automated_repair_authorized": False,
+            "prospective_claim": False,
+            "blind_holdout_claim": False,
+            "production_world_claim": False,
+            "review_fields": {"first_eligible_confirmed": None},
+            "observation_digest_sha256": "a" * 64,
         }
 
         with tempfile.TemporaryDirectory() as tmp:
@@ -43,10 +50,14 @@ class ProspectiveHoldoutObserverCliTests(unittest.TestCase):
                 "--holdout-observation-output",
                 str(output_path),
             ]
-            with mock.patch.object(sys, "argv", argv):
+            with mock.patch.object(sys, "argv", argv), mock.patch(
+                "lola_prospective_holdout_observer.observe_workflow_event",
+                return_value=observed,
+            ) as observer:
                 rc = main()
 
             self.assertEqual(rc, 0)
+            observer.assert_called_once()
             payload = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(payload["status"], "OBSERVED_REVIEW_REQUIRED")
             self.assertFalse(payload["selection_authorized"])
