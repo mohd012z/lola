@@ -24,7 +24,7 @@ def _digest(value):
     return hashlib.sha256(payload).hexdigest()
 
 
-class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
+class ProspectiveRepairAuthorizationBindingTests(unittest.TestCase):
     def _selection(self):
         return {
             "first_eligible_confirmed": True,
@@ -199,49 +199,55 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
             "learned": self._learned(),
         }
 
-    def test_missing_result_evidence_binding_is_invalid(self):
+    def test_missing_repair_authorization_binding_is_invalid(self):
         payload = self._payload()
-        payload.pop("result_evidence_path")
-        payload.pop("result_evidence_artifact")
+        payload.pop("repair_authorization_path")
+        payload.pop("repair_authorization_artifact")
+        payload["chronology"].pop("repair_authorization_commit_sha")
+        evidence = payload["result_evidence_artifact"]
+        evidence.pop("repair_authorization_digest_sha256")
+        evidence.pop("repair_authorization_commit_sha")
+        evidence.pop("result_evidence_digest_sha256")
+        evidence["result_evidence_digest_sha256"] = _digest(evidence)
 
         result = evaluate_prospective_result(payload, trust_ancestry_flag=True)
 
         self.assertFalse(result["valid_contract"])
         self.assertFalse(result["prospective_claim"])
-        self.assertIn("result_evidence_binding_missing", result["reasons"])
+        self.assertIn("repair_authorization_binding_missing", result["reasons"])
 
-    def test_tampered_result_evidence_digest_is_invalid(self):
+    def test_tampered_repair_authorization_digest_is_invalid(self):
         payload = self._payload()
-        payload["result_evidence_artifact"]["learned"]["actions"] = 2
+        payload["repair_authorization_artifact"]["authorization_reason"] = "tampered"
 
         result = evaluate_prospective_result(payload, trust_ancestry_flag=True)
 
         self.assertFalse(result["valid_contract"])
         self.assertFalse(result["prospective_claim"])
-        self.assertIn("result_evidence_digest_mismatch", result["reasons"])
+        self.assertIn("repair_authorization_digest_mismatch", result["reasons"])
 
-    def test_result_trials_must_match_authenticated_evidence(self):
+    def test_repair_authorization_cannot_claim_outcome_or_fix(self):
         payload = self._payload()
-        payload["learned"]["actions"] = 2
+        authorization = payload["repair_authorization_artifact"]
+        authorization["repair_outcome"] = "VERIFIED"
+        authorization["fix_commit_sha"] = "4" * 40
+        authorization.pop("repair_authorization_digest_sha256")
+        authorization["repair_authorization_digest_sha256"] = _digest(authorization)
 
         result = evaluate_prospective_result(payload, trust_ancestry_flag=True)
 
         self.assertFalse(result["valid_contract"])
-        self.assertIn("result_evidence_trials_mismatch", result["reasons"])
+        self.assertIn("repair_authorization_outcome_known", result["reasons"])
+        self.assertIn("repair_authorization_fix_already_known", result["reasons"])
 
-    def test_valid_authenticated_result_evidence_can_pass_isolated_governance(self):
+    def test_valid_authenticated_repair_authorization_can_pass_isolated_governance(self):
         result = evaluate_prospective_result(self._payload(), trust_ancestry_flag=True)
 
         self.assertTrue(result["valid_contract"])
         self.assertTrue(result["prospective_claim"])
         self.assertTrue(result["repair_authorization_verified"])
-        self.assertTrue(result["result_evidence_verified"])
-        self.assertEqual(
-            result["result_evidence_digest_sha256"],
-            self._payload()["result_evidence_artifact"]["result_evidence_digest_sha256"],
-        )
 
-    def _init_repo_chain(self, *, committed_evidence=None):
+    def _init_repo_chain(self, *, committed_authorization=None):
         tmp = tempfile.TemporaryDirectory()
         repo = Path(tmp.name)
         subprocess.run(["git", "init", "-q", str(repo)], check=True)
@@ -268,51 +274,43 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
             "selection",
             {"evidence/prospective-selection-lock.json": lock},
         )
-        authorization = self._authorization(
+        valid_authorization = self._authorization(
             anchor_sha=anchor,
             failure_sha=failure,
             selection_sha=selection,
             selection_lock_digest=lock["selection_lock_digest_sha256"],
         )
-        authorization_commit = commit(
-            "authorization",
-            {"evidence/prospective-repair-authorization.json": authorization},
-        )
-        fix = commit("fix")
-
-        if committed_evidence == "valid":
-            evidence = self._result_evidence(
-                anchor_sha=anchor,
-                failure_sha=failure,
-                selection_sha=selection,
-                authorization_sha=authorization_commit,
-                fix_sha=fix,
-                selection_lock_digest=lock["selection_lock_digest_sha256"],
-                authorization_digest=authorization["repair_authorization_digest_sha256"],
+        if committed_authorization == "valid":
+            committed = valid_authorization
+            authorization_commit = commit(
+                "authorization",
+                {"evidence/prospective-repair-authorization.json": committed},
             )
-            result_commit = commit(
-                "result",
-                {"evidence/prospective-result-evidence.json": evidence},
-            )
-        elif committed_evidence == "tampered":
-            evidence = self._result_evidence(
-                anchor_sha=anchor,
-                failure_sha=failure,
-                selection_sha=selection,
-                authorization_sha=authorization_commit,
-                fix_sha=fix,
-                selection_lock_digest=lock["selection_lock_digest_sha256"],
-                authorization_digest=authorization["repair_authorization_digest_sha256"],
-            )
-            evidence["learned"]["actions"] = 2
-            result_commit = commit(
-                "result",
-                {"evidence/prospective-result-evidence.json": evidence},
+        elif committed_authorization == "tampered":
+            committed = json.loads(json.dumps(valid_authorization))
+            committed["authorization_reason"] = "tampered after digest"
+            authorization_commit = commit(
+                "authorization",
+                {"evidence/prospective-repair-authorization.json": committed},
             )
         else:
-            evidence = None
-            result_commit = commit("result")
+            committed = None
+            authorization_commit = commit("authorization-without-artifact")
 
+        fix = commit("fix")
+        evidence = self._result_evidence(
+            anchor_sha=anchor,
+            failure_sha=failure,
+            selection_sha=selection,
+            authorization_sha=authorization_commit,
+            fix_sha=fix,
+            selection_lock_digest=lock["selection_lock_digest_sha256"],
+            authorization_digest=valid_authorization["repair_authorization_digest_sha256"],
+        )
+        result_commit = commit(
+            "result",
+            {"evidence/prospective-result-evidence.json": evidence},
+        )
         return (
             tmp,
             repo,
@@ -323,8 +321,7 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
             fix,
             result_commit,
             lock,
-            authorization,
-            evidence,
+            valid_authorization,
         )
 
     def _production_payload(
@@ -361,21 +358,9 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
         }
         return payload
 
-    def test_production_missing_result_evidence_at_result_commit_is_invalid(self):
+    def test_production_missing_authorization_at_authorization_commit_is_invalid(self):
         chain = self._init_repo_chain()
-        (
-            tmp,
-            repo,
-            anchor,
-            failure,
-            selection,
-            authorization_commit,
-            fix,
-            result_commit,
-            lock,
-            authorization,
-            _,
-        ) = chain
+        tmp, repo, anchor, failure, selection, authorization_commit, fix, result_commit, lock, authorization = chain
         try:
             payload = self._production_payload(
                 anchor,
@@ -394,23 +379,14 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
 
         self.assertFalse(outcome["valid_contract"])
         self.assertFalse(outcome["prospective_claim"])
-        self.assertIn("result_evidence_artifact_not_found_at_result_commit", outcome["reasons"])
+        self.assertIn(
+            "repair_authorization_artifact_not_found_at_authorization_commit",
+            outcome["reasons"],
+        )
 
-    def test_production_uses_committed_result_evidence_not_embedded_copy(self):
-        chain = self._init_repo_chain(committed_evidence="tampered")
-        (
-            tmp,
-            repo,
-            anchor,
-            failure,
-            selection,
-            authorization_commit,
-            fix,
-            result_commit,
-            lock,
-            authorization,
-            _,
-        ) = chain
+    def test_production_uses_committed_authorization_not_embedded_copy(self):
+        chain = self._init_repo_chain(committed_authorization="tampered")
+        tmp, repo, anchor, failure, selection, authorization_commit, fix, result_commit, lock, authorization = chain
         try:
             payload = self._production_payload(
                 anchor,
@@ -429,7 +405,7 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
 
         self.assertFalse(outcome["valid_contract"])
         self.assertFalse(outcome["prospective_claim"])
-        self.assertIn("result_evidence_digest_mismatch", outcome["reasons"])
+        self.assertIn("repair_authorization_digest_mismatch", outcome["reasons"])
 
 
 if __name__ == "__main__":

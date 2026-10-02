@@ -65,6 +65,31 @@ class ProspectiveResultGateTests(unittest.TestCase):
             "production_world_claim": False,
         }
         selection_lock["selection_lock_digest_sha256"] = _digest(selection_lock)
+        repair_authorization = {
+            "schema_version": "prospective-repair-authorization-v1",
+            "registration_id": "lola-preflight-validity-prospective-001",
+            "phase": "REPAIR_AUTHORIZATION",
+            "status": "AUTHORIZED_AWAITING_REPAIR",
+            "preregistration_anchor_sha": ANCHOR_SHA,
+            "preregistration_seal_sha256": PREREGISTRATION_SEAL,
+            "failure_commit_sha": "1" * 40,
+            "selection_lock_commit_sha": "2" * 40,
+            "selection_lock_digest_sha256": selection_lock["selection_lock_digest_sha256"],
+            "authorizer_id": "repair-authorizer-explicit",
+            "authorization_mode": "AUTOMATED_REPAIR",
+            "authorization_reason": "Repair the independently selected prospective holdout.",
+            "repair_authorized": True,
+            "automated_repair_authorized": True,
+            "repair_outcome": "UNKNOWN",
+            "fix_commit_sha": None,
+            "result_commit_sha": None,
+            "prospective_claim": False,
+            "blind_holdout_claim": False,
+            "production_world_claim": False,
+        }
+        repair_authorization["repair_authorization_digest_sha256"] = _digest(
+            repair_authorization
+        )
         baseline = {
             "task_id": "prospective-baseline",
             "family": "historical-preflight-validity",
@@ -101,9 +126,13 @@ class ProspectiveResultGateTests(unittest.TestCase):
             "preregistration_anchor_sha": ANCHOR_SHA,
             "preregistration_seal_sha256": PREREGISTRATION_SEAL,
             "selection_lock_digest_sha256": selection_lock["selection_lock_digest_sha256"],
+            "repair_authorization_digest_sha256": repair_authorization[
+                "repair_authorization_digest_sha256"
+            ],
             "failure_commit_sha": "1" * 40,
             "selection_lock_commit_sha": "2" * 40,
-            "fix_commit_sha": "3" * 40,
+            "repair_authorization_commit_sha": "3" * 40,
+            "fix_commit_sha": "4" * 40,
             "repair_outcome": "VERIFIED",
             "after_evidence_refs": ["ci:after-run-456"],
             "baseline": baseline,
@@ -122,13 +151,16 @@ class ProspectiveResultGateTests(unittest.TestCase):
             "selection": selection,
             "selection_lock_path": "evidence/prospective-selection-lock.json",
             "selection_lock_artifact": selection_lock,
+            "repair_authorization_path": "evidence/prospective-repair-authorization.json",
+            "repair_authorization_artifact": repair_authorization,
             "result_evidence_path": "evidence/prospective-result-evidence.json",
             "result_evidence_artifact": result_evidence,
             "chronology": {
                 "failure_commit_sha": "1" * 40,
                 "selection_lock_commit_sha": "2" * 40,
-                "fix_commit_sha": "3" * 40,
-                "result_commit_sha": "4" * 40,
+                "repair_authorization_commit_sha": "3" * 40,
+                "fix_commit_sha": "4" * 40,
+                "result_commit_sha": "5" * 40,
                 "git_ancestry_verified": True,
             },
             "baseline": baseline,
@@ -137,7 +169,6 @@ class ProspectiveResultGateTests(unittest.TestCase):
 
     def _refresh_result_evidence_digest(self, payload):
         evidence = payload["result_evidence_artifact"]
-        evidence["result_evidence_digest_sha256"] = ""
         evidence.pop("result_evidence_digest_sha256", None)
         evidence["result_evidence_digest_sha256"] = _digest(evidence)
 
@@ -147,6 +178,7 @@ class ProspectiveResultGateTests(unittest.TestCase):
         self.assertTrue(result["prospective_claim"])
         self.assertTrue(result["blind_holdout_claim"])
         self.assertTrue(result["selection_lock_verified"])
+        self.assertTrue(result["repair_authorization_verified"])
         self.assertTrue(result["result_evidence_verified"])
         self.assertFalse(result["production_world_claim"])
         self.assertEqual(result["status"], "PROSPECTIVE_TRANSFER_PASS")
@@ -183,7 +215,7 @@ class ProspectiveResultGateTests(unittest.TestCase):
         self.assertIn("no_intellectual_downshift", result["growth_reasons"])
         self.assertIn("actions_increased", result["growth_reasons"])
 
-    def test_git_ancestry_requires_anchor_failure_selection_fix_result_order(self):
+    def test_git_ancestry_requires_authorization_before_fix(self):
         with tempfile.TemporaryDirectory() as tmp:
             repo = Path(tmp)
             subprocess.run(["git", "init", "-q", str(repo)], check=True)
@@ -191,15 +223,29 @@ class ProspectiveResultGateTests(unittest.TestCase):
             subprocess.run(["git", "-C", str(repo), "config", "user.name", "LOLA Test"], check=True)
 
             shas = []
-            for index, label in enumerate(("anchor", "failure", "selection", "fix", "result")):
+            for index, label in enumerate(
+                ("anchor", "failure", "selection", "authorization", "fix", "result")
+            ):
                 (repo / "state.txt").write_text(f"{index}:{label}\n", encoding="utf-8")
                 subprocess.run(["git", "-C", str(repo), "add", "state.txt"], check=True)
                 subprocess.run(["git", "-C", str(repo), "commit", "-q", "-m", label], check=True)
-                sha = subprocess.check_output(["git", "-C", str(repo), "rev-parse", "HEAD"], text=True).strip()
+                sha = subprocess.check_output(
+                    ["git", "-C", str(repo), "rev-parse", "HEAD"], text=True
+                ).strip()
                 shas.append(sha)
 
             self.assertTrue(verify_commit_order(repo, *shas))
-            self.assertFalse(verify_commit_order(repo, shas[0], shas[2], shas[1], shas[3], shas[4]))
+            self.assertFalse(
+                verify_commit_order(
+                    repo,
+                    shas[0],
+                    shas[1],
+                    shas[2],
+                    shas[4],
+                    shas[3],
+                    shas[5],
+                )
+            )
 
     def test_cli_uses_real_git_ancestry_and_rejects_synthetic_result(self):
         with tempfile.TemporaryDirectory() as tmp:
