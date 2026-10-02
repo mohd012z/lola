@@ -1,10 +1,11 @@
 """Phase-B governance for LOLA's preregistered prospective transfer test.
 
-The Phase-A preregistration is immutable and anchored at ANCHOR_SHA.  A future
+The Phase-A preregistration is immutable and anchored at ANCHOR_SHA. A future
 result is valid only when it references that prior anchor and seal, obeys the
-first-eligible selection policy, proves commit chronology, and authenticates the
-selection-lock artifact committed before repair.  A valid failed trial remains
-evidence; it is never upgraded into a success claim.
+first-eligible selection policy, proves commit chronology, authenticates the
+selection-lock artifact committed before repair, and scores only a digest-bound
+result-evidence artifact committed with the recorded result. A valid failed
+trial remains evidence; it is never upgraded into a success claim.
 """
 from __future__ import annotations
 
@@ -180,6 +181,80 @@ def _selection_lock_reasons(
     return reasons
 
 
+def _result_evidence_reasons(
+    evidence: Mapping[str, Any],
+    *,
+    expected_anchor_sha: str,
+    expected_selection_lock_digest: str,
+    chronology_values: list[str],
+    result_baseline: Any,
+    result_learned: Any,
+) -> list[str]:
+    reasons: list[str] = []
+    payload = dict(evidence)
+
+    if payload.get("schema_version") != "prospective-result-evidence-v1":
+        reasons.append("result_evidence_schema_invalid")
+    if payload.get("registration_id") != REGISTRATION_ID:
+        reasons.append("result_evidence_registration_mismatch")
+    if payload.get("phase") != "RESULT_EVIDENCE":
+        reasons.append("result_evidence_phase_invalid")
+    if payload.get("status") != "VERIFIED_RESULT_EVIDENCE":
+        reasons.append("result_evidence_status_invalid")
+    if payload.get("preregistration_anchor_sha") != expected_anchor_sha:
+        reasons.append("result_evidence_anchor_mismatch")
+    if payload.get("preregistration_seal_sha256") != PREREGISTRATION_SEAL:
+        reasons.append("result_evidence_seal_mismatch")
+    if payload.get("selection_lock_digest_sha256") != expected_selection_lock_digest:
+        reasons.append("result_evidence_selection_lock_mismatch")
+
+    for index, field in enumerate(
+        ("failure_commit_sha", "selection_lock_commit_sha", "fix_commit_sha")
+    ):
+        if payload.get(field) != chronology_values[index]:
+            reasons.append(f"result_evidence_{field}_mismatch")
+
+    supplied_digest = str(payload.get("result_evidence_digest_sha256") or "")
+    if not _SHA256.fullmatch(supplied_digest):
+        reasons.append("result_evidence_digest_missing_or_invalid")
+    else:
+        unsigned = dict(payload)
+        unsigned.pop("result_evidence_digest_sha256", None)
+        if _canonical_digest(unsigned) != supplied_digest:
+            reasons.append("result_evidence_digest_mismatch")
+
+    after_refs = payload.get("after_evidence_refs")
+    if (
+        not isinstance(after_refs, list)
+        or not after_refs
+        or not all(isinstance(item, str) and item.strip() for item in after_refs)
+    ):
+        reasons.append("result_evidence_after_evidence_missing")
+    if payload.get("repair_outcome") != "VERIFIED":
+        reasons.append("result_evidence_repair_not_verified")
+
+    evidence_baseline = payload.get("baseline")
+    evidence_learned = payload.get("learned")
+    if not isinstance(evidence_baseline, Mapping) or not isinstance(evidence_learned, Mapping):
+        reasons.append("result_evidence_trials_invalid")
+    elif (
+        not isinstance(result_baseline, Mapping)
+        or not isinstance(result_learned, Mapping)
+        or dict(evidence_baseline) != dict(result_baseline)
+        or dict(evidence_learned) != dict(result_learned)
+    ):
+        reasons.append("result_evidence_trials_mismatch")
+
+    if payload.get("prospective_claim") is not False:
+        reasons.append("result_evidence_prospective_claim_forbidden")
+    if payload.get("blind_holdout_claim") is not False:
+        reasons.append("result_evidence_blind_claim_forbidden")
+    if payload.get("production_world_claim") is not False:
+        reasons.append("result_evidence_production_claim_forbidden")
+
+    return reasons
+
+
 def _trial_from_mapping(value: Mapping[str, Any]) -> BenchmarkTrial:
     return BenchmarkTrial(
         task_id=str(value["task_id"]),
@@ -214,11 +289,12 @@ def evaluate_prospective_result(
 ) -> dict[str, Any]:
     """Validate Phase-B governance and evaluate the fixed Tiny-to-Beast contract.
 
-    Production callers must provide ``repository_root``.  The evaluator then
-    reads the selection-lock artifact from the recorded selection commit and
-    does not trust an embedded copy as authority. ``trust_ancestry_flag`` exists
-    only for isolated unit testing, where a digest-valid embedded lock may stand
-    in for committed Git evidence; it must never be enabled by CLI or CI.
+    Production callers must provide ``repository_root``. The evaluator reads
+    the selection lock from the recorded selection commit and result evidence
+    from the recorded result commit; caller-supplied embedded copies are not
+    authority. ``trust_ancestry_flag`` exists only for isolated unit testing,
+    where digest-valid embedded artifacts may stand in for committed Git
+    evidence; it must never be enabled by CLI or CI.
     """
 
     payload = dict(value)
@@ -318,6 +394,57 @@ def evaluate_prospective_result(
             "eligibility_reviewer_id": str(selection_lock.get("eligibility_reviewer_id") or ""),
         }
 
+    result_baseline = payload.get("baseline")
+    result_learned = payload.get("learned")
+    result_evidence_path = _safe_repo_path(payload.get("result_evidence_path"))
+    embedded_result_evidence = payload.get("result_evidence_artifact")
+    if result_evidence_path is None:
+        reasons.append("result_evidence_binding_missing")
+
+    result_evidence: dict[str, Any] | None = None
+    if result_evidence_path is not None:
+        if repository_root is not None and _SHA40.fullmatch(chronology_values[3]):
+            result_evidence = _load_json_from_commit(
+                Path(repository_root).resolve(),
+                chronology_values[3],
+                result_evidence_path,
+            )
+            if result_evidence is None:
+                reasons.append("result_evidence_artifact_not_found_at_result_commit")
+        elif repository_root is None and trust_ancestry_flag:
+            if isinstance(embedded_result_evidence, Mapping):
+                result_evidence = dict(embedded_result_evidence)
+            else:
+                reasons.append("result_evidence_binding_missing")
+        elif repository_root is None:
+            reasons.append("result_evidence_artifact_not_verified")
+
+    result_evidence_verified = False
+    result_evidence_digest = ""
+    result_evidence_lineage: dict[str, str] = {}
+    if result_evidence is not None:
+        evidence_reasons = _result_evidence_reasons(
+            result_evidence,
+            expected_anchor_sha=ANCHOR_SHA,
+            expected_selection_lock_digest=selection_lock_digest,
+            chronology_values=chronology_values,
+            result_baseline=result_baseline,
+            result_learned=result_learned,
+        )
+        reasons.extend(evidence_reasons)
+        result_evidence_verified = not evidence_reasons
+        result_evidence_digest = str(result_evidence.get("result_evidence_digest_sha256") or "")
+        result_evidence_lineage = {
+            "selection_lock_digest_sha256": str(
+                result_evidence.get("selection_lock_digest_sha256") or ""
+            ),
+            "failure_commit_sha": str(result_evidence.get("failure_commit_sha") or ""),
+            "selection_lock_commit_sha": str(
+                result_evidence.get("selection_lock_commit_sha") or ""
+            ),
+            "fix_commit_sha": str(result_evidence.get("fix_commit_sha") or ""),
+        }
+
     ancestry_verified = False
     if not any(reason.startswith("invalid_") and reason.endswith("_commit_sha") for reason in reasons):
         if repository_root is not None:
@@ -333,15 +460,16 @@ def evaluate_prospective_result(
 
     baseline: BenchmarkTrial | None = None
     learned: BenchmarkTrial | None = None
-    try:
-        baseline_value = payload.get("baseline")
-        learned_value = payload.get("learned")
-        if not isinstance(baseline_value, Mapping) or not isinstance(learned_value, Mapping):
-            raise ValueError("baseline and learned mappings are required")
-        baseline = _trial_from_mapping(baseline_value)
-        learned = _trial_from_mapping(learned_value)
-    except (KeyError, TypeError, ValueError):
-        reasons.append("invalid_benchmark_trials")
+    if result_evidence_verified and result_evidence is not None:
+        try:
+            baseline_value = result_evidence.get("baseline")
+            learned_value = result_evidence.get("learned")
+            if not isinstance(baseline_value, Mapping) or not isinstance(learned_value, Mapping):
+                raise ValueError("baseline and learned mappings are required")
+            baseline = _trial_from_mapping(baseline_value)
+            learned = _trial_from_mapping(learned_value)
+        except (KeyError, TypeError, ValueError):
+            reasons.append("invalid_benchmark_trials")
 
     if baseline is not None and learned is not None:
         if baseline.family != FAMILY or learned.family != FAMILY:
@@ -391,6 +519,10 @@ def evaluate_prospective_result(
         "selection_lock_path": selection_lock_path or "",
         "selection_lock_digest_sha256": selection_lock_digest,
         "selection_lock_lineage": selection_lock_lineage,
+        "result_evidence_verified": result_evidence_verified,
+        "result_evidence_path": result_evidence_path or "",
+        "result_evidence_digest_sha256": result_evidence_digest,
+        "result_evidence_lineage": result_evidence_lineage,
         "reasons": reasons,
         "growth": growth_payload,
         "growth_reasons": growth_reasons,
