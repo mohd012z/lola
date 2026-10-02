@@ -1,9 +1,10 @@
 """Observer-only watcher for LOLA's preregistered prospective holdout.
 
-This module may record that a failed workflow happened strictly after the
-sealed Phase-A anchor.  It intentionally cannot decide holdout eligibility,
-create a selection lock, repair a failure, or make any prospective success
-claim.  Selection-sensitive fields remain unknown until independent review.
+This module may record that an abnormal terminal workflow outcome happened
+strictly after the sealed Phase-A anchor. It intentionally cannot decide
+holdout eligibility, create a selection lock, repair a failure, or make any
+prospective success claim. Selection-sensitive fields remain unknown until
+independent review.
 """
 from __future__ import annotations
 
@@ -18,6 +19,15 @@ from lola_prospective_result import ANCHOR_SHA, PREREGISTRATION_SEAL, REGISTRATI
 
 
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
+_REVIEWABLE_CONCLUSIONS = frozenset(
+    {
+        "failure",
+        "timed_out",
+        "startup_failure",
+        "action_required",
+        "cancelled",
+    }
+)
 _REVIEW_FIELDS = (
     "surface",
     "naturally_occurring",
@@ -84,9 +94,10 @@ def observe_workflow_event(
     """Normalize one GitHub workflow_run event without selecting a holdout.
 
     A returned ``OBSERVED_REVIEW_REQUIRED`` object proves only two things:
-    a workflow reported failure and its head commit is strictly after the
-    preregistered anchor in the supplied local Git history.  All semantic
-    eligibility questions are deliberately left for independent review.
+    a watched workflow reached a reviewable abnormal terminal conclusion and
+    its head commit is strictly after the preregistered anchor in the supplied
+    local Git history. All semantic eligibility questions are deliberately
+    left for independent review.
     """
 
     workflow_run = value.get("workflow_run") if isinstance(value, Mapping) else None
@@ -99,12 +110,12 @@ def observe_workflow_event(
     conclusion = str(workflow_run.get("conclusion") or "")
     head_sha = str(workflow_run.get("head_sha") or "")
 
-    if conclusion != "failure":
-        result = _base("IGNORED_NOT_FAILURE")
+    if conclusion not in _REVIEWABLE_CONCLUSIONS:
+        result = _base("IGNORED_NOT_REVIEWABLE")
         result["preregistration_anchor_sha"] = expected_anchor_sha
         result["failure_commit_sha"] = head_sha
         result["git_ancestry_verified"] = False
-        result["reason"] = "workflow_conclusion_not_failure"
+        result["reason"] = "workflow_conclusion_not_reviewable"
         return result
 
     repo = Path(repository_root).resolve()
@@ -114,7 +125,7 @@ def observe_workflow_event(
         result["preregistration_anchor_sha"] = expected_anchor_sha
         result["failure_commit_sha"] = head_sha
         result["git_ancestry_verified"] = False
-        result["reason"] = "failure_not_strictly_after_anchor"
+        result["reason"] = "abnormal_outcome_not_strictly_after_anchor"
         return result
 
     run_id = workflow_run.get("id")
