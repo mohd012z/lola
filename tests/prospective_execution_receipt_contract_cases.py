@@ -95,6 +95,7 @@ class ProspectiveExecutionReceiptBindingTests(unittest.TestCase):
 
     def test_authorized_fix_without_execution_receipt_is_invalid(self):
         payload = self.helper._payload()
+        payload["execution_receipt_contract_required"] = True
 
         outcome = evaluate_prospective_result(payload, trust_ancestry_flag=True)
 
