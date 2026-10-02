@@ -1,5 +1,11 @@
+import io
+import json
+import sys
 import unittest
+from contextlib import redirect_stdout
+from unittest.mock import patch
 
+from lola import main
 from lola_historical_replay import (
     load_scanner_cwd_fixture,
     run_scanner_cwd_historical_replay,
@@ -29,6 +35,19 @@ class HistoricalReplayTests(unittest.TestCase):
         self.assertEqual(fixture["source"]["path"], "scan-security.ps1")
         self.assertEqual(fixture["source"]["before_blob_sha"], "f433e44786574a5fa3d9f54d2812f7cc48059af5")
         self.assertEqual(fixture["source"]["fixed_blob_sha"], "9ace16e38bfce25668558d9f5d3e6a5cd612e032")
+
+    def test_cli_runs_historical_replay_without_target(self):
+        stdout = io.StringIO()
+        with patch.object(sys, "argv", ["lola.py", "--historical-replay-scanner-cwd"]):
+            with redirect_stdout(stdout):
+                rc = main()
+
+        self.assertEqual(rc, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["mode"], "HISTORICAL-REPLAY")
+        self.assertTrue(payload["historical_replay_claim"])
+        self.assertFalse(payload["transfer_claim"])
+        self.assertFalse(payload["production_world_claim"])
 
 
 if __name__ == "__main__":
