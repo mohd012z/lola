@@ -63,8 +63,8 @@
       "fixed_blob_sha": "060094018e54e2af74e5eb46b4fb5eaf0264309b"
     },
     "before": {
-      "excerpt": "  - id: extract-file-uri\n    languages: [generic]\n    severity: INFO\n    message: \"file:// URI found\"\n    metadata: {category: paths, surface: filesystem, confidence: HIGH}\n    pattern-regex: \"file://[^\\\\s\\\\\\\"'<>]+\"\n",
-      "excerpt_sha256": "3dfc8f95f09376aada3611e184bd7bd548955dde9a2a23055fe24fb12e53d3fc"
+      "excerpt": "  - id: extract-file-uri\n    languages: [generic]\n    severity: INFO\n    message: \"file:// URI found\"\n    metadata: {category: paths, surface: filesystem, confidence: HIGH}\n    pattern-regex: \"file://[^\\\\s\\\\\"'<>]+\"\n",
+      "excerpt_sha256": "4c9888ae5d8cfcdb9fc262077a21e4b9b675c59ea977ee6dbf428aa160a8ea72"
     },
     "after": {
       "excerpt": "  - id: extract-file-uri\n    languages: [generic]\n    severity: INFO\n    message: \"file:// URI found\"\n    metadata: {category: paths, surface: filesystem, confidence: HIGH}\n    pattern-regex: 'file://[^\\s\\\"''<>]+'\n",
