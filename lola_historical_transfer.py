@@ -80,15 +80,21 @@ def load_historical_transfer_fixture(path: Path | str = DEFAULT_FIXTURE) -> dict
 
 
 def _powershell_parser(excerpt: str) -> dict[str, Any]:
-    # The historical defect was an extra closing attribute bracket immediately
-    # after ValidateSet.  This is a deterministic structural check, not an LLM.
     defect = re.search(r"\)\]\]\s*\n\s*\[string\]\$Mode", excerpt) is not None
     return {"known_defect_detected": defect, "validator_kind": "powershell_parser"}
 
 
 def _python_ast(excerpt: str) -> dict[str, Any]:
+    candidate = excerpt
+    # Historical fixtures intentionally store bounded provenance excerpts. If
+    # an excerpt ends immediately after opening a block, append a no-op only to
+    # make the fragment parseable; real syntax defects inside the excerpt remain.
+    lines = candidate.rstrip().splitlines()
+    if lines and lines[-1].rstrip().endswith(":"):
+        indent = len(lines[-1]) - len(lines[-1].lstrip())
+        candidate = candidate.rstrip() + "\n" + " " * (indent + 4) + "pass"
     try:
-        ast.parse(excerpt)
+        ast.parse(candidate)
     except SyntaxError as exc:
         return {
             "known_defect_detected": True,
@@ -206,14 +212,22 @@ def run_historical_transfer_suite(
     )
 
     training_validator_kinds = tuple(
-        dict.fromkeys(str(episode.get("validator_kind", "")) for episode in learning_episodes if episode.get("validator_kind"))
+        dict.fromkeys(
+            str(episode.get("validator_kind", ""))
+            for episode in learning_episodes
+            if episode.get("validator_kind")
+        )
     )
     holdout_replay = _replay_incident(payload["holdout"])
     baseline_actions = len(payload["holdout"].get("baseline_diagnostic_order") or ())
     if baseline_actions < 1:
         raise ValueError("holdout baseline_diagnostic_order must be non-empty")
 
-    learned_actions = 1 if governance.promotable and holdout_replay["before"]["known_defect_detected"] else baseline_actions
+    learned_actions = (
+        1
+        if governance.promotable and holdout_replay["before"]["known_defect_detected"]
+        else baseline_actions
+    )
     learned_level = 1 if learned_actions < baseline_actions else 4
     verified = bool(holdout_replay["reproduced"])
 
