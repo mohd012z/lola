@@ -32,16 +32,19 @@ class ProspectiveEligibilityReviewTests(unittest.TestCase):
             "source": "github_workflow_run",
             "workflow_run": {
                 "id": 4242,
+                "run_attempt": 1,
                 "name": "Toolchain smoke check",
                 "head_branch": "feature/example",
                 "trigger_event": "push",
                 "status": "completed",
                 "conclusion": "failure",
                 "run_url": "https://github.com/example/lola/actions/runs/4242",
+                "run_api_url": "https://api.github.com/repos/example/lola/actions/runs/4242",
+                "attempt_api_url": "https://api.github.com/repos/example/lola/actions/runs/4242/attempts/1",
                 "run_started_at": "2026-10-02T10:00:00Z",
                 "updated_at": "2026-10-02T10:01:00Z",
             },
-            "before_evidence_refs": ["https://github.com/example/lola/actions/runs/4242"],
+            "before_evidence_refs": ["https://api.github.com/repos/example/lola/actions/runs/4242/attempts/1"],
             "review_fields": {
                 "surface": None,
                 "naturally_occurring": None,
@@ -61,6 +64,35 @@ class ProspectiveEligibilityReviewTests(unittest.TestCase):
         value["observation_digest_sha256"] = canonical_digest(value)
         return value
 
+    def _census(self, observation):
+        event = {
+            "event_key": "2026-10-02T10:00:00Z|00000000000000004242|000001",
+            "run_id": 4242,
+            "run_attempt": 1,
+            "head_sha": observation["failure_commit_sha"],
+            "workflow_name": "Toolchain smoke check",
+            "conclusion": "failure",
+            "run_started_at": "2026-10-02T10:00:00Z",
+            "updated_at": "2026-10-02T10:01:00Z",
+            "attempt_api_url": observation["workflow_run"]["attempt_api_url"],
+        }
+        census = {
+            "schema_version": "prospective-event-census-v1",
+            "registration_id": REGISTRATION_ID,
+            "preregistration_anchor_sha": ANCHOR_SHA,
+            "preregistration_seal_sha256": PREREGISTRATION_SEAL,
+            "source": "github_actions_history",
+            "candidate_event_key": event["event_key"],
+            "ordered_events": [event],
+            "prior_event_verdicts": [],
+            "history_complete_through_candidate": True,
+            "prospective_claim": False,
+            "blind_holdout_claim": False,
+            "production_world_claim": False,
+        }
+        census["event_census_digest_sha256"] = canonical_digest(census)
+        return census
+
     def _review(self, observation):
         return {
             "schema_version": "prospective-holdout-eligibility-review-v1",
@@ -69,6 +101,7 @@ class ProspectiveEligibilityReviewTests(unittest.TestCase):
             "reviewer_id": "independent-reviewer-01",
             "reviewer_independent": True,
             "review_completed_before_repair": True,
+            "event_census": self._census(observation),
             "review_fields": {
                 "surface": "workflow",
                 "naturally_occurring": True,
@@ -98,6 +131,50 @@ class ProspectiveEligibilityReviewTests(unittest.TestCase):
         self.assertFalse(result["production_world_claim"])
         self.assertEqual(result["repair_outcome"], "UNKNOWN")
         self.assertRegex(result["eligibility_review_digest_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_missing_census_proof_is_rejected(self):
+        observation = self._observation()
+        review = self._review(observation)
+        review.pop("event_census")
+
+        result = review_observation(observation, review)
+
+        self.assertFalse(result["valid_review"])
+        self.assertIn("event_census_missing", result["reasons"])
+
+    def test_census_with_unreviewed_earlier_event_is_rejected(self):
+        observation = self._observation()
+        review = self._review(observation)
+        earlier = {
+            "event_key": "2026-10-02T09:00:00Z|00000000000000004000|000001",
+            "run_id": 4000,
+            "run_attempt": 1,
+            "head_sha": "2" * 40,
+            "workflow_name": "Lola Code Doctor",
+            "conclusion": "failure",
+            "run_started_at": "2026-10-02T09:00:00Z",
+            "updated_at": "2026-10-02T09:01:00Z",
+            "attempt_api_url": "https://api.github.com/repos/example/lola/actions/runs/4000/attempts/1",
+        }
+        census = review["event_census"]
+        census["ordered_events"].insert(0, earlier)
+        census.pop("event_census_digest_sha256")
+        census["event_census_digest_sha256"] = canonical_digest(census)
+
+        result = review_observation(observation, review)
+
+        self.assertFalse(result["valid_review"])
+        self.assertIn("prior_event_unreviewed", result["reasons"])
+
+    def test_tampered_census_is_rejected(self):
+        observation = self._observation()
+        review = self._review(observation)
+        review["event_census"]["ordered_events"][0]["run_id"] = 9999
+
+        result = review_observation(observation, review)
+
+        self.assertFalse(result["valid_review"])
+        self.assertIn("event_census_digest_mismatch", result["reasons"])
 
     def test_tampered_observation_is_rejected(self):
         observation = self._observation()
