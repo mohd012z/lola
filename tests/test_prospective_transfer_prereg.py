@@ -8,6 +8,7 @@ from unittest.mock import patch
 
 from lola import main
 from lola_prospective_prereg import (
+    compute_preregistration_seal,
     load_preregistration,
     validate_preregistration,
 )
@@ -42,11 +43,11 @@ class ProspectiveTransferPreregistrationTests(unittest.TestCase):
         self.assertIn("contract_digest_mismatch", result["reasons"])
         self.assertFalse(result["prospective_claim"])
 
-    def test_selection_rule_cannot_target_known_outcome(self):
+    def test_selection_rule_cannot_target_known_outcome_even_with_valid_new_seal(self):
         registration = load_preregistration()
         tampered = copy.deepcopy(registration)
         tampered["holdout_selection"]["known_outcome_allowed"] = True
-        tampered["seal_sha256"] = tampered["computed_test_only_seal"]
+        tampered["seal_sha256"] = compute_preregistration_seal(tampered)
 
         result = validate_preregistration(tampered)
 
