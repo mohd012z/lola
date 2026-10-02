@@ -7,6 +7,7 @@ on:
 
 permissions:
   contents: read
+  actions: read
 
 jobs:
   observe-abnormal-outcome:
@@ -39,11 +40,53 @@ jobs:
             --prospective-holdout-observe "$GITHUB_EVENT_PATH" \
             --holdout-observation-output prospective-holdout-observation.json
 
-      - name: Upload review-only observation
-        if: ${{ hashFiles('prospective-holdout-observation.json') != '' }}
+      - name: Export complete read-only GitHub Actions history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate --slurp \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" \
+            > prospective-workflow-runs-pages.json
+
+      - name: Build deterministic first-eligible event census
+        env:
+          CANDIDATE_RUN_ID: ${{ github.event.workflow_run.id }}
+          CANDIDATE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from lola_prospective_event_census import build_event_census
+
+          pages = json.loads(Path("prospective-workflow-runs-pages.json").read_text(encoding="utf-8"))
+          runs = []
+          for page in pages:
+              if isinstance(page, dict):
+                  page_runs = page.get("workflow_runs", [])
+                  if isinstance(page_runs, list):
+                      runs.extend(page_runs)
+
+          census = build_event_census(
+              runs,
+              candidate_run_id=int(os.environ["CANDIDATE_RUN_ID"]),
+              candidate_run_attempt=int(os.environ["CANDIDATE_RUN_ATTEMPT"]),
+              history_complete=True,
+          )
+          Path("prospective-event-census.json").write_text(
+              json.dumps(census, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Upload review-only observation and census
+        if: ${{ hashFiles('prospective-holdout-observation.json') != '' && hashFiles('prospective-event-census.json') != '' }}
         uses: actions/upload-artifact@v4
         with:
-          name: prospective-holdout-observation-${{ github.event.workflow_run.id }}
-          path: prospective-holdout-observation.json
+          name: prospective-holdout-evidence-${{ github.event.workflow_run.id }}-attempt-${{ github.event.workflow_run.run_attempt }}
+          path: |
+            prospective-holdout-observation.json
+            prospective-event-census.json
           if-no-files-found: error
           retention-days: 30
