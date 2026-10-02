@@ -2,15 +2,17 @@
 
 The Phase-A preregistration is immutable and anchored at ANCHOR_SHA.  A future
 result is valid only when it references that prior anchor and seal, obeys the
-first-eligible selection policy, and proves commit chronology.  A valid failed
-trial remains evidence; it is never upgraded into a success claim.
+first-eligible selection policy, proves commit chronology, and authenticates the
+selection-lock artifact committed before repair.  A valid failed trial remains
+evidence; it is never upgraded into a success claim.
 """
 from __future__ import annotations
 
+import hashlib
 import json
 import re
 import subprocess
-from pathlib import Path
+from pathlib import Path, PurePosixPath
 from typing import Any, Mapping
 
 from lola_tiny_beast_benchmark import BenchmarkTrial, evaluate_growth
@@ -23,6 +25,8 @@ MODEL_ID = "kernel-historical-inspector-v2"
 HARDWARE_ID = "frozen-fixture-runtime"
 FAMILY = "historical-preflight-validity"
 _SHA40 = re.compile(r"^[0-9a-f]{40}$")
+_SHA256 = re.compile(r"^[0-9a-f]{64}$")
+_ALLOWED_SURFACES = {"source", "workflow", "config", "runtime-integration"}
 
 
 def _git_is_ancestor(repo: Path, older: str, newer: str) -> bool:
@@ -59,6 +63,123 @@ def verify_commit_order(
     )
 
 
+def _canonical_digest(value: Mapping[str, Any]) -> str:
+    payload = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
+def _safe_repo_path(value: Any) -> str | None:
+    if not isinstance(value, str) or not value.strip() or "\\" in value or "\x00" in value:
+        return None
+    path = PurePosixPath(value.strip())
+    if path.is_absolute() or any(part in {"", ".", ".."} for part in path.parts):
+        return None
+    return path.as_posix()
+
+
+def _load_json_from_commit(repo: Path, commit_sha: str, path: str) -> dict[str, Any] | None:
+    if not _SHA40.fullmatch(commit_sha):
+        return None
+    completed = subprocess.run(
+        ["git", "-C", str(repo), "show", f"{commit_sha}:{path}"],
+        stdout=subprocess.PIPE,
+        stderr=subprocess.DEVNULL,
+        text=True,
+        check=False,
+    )
+    if completed.returncode != 0:
+        return None
+    try:
+        payload = json.loads(completed.stdout)
+    except json.JSONDecodeError:
+        return None
+    return payload if isinstance(payload, dict) else None
+
+
+def _selection_lock_reasons(
+    lock: Mapping[str, Any],
+    *,
+    expected_anchor_sha: str,
+    expected_failure_sha: str,
+    result_selection: Mapping[str, Any],
+) -> list[str]:
+    reasons: list[str] = []
+    payload = dict(lock)
+
+    if payload.get("schema_version") != "prospective-holdout-selection-lock-v1":
+        reasons.append("selection_lock_schema_invalid")
+    if payload.get("registration_id") != REGISTRATION_ID:
+        reasons.append("selection_lock_registration_mismatch")
+    if payload.get("phase") != "SELECTION_LOCK":
+        reasons.append("selection_lock_phase_invalid")
+    if payload.get("status") != "LOCKED_AWAITING_REPAIR":
+        reasons.append("selection_lock_status_invalid")
+    if payload.get("preregistration_anchor_sha") != expected_anchor_sha:
+        reasons.append("selection_lock_anchor_mismatch")
+    if payload.get("preregistration_seal_sha256") != PREREGISTRATION_SEAL:
+        reasons.append("selection_lock_seal_mismatch")
+    if payload.get("failure_commit_sha") != expected_failure_sha:
+        reasons.append("selection_lock_failure_mismatch")
+
+    supplied_digest = str(payload.get("selection_lock_digest_sha256") or "")
+    if not _SHA256.fullmatch(supplied_digest):
+        reasons.append("selection_lock_digest_missing_or_invalid")
+    else:
+        unsigned = dict(payload)
+        unsigned.pop("selection_lock_digest_sha256", None)
+        if _canonical_digest(unsigned) != supplied_digest:
+            reasons.append("selection_lock_digest_mismatch")
+
+    for field, reason in (
+        ("candidate_digest_sha256", "selection_lock_candidate_digest_invalid"),
+        ("observation_digest_sha256", "selection_lock_observation_digest_invalid"),
+        ("eligibility_review_digest_sha256", "selection_lock_review_digest_invalid"),
+    ):
+        if not _SHA256.fullmatch(str(payload.get(field) or "")):
+            reasons.append(reason)
+    if not str(payload.get("eligibility_reviewer_id") or "").strip():
+        reasons.append("selection_lock_reviewer_missing")
+
+    lock_selection = payload.get("selection")
+    if not isinstance(lock_selection, Mapping):
+        reasons.append("selection_lock_selection_missing")
+        lock_selection = {}
+    if dict(lock_selection) != dict(result_selection):
+        reasons.append("selection_lock_selection_mismatch")
+
+    if lock_selection.get("surface") not in _ALLOWED_SURFACES:
+        reasons.append("selection_lock_surface_invalid")
+    before_refs = lock_selection.get("before_evidence_refs")
+    if (
+        not isinstance(before_refs, list)
+        or not before_refs
+        or not all(isinstance(item, str) and item.strip() for item in before_refs)
+    ):
+        reasons.append("selection_lock_before_evidence_missing")
+    if not isinstance(lock_selection.get("prior_post_anchor_failures_reviewed"), list):
+        reasons.append("selection_lock_prior_review_missing")
+
+    if payload.get("outcome_at_selection") != "UNKNOWN":
+        reasons.append("selection_lock_outcome_known")
+    if payload.get("fix_commit_sha") is not None:
+        reasons.append("selection_lock_fix_already_known")
+    if payload.get("result_commit_sha") is not None:
+        reasons.append("selection_lock_result_already_known")
+    if payload.get("prospective_claim") is not False:
+        reasons.append("selection_lock_prospective_claim_forbidden")
+    if payload.get("blind_holdout_claim") is not False:
+        reasons.append("selection_lock_blind_claim_forbidden")
+    if payload.get("production_world_claim") is not False:
+        reasons.append("selection_lock_production_claim_forbidden")
+
+    return reasons
+
+
 def _trial_from_mapping(value: Mapping[str, Any]) -> BenchmarkTrial:
     return BenchmarkTrial(
         task_id=str(value["task_id"]),
@@ -93,9 +214,11 @@ def evaluate_prospective_result(
 ) -> dict[str, Any]:
     """Validate Phase-B governance and evaluate the fixed Tiny-to-Beast contract.
 
-    Production callers should provide ``repository_root`` so Git ancestry is
-    independently checked.  ``trust_ancestry_flag`` exists only for isolated
-    unit testing and must never be enabled by the CLI or CI result evaluator.
+    Production callers must provide ``repository_root``.  The evaluator then
+    reads the selection-lock artifact from the recorded selection commit and
+    does not trust an embedded copy as authority. ``trust_ancestry_flag`` exists
+    only for isolated unit testing, where a digest-valid embedded lock may stand
+    in for committed Git evidence; it must never be enabled by CLI or CI.
     """
 
     payload = dict(value)
@@ -149,6 +272,51 @@ def evaluate_prospective_result(
     for key, sha in zip(chronology_keys, chronology_values):
         if not _SHA40.fullmatch(sha):
             reasons.append(f"invalid_{key}")
+
+    selection_lock_path = _safe_repo_path(payload.get("selection_lock_path"))
+    embedded_lock = payload.get("selection_lock_artifact")
+    if selection_lock_path is None:
+        reasons.append("selection_lock_binding_missing")
+
+    selection_lock: dict[str, Any] | None = None
+    if selection_lock_path is not None:
+        if repository_root is not None and _SHA40.fullmatch(chronology_values[1]):
+            selection_lock = _load_json_from_commit(
+                Path(repository_root).resolve(),
+                chronology_values[1],
+                selection_lock_path,
+            )
+            if selection_lock is None:
+                reasons.append("selection_lock_artifact_not_found_at_selection_commit")
+        elif repository_root is None and trust_ancestry_flag:
+            if isinstance(embedded_lock, Mapping):
+                selection_lock = dict(embedded_lock)
+            else:
+                reasons.append("selection_lock_binding_missing")
+        elif repository_root is None:
+            reasons.append("selection_lock_artifact_not_verified")
+
+    selection_lock_verified = False
+    selection_lock_digest = ""
+    selection_lock_lineage: dict[str, str] = {}
+    if selection_lock is not None:
+        lock_reasons = _selection_lock_reasons(
+            selection_lock,
+            expected_anchor_sha=ANCHOR_SHA,
+            expected_failure_sha=chronology_values[0],
+            result_selection=selection,
+        )
+        reasons.extend(lock_reasons)
+        selection_lock_verified = not lock_reasons
+        selection_lock_digest = str(selection_lock.get("selection_lock_digest_sha256") or "")
+        selection_lock_lineage = {
+            "candidate_digest_sha256": str(selection_lock.get("candidate_digest_sha256") or ""),
+            "observation_digest_sha256": str(selection_lock.get("observation_digest_sha256") or ""),
+            "eligibility_review_digest_sha256": str(
+                selection_lock.get("eligibility_review_digest_sha256") or ""
+            ),
+            "eligibility_reviewer_id": str(selection_lock.get("eligibility_reviewer_id") or ""),
+        }
 
     ancestry_verified = False
     if not any(reason.startswith("invalid_") and reason.endswith("_commit_sha") for reason in reasons):
@@ -219,6 +387,10 @@ def evaluate_prospective_result(
         "preregistration_anchor_sha": str(payload.get("preregistration_anchor_sha", "")),
         "preregistration_seal_sha256": str(payload.get("preregistration_seal_sha256", "")),
         "git_ancestry_verified": ancestry_verified,
+        "selection_lock_verified": selection_lock_verified,
+        "selection_lock_path": selection_lock_path or "",
+        "selection_lock_digest_sha256": selection_lock_digest,
+        "selection_lock_lineage": selection_lock_lineage,
         "reasons": reasons,
         "growth": growth_payload,
         "growth_reasons": growth_reasons,
