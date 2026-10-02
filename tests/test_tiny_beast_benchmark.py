@@ -17,6 +17,24 @@ from lola_tiny_beast_benchmark import (
 
 
 class TinyBeastBenchmarkTests(unittest.TestCase):
+    def _passing_payload(self):
+        return {
+            "baseline": {
+                "task_id": "p0", "family": "dependency-debug", "transfer_distance": 0,
+                "model_id": "tiny-a", "hardware_id": "cpu-a", "verified": True,
+                "false_solved": False, "intellectual_level": 4, "actions": 10,
+                "escalations": 2, "tokens": 5000, "wall_time_ms": 8000,
+                "external_ai_used": False, "regression_failures": 0,
+            },
+            "learned": {
+                "task_id": "p2", "family": "dependency-debug", "transfer_distance": 2,
+                "model_id": "tiny-a", "hardware_id": "cpu-a", "verified": True,
+                "false_solved": False, "intellectual_level": 1, "actions": 3,
+                "escalations": 0, "tokens": 1200, "wall_time_ms": 2500,
+                "external_ai_used": False, "regression_failures": 0,
+            },
+        }
+
     def test_verified_unseen_downshift_passes(self):
         before = BenchmarkTrial(
             task_id="p0",
@@ -121,18 +139,7 @@ class TinyBeastBenchmarkTests(unittest.TestCase):
         self.assertIn("external_ai_used", result.reasons)
 
     def test_json_pair_loader_is_strict(self):
-        payload = {
-            "baseline": {
-                "task_id": "p0", "family": "x", "transfer_distance": 0,
-                "model_id": "tiny-a", "hardware_id": "cpu-a",
-                "verified": True, "intellectual_level": 4, "actions": 10,
-            },
-            "learned": {
-                "task_id": "p2", "family": "x", "transfer_distance": 2,
-                "model_id": "tiny-a", "hardware_id": "cpu-a",
-                "verified": True, "intellectual_level": 1, "actions": 3,
-            },
-        }
+        payload = self._passing_payload()
         with tempfile.TemporaryDirectory() as tmp:
             path = Path(tmp) / "pair.json"
             path.write_text(json.dumps(payload), encoding="utf-8")
@@ -156,6 +163,40 @@ class TinyBeastBenchmarkTests(unittest.TestCase):
         payload = json.loads(stdout.getvalue())
         self.assertTrue(payload["passed"])
         self.assertFalse(payload["empirical_beast_claim"])
+
+    def test_cli_empirical_benchmark_can_prove_sovereign_gain(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "pair.json"
+            path.write_text(json.dumps(self._passing_payload()), encoding="utf-8")
+            stdout = io.StringIO()
+            with patch.object(
+                sys,
+                "argv",
+                ["lola.py", "--tiny-beast-benchmark", str(path), "--require-sovereign"],
+            ):
+                with redirect_stdout(stdout):
+                    rc = main()
+        self.assertEqual(rc, 0)
+        result = json.loads(stdout.getvalue())
+        self.assertTrue(result["passed"])
+        self.assertTrue(result["empirical_beast_claim"])
+        self.assertTrue(result["sovereign"])
+
+    def test_cli_empirical_benchmark_returns_nonzero_when_not_proven(self):
+        payload = self._passing_payload()
+        payload["learned"]["model_id"] = "larger-model"
+        with tempfile.TemporaryDirectory() as tmp:
+            path = Path(tmp) / "pair.json"
+            path.write_text(json.dumps(payload), encoding="utf-8")
+            stdout = io.StringIO()
+            with patch.object(sys, "argv", ["lola.py", "--tiny-beast-benchmark", str(path)]):
+                with redirect_stdout(stdout):
+                    rc = main()
+        self.assertEqual(rc, 2)
+        result = json.loads(stdout.getvalue())
+        self.assertFalse(result["passed"])
+        self.assertFalse(result["empirical_beast_claim"])
+        self.assertIn("model_changed", result["reasons"])
 
 
 if __name__ == "__main__":
