@@ -51,6 +51,42 @@ A successful result reports `mode: S0-SOVEREIGN`, `external_used: false`, and `r
 
 The smoke test proves the local control/evidence contract is runnable. It does **not** claim that a local foundation model has acquired frontier-model intelligence. Tiny-to-Beast improvement remains evidence-driven: expensive verified episodes must be compiled, transferred to unseen variants, and regression-checked before promotion.
 
+## Tiny-to-Beast benchmark
+
+`lola_tiny_beast_benchmark.py` is the empirical gate for the stronger system-intelligence claim. It intentionally avoids a single IQ-style score.
+
+The evaluator compares a verified baseline trial with a verified learned trial and requires, by default:
+
+- the same exact `model_id`;
+- the same exact `hardware_id`;
+- the same task family;
+- T2 or harder transfer (`transfer_distance >= 2`), so exact/near-exact replay is insufficient;
+- a lower intellectual operating level after learning;
+- no increase in actions or escalations;
+- no false-solved result;
+- no regression failures;
+- no increase in recorded tokens/wall time when those values exist.
+
+For a sovereign Tiny-to-Beast claim, the learned trial must additionally have `external_ai_used: false`.
+
+The synthetic harness smoke is runnable with:
+
+```bash
+python lola.py --tiny-beast-smoke
+```
+
+A green harness smoke proves only that the evaluator behaves correctly. It always reports `empirical_beast_claim: false` because synthetic data is not evidence of real learned intelligence.
+
+To evaluate real before/after evidence, copy `fixtures/tiny_beast_benchmark.example.json`, replace the trial data with measured values, and run:
+
+```bash
+python lola.py --tiny-beast-benchmark my-benchmark.json --require-sovereign
+```
+
+A real pass returns `SYSTEM_INTELLIGENCE_GAIN` and exit code `0`. A rejected claim returns `NOT_PROVEN` and exit code `2`, with explicit reasons such as `model_changed`, `transfer_distance_below_t2`, `false_solved`, `regression_failure`, or `external_ai_used`.
+
+This benchmark isolates **system intelligence gain** from model intelligence: keeping model weights/build identity and hardware fixed makes it possible to test whether `kernel_ai + in_ai + verified experience` actually reduce the cognitive work required for unseen variants.
+
 ## New primitives
 
 ### Epistemic Fuse
@@ -134,12 +170,13 @@ Knowledge/skills remain versioned and reversible. Contradiction, staleness, or f
 
 ## Verification
 
-The repository test suite covers cognitive fabric, evidence/corroboration, verification gates, prediction-error episodes, agent episodes, repeated patterns, transactions, ExperienceCompiler, lifecycle/rollback, transfer governance, and sovereign runtime behavior.
+The repository test suite covers cognitive fabric, evidence/corroboration, verification gates, prediction-error episodes, agent episodes, repeated patterns, transactions, ExperienceCompiler, lifecycle/rollback, transfer governance, sovereign runtime behavior, and Tiny-to-Beast benchmark semantics.
 
-CI also runs the targetless runnable proof:
+CI runs both targetless proofs:
 
 ```bash
 python lola.py --cognitive-smoke
+python lola.py --tiny-beast-smoke
 ```
 
-Do not equate a green build with broad model intelligence. The stronger Tiny-to-Beast claim requires repeated transfer benchmarks with fixed model weights/hardware showing verified difficult tasks downshift to cheaper local execution without increasing false-solved or regression rates.
+Do not equate either smoke test with broad model intelligence. The stronger Tiny-to-Beast claim requires measured real trials with fixed model weights/build and hardware showing verified difficult tasks downshift to cheaper execution on T2+ unseen variants without increasing false-solved or regression rates.
