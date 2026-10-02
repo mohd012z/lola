@@ -5,6 +5,7 @@ on:
     paths:
       - "toolchain.json"
       - "COGNITIVE_FABRIC.md"
+      - "fixtures/tiny_beast_benchmark.example.json"
       - "lola.py"
       - "lola_sovereign_runtime.py"
       - "lola_tiny_beast_benchmark.py"
@@ -23,6 +24,7 @@ on:
     paths:
       - "toolchain.json"
       - "COGNITIVE_FABRIC.md"
+      - "fixtures/tiny_beast_benchmark.example.json"
       - "lola.py"
       - "lola_sovereign_runtime.py"
       - "lola_tiny_beast_benchmark.py"
@@ -47,8 +49,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
-      - name: Validate JSON manifest
-        run: python -m json.tool toolchain.json > /dev/null
+      - name: Validate JSON manifests
+        run: |
+          python -m json.tool toolchain.json > /dev/null
+          python -m json.tool fixtures/tiny_beast_benchmark.example.json > /dev/null
       - name: Compile Lola Python modules
         run: |
           python -m py_compile \
