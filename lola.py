@@ -7,6 +7,8 @@ Examples:
     python lola.py --target "C:\Projects\MyApp"
     python lola.py "C:\Apps\sample.apk" --mode /apkpermissions
     python lola.py --cognitive-smoke
+    python lola.py --tiny-beast-smoke
+    python lola.py --tiny-beast-benchmark benchmark.json
 """
 
 from __future__ import annotations
@@ -198,6 +200,20 @@ def build_parser() -> argparse.ArgumentParser:
         action="store_true",
         help="Run the deterministic offline S0 sovereign cognitive smoke test.",
     )
+    p.add_argument(
+        "--tiny-beast-smoke",
+        action="store_true",
+        help="Run a synthetic smoke of the Tiny-to-Beast benchmark harness.",
+    )
+    p.add_argument(
+        "--tiny-beast-benchmark",
+        help="Evaluate a JSON baseline/learned benchmark pair with fixed-model rules.",
+    )
+    p.add_argument(
+        "--require-sovereign",
+        action="store_true",
+        help="Require the learned benchmark trial to use no external AI.",
+    )
 
     # Shared / source-project options
     p.add_argument("--resolve-urls", action="store_true")
@@ -239,16 +255,52 @@ def main() -> int:
     if args.handoff_validate and args.handoff_run:
         parser.error("--handoff-validate and --handoff-run cannot be used together.")
 
+    special_modes = sum(
+        bool(value)
+        for value in (
+            args.cognitive_smoke,
+            args.tiny_beast_smoke,
+            args.tiny_beast_benchmark,
+            args.handoff_validate,
+            args.handoff_run,
+        )
+    )
+    if special_modes > 1:
+        parser.error("Choose only one cognitive/benchmark/handoff command at a time.")
+
     if args.cognitive_smoke:
-        if args.handoff_validate or args.handoff_run or args.target_option or args.target_positional:
-            parser.error(
-                "--cognitive-smoke must run without handoff commands or target inputs."
-            )
+        if args.target_option or args.target_positional:
+            parser.error("--cognitive-smoke must run without target inputs.")
         from lola_sovereign_runtime import run_sovereign_smoke
 
         result = run_sovereign_smoke()
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("passed") else 1
+
+    if args.tiny_beast_smoke:
+        if args.target_option or args.target_positional:
+            parser.error("--tiny-beast-smoke must run without target inputs.")
+        from lola_tiny_beast_benchmark import run_tiny_beast_smoke
+
+        result = run_tiny_beast_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
+
+    if args.tiny_beast_benchmark:
+        if args.target_option or args.target_positional:
+            parser.error("--tiny-beast-benchmark must run without target inputs.")
+        from lola_tiny_beast_benchmark import evaluate_growth, load_benchmark_pair
+
+        baseline, learned = load_benchmark_pair(Path(args.tiny_beast_benchmark))
+        result = evaluate_growth(
+            baseline,
+            learned,
+            require_sovereign=bool(args.require_sovereign),
+        )
+        payload = result.as_dict()
+        payload["empirical_beast_claim"] = bool(result.passed)
+        print(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.passed else 2
 
     if args.handoff_validate or args.handoff_run:
         if args.target_option or args.target_positional:
