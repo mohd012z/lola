@@ -17,7 +17,9 @@ class ProspectiveHoldoutObserverWorkflowTests(unittest.TestCase):
         for conclusion in ("failure", "timed_out", "startup_failure", "action_required", "cancelled"):
             self.assertIn(conclusion, text)
         self.assertIn("contents: read", text)
+        self.assertIn("actions: read", text)
         self.assertNotIn("contents: write", text)
+        self.assertNotIn("actions: write", text)
 
         # Trusted code is checked out from the repository default branch.
         self.assertIn("github.event.repository.default_branch", text)
@@ -28,6 +30,13 @@ class ProspectiveHoldoutObserverWorkflowTests(unittest.TestCase):
         self.assertIn("git fetch", text)
         self.assertIn("--prospective-holdout-observe", text)
         self.assertIn("$GITHUB_EVENT_PATH", text)
+
+        # First-eligible history is captured read-only from GitHub Actions and emitted as evidence.
+        self.assertIn("gh api", text)
+        self.assertIn("--paginate", text)
+        self.assertIn("prospective-workflow-runs-pages.json", text)
+        self.assertIn("prospective-event-census.json", text)
+        self.assertIn("lola_prospective_event_census", text)
         self.assertIn("actions/upload-artifact@v4", text)
 
         # Hard boundary: the observer cannot select/lock/repair or mutate repository state.
