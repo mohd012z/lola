@@ -1,3 +1,4 @@
+import hashlib
 import io
 import json
 import subprocess
@@ -17,25 +18,62 @@ from lola_prospective_result import (
 )
 
 
+def _digest(value):
+    payload = json.dumps(
+        value,
+        sort_keys=True,
+        separators=(",", ":"),
+        ensure_ascii=False,
+    ).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
+
+
 class ProspectiveResultGateTests(unittest.TestCase):
     def _valid_payload(self):
+        selection = {
+            "first_eligible_confirmed": True,
+            "naturally_occurring": True,
+            "benchmark_authored": False,
+            "intentionally_injected": False,
+            "documentation_only": False,
+            "test_only_fixture": False,
+            "same_origin_training": False,
+            "known_outcome_at_selection": False,
+            "cherry_picked": False,
+            "surface": "workflow",
+            "before_evidence_refs": ["ci:run-123"],
+            "prior_post_anchor_failures_reviewed": [],
+        }
+        selection_lock = {
+            "schema_version": "prospective-holdout-selection-lock-v1",
+            "registration_id": "lola-preflight-validity-prospective-001",
+            "phase": "SELECTION_LOCK",
+            "status": "LOCKED_AWAITING_REPAIR",
+            "preregistration_anchor_sha": ANCHOR_SHA,
+            "preregistration_seal_sha256": PREREGISTRATION_SEAL,
+            "failure_commit_sha": "1" * 40,
+            "candidate_digest_sha256": "a" * 64,
+            "observation_digest_sha256": "b" * 64,
+            "eligibility_review_digest_sha256": "c" * 64,
+            "eligibility_reviewer_id": "reviewer-independent",
+            "selection": dict(selection),
+            "outcome_at_selection": "UNKNOWN",
+            "fix_commit_sha": None,
+            "result_commit_sha": None,
+            "prospective_claim": False,
+            "blind_holdout_claim": False,
+            "production_world_claim": False,
+        }
+        selection_lock["selection_lock_digest_sha256"] = _digest(selection_lock)
         return {
             "schema_version": "prospective-transfer-result-v1",
             "registration_id": "lola-preflight-validity-prospective-001",
             "phase": "RESULT",
             "preregistration_anchor_sha": ANCHOR_SHA,
             "preregistration_seal_sha256": PREREGISTRATION_SEAL,
-            "selection": {
-                "first_eligible_confirmed": True,
-                "naturally_occurring": True,
-                "benchmark_authored": False,
-                "intentionally_injected": False,
-                "documentation_only": False,
-                "test_only_fixture": False,
-                "same_origin_training": False,
-                "known_outcome_at_selection": False,
-                "cherry_picked": False,
-            },
+            "selection": selection,
+            "selection_lock_path": "evidence/prospective-selection-lock.json",
+            "selection_lock_artifact": selection_lock,
             "chronology": {
                 "failure_commit_sha": "1" * 40,
                 "selection_lock_commit_sha": "2" * 40,
@@ -78,6 +116,7 @@ class ProspectiveResultGateTests(unittest.TestCase):
         self.assertTrue(result["valid_contract"])
         self.assertTrue(result["prospective_claim"])
         self.assertTrue(result["blind_holdout_claim"])
+        self.assertTrue(result["selection_lock_verified"])
         self.assertFalse(result["production_world_claim"])
         self.assertEqual(result["status"], "PROSPECTIVE_TRANSFER_PASS")
 
