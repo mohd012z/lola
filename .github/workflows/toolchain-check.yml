@@ -8,12 +8,14 @@ on:
       - "fixtures/tiny_beast_benchmark.example.json"
       - "fixtures/historical_scanner_cwd_v1.json"
       - "fixtures/historical_transfer_v2.json"
+      - "fixtures/prospective_transfer_prereg_v1.json"
       - "lola.py"
       - "lola_sovereign_runtime.py"
       - "lola_tiny_beast_benchmark.py"
       - "lola_controlled_transfer_benchmark.py"
       - "lola_historical_replay.py"
       - "lola_historical_transfer.py"
+      - "lola_prospective_prereg.py"
       - "lola_toolchain.py"
       - "lola_handoff_adapter.py"
       - "lola_code_integration.py"
@@ -32,12 +34,14 @@ on:
       - "fixtures/tiny_beast_benchmark.example.json"
       - "fixtures/historical_scanner_cwd_v1.json"
       - "fixtures/historical_transfer_v2.json"
+      - "fixtures/prospective_transfer_prereg_v1.json"
       - "lola.py"
       - "lola_sovereign_runtime.py"
       - "lola_tiny_beast_benchmark.py"
       - "lola_controlled_transfer_benchmark.py"
       - "lola_historical_replay.py"
       - "lola_historical_transfer.py"
+      - "lola_prospective_prereg.py"
       - "lola_toolchain.py"
       - "lola_handoff_adapter.py"
       - "lola_code_integration.py"
@@ -65,6 +69,7 @@ jobs:
           python -m json.tool fixtures/tiny_beast_benchmark.example.json > /dev/null
           python -m json.tool fixtures/historical_scanner_cwd_v1.json > /dev/null
           python -m json.tool fixtures/historical_transfer_v2.json > /dev/null
+          python -m json.tool fixtures/prospective_transfer_prereg_v1.json > /dev/null
       - name: Compile Lola Python modules
         run: |
           python -m py_compile \
@@ -74,6 +79,7 @@ jobs:
             lola_controlled_transfer_benchmark.py \
             lola_historical_replay.py \
             lola_historical_transfer.py \
+            lola_prospective_prereg.py \
             lola_cognitive_transaction.py \
             lola_toolchain.py \
             lola_handoff_adapter.py \
@@ -98,5 +104,7 @@ jobs:
         run: python lola.py --historical-replay-scanner-cwd
       - name: Multi-incident historical transfer benchmark
         run: python lola.py --historical-transfer-benchmark
+      - name: Prospective transfer preregistration seal
+        run: python lola.py --prospective-transfer-prereg
       - name: Toolchain status smoke test
         run: python lola_toolchain.py status
