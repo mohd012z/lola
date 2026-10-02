@@ -6,8 +6,8 @@ review-rejected, but it cannot create a candidate, selection lock, repair, or
 prospective success claim.
 
 The first-eligible decision is evidence-derived: an eligibility review must
-carry a digest-bound prospective event census proving all earlier abnormal
-events were independently reviewed and rejected.
+carry a digest-bound prospective event census proving the ordered history, plus
+separate digest-bound rejection verdicts for every earlier abnormal event.
 """
 from __future__ import annotations
 
@@ -116,7 +116,11 @@ def review_observation(
     if not isinstance(census, Mapping):
         reasons.append("event_census_missing")
     else:
-        census_state = validate_event_census(census, obs)
+        census_state = validate_event_census(
+            census,
+            obs,
+            rv.get("prior_event_verdicts"),
+        )
         reasons.extend(census_state["reasons"])
 
     fields = rv.get("review_fields")
