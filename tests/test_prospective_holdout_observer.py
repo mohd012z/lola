@@ -7,7 +7,7 @@ from lola_prospective_holdout_observer import observe_workflow_event
 
 
 class ProspectiveHoldoutObserverTests(unittest.TestCase):
-    def _event(self, head_sha: str, conclusion: str = "failure") -> dict:
+    def _event(self, head_sha: str, conclusion: str = "failure", run_attempt: int = 1) -> dict:
         return {
             "action": "completed",
             "workflow_run": {
@@ -18,6 +18,8 @@ class ProspectiveHoldoutObserverTests(unittest.TestCase):
                 "event": "push",
                 "status": "completed",
                 "conclusion": conclusion,
+                "run_attempt": run_attempt,
+                "url": "https://api.github.com/repos/example/lola/actions/runs/4242",
                 "html_url": "https://github.com/example/lola/actions/runs/4242",
                 "run_started_at": "2026-10-02T10:00:00Z",
                 "updated_at": "2026-10-02T10:01:00Z",
@@ -67,6 +69,49 @@ class ProspectiveHoldoutObserverTests(unittest.TestCase):
         self.assertIsNone(result["review_fields"]["benchmark_authored"])
         self.assertIsNone(result["review_fields"]["first_eligible_confirmed"])
         self.assertRegex(result["observation_digest_sha256"], r"^[0-9a-f]{64}$")
+
+    def test_reviewable_observation_pins_workflow_attempt_identity(self):
+        tmp, repo, anchor, failure = self._repo_with_anchor_and_failure()
+        self.addCleanup(tmp.cleanup)
+
+        result = observe_workflow_event(
+            self._event(failure, run_attempt=3),
+            repository_root=repo,
+            expected_anchor_sha=anchor,
+        )
+
+        self.assertEqual(result["status"], "OBSERVED_REVIEW_REQUIRED")
+        self.assertEqual(result["workflow_run"]["run_attempt"], 3)
+        self.assertEqual(
+            result["workflow_run"]["attempt_api_url"],
+            "https://api.github.com/repos/example/lola/actions/runs/4242/attempts/3",
+        )
+        self.assertEqual(
+            result["before_evidence_refs"],
+            ["https://api.github.com/repos/example/lola/actions/runs/4242/attempts/3"],
+        )
+
+    def test_invalid_or_missing_run_attempt_is_ignored(self):
+        tmp, repo, anchor, failure = self._repo_with_anchor_and_failure()
+        self.addCleanup(tmp.cleanup)
+
+        for run_attempt in (0, -1, "2", None):
+            with self.subTest(run_attempt=run_attempt):
+                event = self._event(failure)
+                if run_attempt is None:
+                    event["workflow_run"].pop("run_attempt")
+                else:
+                    event["workflow_run"]["run_attempt"] = run_attempt
+
+                result = observe_workflow_event(
+                    event,
+                    repository_root=repo,
+                    expected_anchor_sha=anchor,
+                )
+                self.assertEqual(result["status"], "IGNORED_INVALID_EVENT")
+                self.assertEqual(result["reason"], "workflow_run_attempt_invalid")
+                self.assertFalse(result["observation_created"])
+                self.assertFalse(result["selection_authorized"])
 
     def test_abnormal_terminal_conclusions_are_review_required(self):
         tmp, repo, anchor, failure = self._repo_with_anchor_and_failure()
