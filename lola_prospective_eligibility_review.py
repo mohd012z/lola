@@ -1,9 +1,13 @@
 """Independent eligibility review for prospective LOLA holdout observations.
 
 This module sits strictly between the read-only observer and the existing
-selection-lock contract.  It can classify an observation as review-eligible
-or review-rejected, but it cannot create a candidate, selection lock, repair,
-or prospective success claim.
+selection-lock contract. It can classify an observation as review-eligible or
+review-rejected, but it cannot create a candidate, selection lock, repair, or
+prospective success claim.
+
+The first-eligible decision is evidence-derived: an eligibility review must
+carry a digest-bound prospective event census proving all earlier abnormal
+events were independently reviewed and rejected.
 """
 from __future__ import annotations
 
@@ -13,6 +17,7 @@ import json
 from pathlib import Path
 from typing import Any, Mapping, Sequence
 
+from lola_prospective_event_census import validate_event_census
 from lola_prospective_result import ANCHOR_SHA, PREREGISTRATION_SEAL, REGISTRATION_ID
 
 
@@ -99,6 +104,21 @@ def review_observation(
     if rv.get("review_completed_before_repair") is not True:
         reasons.append("review_not_completed_before_repair")
 
+    census = rv.get("event_census")
+    census_state = {
+        "valid": False,
+        "reasons": ["event_census_missing"],
+        "event_census_digest_sha256": "",
+        "candidate_event_key": "",
+        "prior_event_keys": [],
+        "first_eligible_derived": False,
+    }
+    if not isinstance(census, Mapping):
+        reasons.append("event_census_missing")
+    else:
+        census_state = validate_event_census(census, obs)
+        reasons.extend(census_state["reasons"])
+
     fields = rv.get("review_fields")
     if not isinstance(fields, Mapping):
         reasons.append("review_fields_missing")
@@ -126,10 +146,18 @@ def review_observation(
         reasons.append("outcome_known_at_review")
     if fields.get("cherry_picked") is not False:
         reasons.append("cherry_pick_forbidden")
+
+    derived_prior = list(census_state.get("prior_event_keys") or [])
+    supplied_prior = fields.get("prior_post_anchor_failures_reviewed")
+    if not isinstance(supplied_prior, list):
+        reasons.append("prior_failure_review_missing")
+    elif supplied_prior != derived_prior:
+        reasons.append("prior_failure_review_census_mismatch")
+
     if fields.get("first_eligible_confirmed") is not True:
         reasons.append("first_eligible_not_confirmed")
-    if not isinstance(fields.get("prior_post_anchor_failures_reviewed"), list):
-        reasons.append("prior_failure_review_missing")
+    if census_state.get("first_eligible_derived") is not True:
+        reasons.append("first_eligible_not_derived")
 
     valid = not reasons
     result: dict[str, Any] = {
@@ -139,6 +167,8 @@ def review_observation(
         "status": "REVIEW_ELIGIBLE" if valid else "REVIEW_REJECTED",
         "valid_review": valid,
         "observation_digest_sha256": str(obs.get("observation_digest_sha256") or ""),
+        "event_census_digest_sha256": str(census_state.get("event_census_digest_sha256") or ""),
+        "candidate_event_key": str(census_state.get("candidate_event_key") or ""),
         "failure_commit_sha": str(obs.get("failure_commit_sha") or ""),
         "reviewer_id": reviewer_id,
         "reviewer_independent": rv.get("reviewer_independent") is True,
@@ -154,8 +184,9 @@ def review_observation(
         "blind_holdout_claim": False,
         "production_world_claim": False,
         "review_boundary": (
-            "Eligibility classification only: candidate construction, selection lock, "
-            "repair, and prospective success claims remain separate gated actions."
+            "Eligibility classification only: first-eligible status is census-derived; "
+            "candidate construction, selection lock, repair, and prospective success "
+            "claims remain separate gated actions."
         ),
     }
     result["eligibility_review_digest_sha256"] = _canonical_digest(result)
