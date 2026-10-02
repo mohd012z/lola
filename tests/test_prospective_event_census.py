@@ -26,6 +26,17 @@ class ProspectiveEventCensusGenerationTests(unittest.TestCase):
                 "url": "https://api.github.com/repos/example/lola/actions/runs/5000",
             },
             {
+                "id": 4500,
+                "run_attempt": 1,
+                "name": "Prospective holdout observer",
+                "head_sha": "4" * 40,
+                "status": "completed",
+                "conclusion": "failure",
+                "run_started_at": "2026-10-02T10:30:00Z",
+                "updated_at": "2026-10-02T10:31:00Z",
+                "url": "https://api.github.com/repos/example/lola/actions/runs/4500",
+            },
+            {
                 "id": 4242,
                 "run_attempt": 1,
                 "name": "Toolchain smoke check",
