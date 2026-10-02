@@ -65,6 +65,39 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
         lock["selection_lock_digest_sha256"] = _digest(lock)
         return lock
 
+    def _authorization(
+        self,
+        *,
+        anchor_sha=ANCHOR_SHA,
+        failure_sha="1" * 40,
+        selection_sha="2" * 40,
+        selection_lock_digest="d" * 64,
+    ):
+        authorization = {
+            "schema_version": "prospective-repair-authorization-v1",
+            "registration_id": REGISTRATION_ID,
+            "phase": "REPAIR_AUTHORIZATION",
+            "status": "AUTHORIZED_AWAITING_REPAIR",
+            "preregistration_anchor_sha": anchor_sha,
+            "preregistration_seal_sha256": PREREGISTRATION_SEAL,
+            "failure_commit_sha": failure_sha,
+            "selection_lock_commit_sha": selection_sha,
+            "selection_lock_digest_sha256": selection_lock_digest,
+            "authorizer_id": "repair-authorizer-explicit",
+            "authorization_mode": "AUTOMATED_REPAIR",
+            "authorization_reason": "Repair the independently selected prospective holdout.",
+            "repair_authorized": True,
+            "automated_repair_authorized": True,
+            "repair_outcome": "UNKNOWN",
+            "fix_commit_sha": None,
+            "result_commit_sha": None,
+            "prospective_claim": False,
+            "blind_holdout_claim": False,
+            "production_world_claim": False,
+        }
+        authorization["repair_authorization_digest_sha256"] = _digest(authorization)
+        return authorization
+
     def _baseline(self):
         return {
             "task_id": "prospective-baseline",
@@ -103,8 +136,10 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
         anchor_sha=ANCHOR_SHA,
         failure_sha="1" * 40,
         selection_sha="2" * 40,
-        fix_sha="3" * 40,
+        authorization_sha="3" * 40,
+        fix_sha="4" * 40,
         selection_lock_digest="d" * 64,
+        authorization_digest="e" * 64,
     ):
         evidence = {
             "schema_version": "prospective-result-evidence-v1",
@@ -114,8 +149,10 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
             "preregistration_anchor_sha": anchor_sha,
             "preregistration_seal_sha256": PREREGISTRATION_SEAL,
             "selection_lock_digest_sha256": selection_lock_digest,
+            "repair_authorization_digest_sha256": authorization_digest,
             "failure_commit_sha": failure_sha,
             "selection_lock_commit_sha": selection_sha,
+            "repair_authorization_commit_sha": authorization_sha,
             "fix_commit_sha": fix_sha,
             "repair_outcome": "VERIFIED",
             "after_evidence_refs": ["ci:after-run-456"],
@@ -130,8 +167,12 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
 
     def _payload(self):
         lock = self._lock()
-        evidence = self._result_evidence(
+        authorization = self._authorization(
             selection_lock_digest=lock["selection_lock_digest_sha256"]
+        )
+        evidence = self._result_evidence(
+            selection_lock_digest=lock["selection_lock_digest_sha256"],
+            authorization_digest=authorization["repair_authorization_digest_sha256"],
         )
         return {
             "schema_version": "prospective-transfer-result-v1",
@@ -142,13 +183,16 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
             "selection": self._selection(),
             "selection_lock_path": "evidence/prospective-selection-lock.json",
             "selection_lock_artifact": lock,
+            "repair_authorization_path": "evidence/prospective-repair-authorization.json",
+            "repair_authorization_artifact": authorization,
             "result_evidence_path": "evidence/prospective-result-evidence.json",
             "result_evidence_artifact": evidence,
             "chronology": {
                 "failure_commit_sha": "1" * 40,
                 "selection_lock_commit_sha": "2" * 40,
-                "fix_commit_sha": "3" * 40,
-                "result_commit_sha": "4" * 40,
+                "repair_authorization_commit_sha": "3" * 40,
+                "fix_commit_sha": "4" * 40,
+                "result_commit_sha": "5" * 40,
                 "git_ancestry_verified": True,
             },
             "baseline": self._baseline(),
@@ -190,6 +234,7 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
 
         self.assertTrue(result["valid_contract"])
         self.assertTrue(result["prospective_claim"])
+        self.assertTrue(result["repair_authorization_verified"])
         self.assertTrue(result["result_evidence_verified"])
         self.assertEqual(
             result["result_evidence_digest_sha256"],
@@ -223,6 +268,16 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
             "selection",
             {"evidence/prospective-selection-lock.json": lock},
         )
+        authorization = self._authorization(
+            anchor_sha=anchor,
+            failure_sha=failure,
+            selection_sha=selection,
+            selection_lock_digest=lock["selection_lock_digest_sha256"],
+        )
+        authorization_commit = commit(
+            "authorization",
+            {"evidence/prospective-repair-authorization.json": authorization},
+        )
         fix = commit("fix")
 
         if committed_evidence == "valid":
@@ -230,8 +285,10 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
                 anchor_sha=anchor,
                 failure_sha=failure,
                 selection_sha=selection,
+                authorization_sha=authorization_commit,
                 fix_sha=fix,
                 selection_lock_digest=lock["selection_lock_digest_sha256"],
+                authorization_digest=authorization["repair_authorization_digest_sha256"],
             )
             result_commit = commit(
                 "result",
@@ -242,8 +299,10 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
                 anchor_sha=anchor,
                 failure_sha=failure,
                 selection_sha=selection,
+                authorization_sha=authorization_commit,
                 fix_sha=fix,
                 selection_lock_digest=lock["selection_lock_digest_sha256"],
+                authorization_digest=authorization["repair_authorization_digest_sha256"],
             )
             evidence["learned"]["actions"] = 2
             result_commit = commit(
@@ -254,22 +313,48 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
             evidence = None
             result_commit = commit("result")
 
-        return tmp, repo, anchor, failure, selection, fix, result_commit, lock, evidence
+        return (
+            tmp,
+            repo,
+            anchor,
+            failure,
+            selection,
+            authorization_commit,
+            fix,
+            result_commit,
+            lock,
+            authorization,
+            evidence,
+        )
 
-    def _production_payload(self, anchor, failure, selection, fix, result_commit, lock):
+    def _production_payload(
+        self,
+        anchor,
+        failure,
+        selection,
+        authorization_commit,
+        fix,
+        result_commit,
+        lock,
+        authorization,
+    ):
         payload = self._payload()
         payload["preregistration_anchor_sha"] = anchor
         payload["selection_lock_artifact"] = lock
+        payload["repair_authorization_artifact"] = authorization
         payload["result_evidence_artifact"] = self._result_evidence(
             anchor_sha=anchor,
             failure_sha=failure,
             selection_sha=selection,
+            authorization_sha=authorization_commit,
             fix_sha=fix,
             selection_lock_digest=lock["selection_lock_digest_sha256"],
+            authorization_digest=authorization["repair_authorization_digest_sha256"],
         )
         payload["chronology"] = {
             "failure_commit_sha": failure,
             "selection_lock_commit_sha": selection,
+            "repair_authorization_commit_sha": authorization_commit,
             "fix_commit_sha": fix,
             "result_commit_sha": result_commit,
             "git_ancestry_verified": True,
@@ -277,9 +362,31 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
         return payload
 
     def test_production_missing_result_evidence_at_result_commit_is_invalid(self):
-        tmp, repo, anchor, failure, selection, fix, result_commit, lock, _ = self._init_repo_chain()
+        chain = self._init_repo_chain()
+        (
+            tmp,
+            repo,
+            anchor,
+            failure,
+            selection,
+            authorization_commit,
+            fix,
+            result_commit,
+            lock,
+            authorization,
+            _,
+        ) = chain
         try:
-            payload = self._production_payload(anchor, failure, selection, fix, result_commit, lock)
+            payload = self._production_payload(
+                anchor,
+                failure,
+                selection,
+                authorization_commit,
+                fix,
+                result_commit,
+                lock,
+                authorization,
+            )
             with patch("lola_prospective_result.ANCHOR_SHA", anchor):
                 outcome = evaluate_prospective_result(payload, repository_root=repo)
         finally:
@@ -290,11 +397,31 @@ class ProspectiveResultEvidenceBindingTests(unittest.TestCase):
         self.assertIn("result_evidence_artifact_not_found_at_result_commit", outcome["reasons"])
 
     def test_production_uses_committed_result_evidence_not_embedded_copy(self):
-        tmp, repo, anchor, failure, selection, fix, result_commit, lock, _ = self._init_repo_chain(
-            committed_evidence="tampered"
-        )
+        chain = self._init_repo_chain(committed_evidence="tampered")
+        (
+            tmp,
+            repo,
+            anchor,
+            failure,
+            selection,
+            authorization_commit,
+            fix,
+            result_commit,
+            lock,
+            authorization,
+            _,
+        ) = chain
         try:
-            payload = self._production_payload(anchor, failure, selection, fix, result_commit, lock)
+            payload = self._production_payload(
+                anchor,
+                failure,
+                selection,
+                authorization_commit,
+                fix,
+                result_commit,
+                lock,
+                authorization,
+            )
             with patch("lola_prospective_result.ANCHOR_SHA", anchor):
                 outcome = evaluate_prospective_result(payload, repository_root=repo)
         finally:
