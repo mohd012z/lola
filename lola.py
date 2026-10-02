@@ -13,6 +13,7 @@ Examples:
     python lola.py --historical-replay-scanner-cwd
     python lola.py --historical-transfer-benchmark
     python lola.py --prospective-transfer-prereg
+    python lola.py --prospective-holdout-observe workflow-event.json --holdout-observation-output observation.json
     python lola.py --prospective-holdout-lock candidate.json --holdout-lock-output selection-lock.json
     python lola.py --prospective-transfer-result result.json
 """
@@ -236,6 +237,14 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate the sealed prospective transfer preregistration; this never claims success before holdout reveal.",
     )
     p.add_argument(
+        "--prospective-holdout-observe",
+        help="Observe one GitHub workflow_run event and emit review-only post-anchor failure evidence; never selects or locks a holdout.",
+    )
+    p.add_argument(
+        "--holdout-observation-output",
+        help="Output JSON path for --prospective-holdout-observe. Written only for OBSERVED_REVIEW_REQUIRED.",
+    )
+    p.add_argument(
         "--prospective-holdout-lock",
         help="Validate the first eligible natural failure and create a pre-repair selection lock using real Git ancestry.",
     )
@@ -292,6 +301,8 @@ def main() -> int:
 
     if args.handoff_validate and args.handoff_run:
         parser.error("--handoff-validate and --handoff-run cannot be used together.")
+    if args.holdout_observation_output and not args.prospective_holdout_observe:
+        parser.error("--holdout-observation-output requires --prospective-holdout-observe.")
     if args.holdout_lock_output and not args.prospective_holdout_lock:
         parser.error("--holdout-lock-output requires --prospective-holdout-lock.")
 
@@ -305,6 +316,7 @@ def main() -> int:
             args.historical_replay_scanner_cwd,
             args.historical_transfer_benchmark,
             args.prospective_transfer_prereg,
+            args.prospective_holdout_observe,
             args.prospective_holdout_lock,
             args.prospective_transfer_result,
             args.handoff_validate,
@@ -383,6 +395,26 @@ def main() -> int:
         result = validate_preregistration(load_preregistration())
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("valid") else 2
+
+    if args.prospective_holdout_observe:
+        if args.target_option or args.target_positional:
+            parser.error("--prospective-holdout-observe must run without target inputs.")
+        if not args.holdout_observation_output:
+            parser.error("--prospective-holdout-observe requires --holdout-observation-output.")
+        from lola_prospective_holdout_observer import observe_workflow_event
+
+        event_path = Path(args.prospective_holdout_observe)
+        event = json.loads(event_path.read_text(encoding="utf-8"))
+        result = observe_workflow_event(event, repository_root=ROOT)
+        if result.get("observation_created"):
+            output_path = Path(args.holdout_observation_output).expanduser().resolve()
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0
 
     if args.prospective_holdout_lock:
         if args.target_option or args.target_positional:
