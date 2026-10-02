@@ -42,6 +42,14 @@ class ProspectiveObserverCoverageTests(unittest.TestCase):
             ["Lola Bot Health", "Lola Code Doctor", "Toolchain smoke check"],
         )
 
+    def test_toolchain_tracks_and_compiles_coverage_checker(self):
+        repo = Path(__file__).resolve().parents[1]
+        toolchain = (repo / ".github" / "workflows" / "toolchain-check.yml").read_text(
+            encoding="utf-8"
+        )
+
+        self.assertEqual(toolchain.count('lola_prospective_observer_coverage.py'), 3)
+
 
 if __name__ == "__main__":
     unittest.main()
