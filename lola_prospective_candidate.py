@@ -6,8 +6,10 @@ cannot create a selection lock, repair a failure, or make a prospective claim.
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
+from pathlib import Path
 from typing import Any, Mapping
 
 from lola_prospective_result import ANCHOR_SHA, PREREGISTRATION_SEAL, REGISTRATION_ID
@@ -155,3 +157,34 @@ def build_candidate(
     }
     candidate["candidate_digest_sha256"] = _canonical_digest(candidate)
     return candidate
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(
+        description="Build a reviewed prospective holdout candidate without locking or repair."
+    )
+    parser.add_argument("observation", help="Observer JSON artifact.")
+    parser.add_argument("verdict", help="Independent eligibility verdict JSON artifact.")
+    parser.add_argument("--output", required=True, help="Candidate JSON output path.")
+    args = parser.parse_args()
+
+    observation = json.loads(Path(args.observation).read_text(encoding="utf-8"))
+    verdict = json.loads(Path(args.verdict).read_text(encoding="utf-8"))
+    try:
+        candidate = build_candidate(observation, verdict)
+    except (TypeError, ValueError) as exc:
+        print(json.dumps({"status": "CANDIDATE_REJECTED", "reason": str(exc)}, sort_keys=True))
+        return 2
+
+    output = Path(args.output).expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        json.dumps(candidate, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print(json.dumps(candidate, indent=2, ensure_ascii=False, sort_keys=True))
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
