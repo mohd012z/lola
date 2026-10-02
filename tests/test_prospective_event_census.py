@@ -69,6 +69,7 @@ class ProspectiveEventCensusGenerationTests(unittest.TestCase):
             candidate_run_id=5000,
             candidate_run_attempt=1,
             history_complete=True,
+            trust_post_anchor_flag=True,
         )
 
         self.assertEqual(value["schema_version"], "prospective-event-census-v1")
@@ -77,6 +78,7 @@ class ProspectiveEventCensusGenerationTests(unittest.TestCase):
         self.assertEqual(value["preregistration_seal_sha256"], PREREGISTRATION_SEAL)
         self.assertTrue(value["history_complete_through_candidate"])
         self.assertEqual([event["run_id"] for event in value["ordered_events"]], [4242, 5000])
+        self.assertTrue(all(event["git_ancestry_verified"] for event in value["ordered_events"]))
         self.assertEqual(value["candidate_event_key"], value["ordered_events"][-1]["event_key"])
         self.assertNotIn("prior_event_verdicts", value)
         self.assertRegex(value["event_census_digest_sha256"], r"^[0-9a-f]{64}$")
@@ -90,6 +92,7 @@ class ProspectiveEventCensusGenerationTests(unittest.TestCase):
                 candidate_run_id=5000,
                 candidate_run_attempt=1,
                 history_complete=False,
+                trust_post_anchor_flag=True,
             )
 
     def test_census_digest_detects_tampering(self):
@@ -100,6 +103,7 @@ class ProspectiveEventCensusGenerationTests(unittest.TestCase):
             candidate_run_id=5000,
             candidate_run_attempt=1,
             history_complete=True,
+            trust_post_anchor_flag=True,
         )
         original = value["event_census_digest_sha256"]
         value["ordered_events"][0]["run_id"] = 9999
