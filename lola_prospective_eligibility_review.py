@@ -7,9 +7,11 @@ or prospective success claim.
 """
 from __future__ import annotations
 
+import argparse
 import hashlib
 import json
-from typing import Any, Mapping
+from pathlib import Path
+from typing import Any, Mapping, Sequence
 
 from lola_prospective_result import ANCHOR_SHA, PREREGISTRATION_SEAL, REGISTRATION_ID
 
@@ -158,3 +160,30 @@ def review_observation(
     }
     result["eligibility_review_digest_sha256"] = _canonical_digest(result)
     return result
+
+
+def main(argv: Sequence[str] | None = None) -> int:
+    parser = argparse.ArgumentParser(
+        description="Review one prospective holdout observation without selecting, locking, or repairing it."
+    )
+    parser.add_argument("observation", help="Observer JSON artifact")
+    parser.add_argument("review", help="Independent eligibility review JSON")
+    parser.add_argument("--output", required=True, help="Verdict JSON output path")
+    args = parser.parse_args(argv)
+
+    observation = json.loads(Path(args.observation).read_text(encoding="utf-8"))
+    review = json.loads(Path(args.review).read_text(encoding="utf-8"))
+    verdict = review_observation(observation, review)
+
+    output = Path(args.output).expanduser().resolve()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text(
+        json.dumps(verdict, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+        encoding="utf-8",
+    )
+    print(json.dumps(verdict, indent=2, ensure_ascii=False, sort_keys=True))
+    return 0 if verdict.get("valid_review") else 2
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
