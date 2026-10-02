@@ -11,6 +11,7 @@ Examples:
     python lola.py --tiny-beast-benchmark benchmark.json
     python lola.py --controlled-transfer-benchmark
     python lola.py --historical-replay-scanner-cwd
+    python lola.py --historical-transfer-benchmark
 """
 
 from __future__ import annotations
@@ -222,6 +223,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Replay the provenance-pinned historical scanner CWD path-resolution incident.",
     )
     p.add_argument(
+        "--historical-transfer-benchmark",
+        action="store_true",
+        help="Run the multi-incident historical preflight-validity transfer benchmark.",
+    )
+    p.add_argument(
         "--require-sovereign",
         action="store_true",
         help="Require the learned benchmark trial to use no external AI.",
@@ -275,6 +281,7 @@ def main() -> int:
             args.tiny_beast_benchmark,
             args.controlled_transfer_benchmark,
             args.historical_replay_scanner_cwd,
+            args.historical_transfer_benchmark,
             args.handoff_validate,
             args.handoff_run,
         )
@@ -333,6 +340,15 @@ def main() -> int:
         result = run_scanner_cwd_historical_replay()
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("historical_replay_claim") else 2
+
+    if args.historical_transfer_benchmark:
+        if args.target_option or args.target_positional:
+            parser.error("--historical-transfer-benchmark must run without target inputs.")
+        from lola_historical_transfer import run_historical_transfer_suite
+
+        result = run_historical_transfer_suite()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("historical_transfer_claim") else 2
 
     if args.handoff_validate or args.handoff_run:
         if args.target_option or args.target_positional:
