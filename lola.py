@@ -13,6 +13,7 @@ Examples:
     python lola.py --historical-replay-scanner-cwd
     python lola.py --historical-transfer-benchmark
     python lola.py --prospective-transfer-prereg
+    python lola.py --prospective-transfer-result result.json
 """
 
 from __future__ import annotations
@@ -234,6 +235,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Validate the sealed prospective transfer preregistration; this never claims success before holdout reveal.",
     )
     p.add_argument(
+        "--prospective-transfer-result",
+        help="Validate a Phase-B prospective transfer result using the sealed anchor and real local Git ancestry.",
+    )
+    p.add_argument(
         "--require-sovereign",
         action="store_true",
         help="Require the learned benchmark trial to use no external AI.",
@@ -289,6 +294,7 @@ def main() -> int:
             args.historical_replay_scanner_cwd,
             args.historical_transfer_benchmark,
             args.prospective_transfer_prereg,
+            args.prospective_transfer_result,
             args.handoff_validate,
             args.handoff_run,
         )
@@ -365,6 +371,18 @@ def main() -> int:
         result = validate_preregistration(load_preregistration())
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("valid") else 2
+
+    if args.prospective_transfer_result:
+        if args.target_option or args.target_positional:
+            parser.error("--prospective-transfer-result must run without target inputs.")
+        from lola_prospective_result import load_prospective_result, evaluate_prospective_result
+
+        result = evaluate_prospective_result(
+            load_prospective_result(Path(args.prospective_transfer_result)),
+            repository_root=ROOT,
+        )
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("prospective_claim") else 2
 
     if args.handoff_validate or args.handoff_run:
         if args.target_option or args.target_positional:
