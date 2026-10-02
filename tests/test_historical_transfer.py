@@ -1,5 +1,11 @@
+import io
+import json
+import sys
 import unittest
+from contextlib import redirect_stdout
+from unittest.mock import patch
 
+from lola import main
 from lola_historical_transfer import (
     build_training_episodes,
     run_historical_transfer_suite,
@@ -48,6 +54,19 @@ class HistoricalTransferTests(unittest.TestCase):
         self.assertFalse(result["governance"]["promotable"])
         self.assertEqual(result["holdout"]["learned_actions"], result["holdout"]["baseline_actions"])
         self.assertEqual(result["holdout"]["learned_intellectual_level"], 4)
+
+    def test_cli_runs_retrospective_historical_transfer_without_target(self):
+        stdout = io.StringIO()
+        with patch.object(sys, "argv", ["lola.py", "--historical-transfer-benchmark"]):
+            with redirect_stdout(stdout):
+                rc = main()
+
+        self.assertEqual(rc, 0)
+        payload = json.loads(stdout.getvalue())
+        self.assertEqual(payload["mode"], "HISTORICAL-TRANSFER-RETROSPECTIVE")
+        self.assertTrue(payload["historical_transfer_claim"])
+        self.assertFalse(payload["blind_holdout_claim"])
+        self.assertFalse(payload["production_world_claim"])
 
 
 if __name__ == "__main__":
