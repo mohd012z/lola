@@ -1,3 +1,4 @@
+import hashlib
 import json
 import tempfile
 import unittest
@@ -5,6 +6,11 @@ from pathlib import Path
 
 from lola_prospective_eligibility_review import main
 from lola_prospective_result import ANCHOR_SHA, PREREGISTRATION_SEAL, REGISTRATION_ID
+
+
+def digest(value):
+    payload = json.dumps(value, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
+    return hashlib.sha256(payload).hexdigest()
 
 
 class ProspectiveEligibilityReviewCliTests(unittest.TestCase):
@@ -28,15 +34,54 @@ class ProspectiveEligibilityReviewCliTests(unittest.TestCase):
                 "failure_commit_sha": "1" * 40,
                 "git_ancestry_verified": True,
                 "source": "github_workflow_run",
-                "workflow_run": {"conclusion": "failure"},
-                "before_evidence_refs": ["run:1"],
+                "workflow_run": {
+                    "id": 1,
+                    "run_attempt": 1,
+                    "name": "Toolchain smoke check",
+                    "head_branch": "feature/example",
+                    "trigger_event": "push",
+                    "status": "completed",
+                    "conclusion": "failure",
+                    "run_url": "https://github.com/example/lola/actions/runs/1",
+                    "run_api_url": "https://api.github.com/repos/example/lola/actions/runs/1",
+                    "attempt_api_url": "https://api.github.com/repos/example/lola/actions/runs/1/attempts/1",
+                    "run_started_at": "2026-10-02T10:00:00Z",
+                    "updated_at": "2026-10-02T10:01:00Z",
+                },
+                "before_evidence_refs": ["https://api.github.com/repos/example/lola/actions/runs/1/attempts/1"],
                 "review_fields": {},
                 "repair_outcome": "UNKNOWN",
                 "observer_boundary": "observation only",
             }
-            import hashlib
-            payload = json.dumps(observation, sort_keys=True, separators=(",", ":"), ensure_ascii=False).encode("utf-8")
-            observation["observation_digest_sha256"] = hashlib.sha256(payload).hexdigest()
+            observation["observation_digest_sha256"] = digest(observation)
+
+            event = {
+                "event_key": "2026-10-02T10:00:00Z|00000000000000000001|000001",
+                "run_id": 1,
+                "run_attempt": 1,
+                "head_sha": observation["failure_commit_sha"],
+                "workflow_name": "Toolchain smoke check",
+                "conclusion": "failure",
+                "run_started_at": "2026-10-02T10:00:00Z",
+                "updated_at": "2026-10-02T10:01:00Z",
+                "attempt_api_url": observation["workflow_run"]["attempt_api_url"],
+            }
+            census = {
+                "schema_version": "prospective-event-census-v1",
+                "registration_id": REGISTRATION_ID,
+                "preregistration_anchor_sha": ANCHOR_SHA,
+                "preregistration_seal_sha256": PREREGISTRATION_SEAL,
+                "source": "github_actions_history",
+                "candidate_event_key": event["event_key"],
+                "ordered_events": [event],
+                "prior_event_verdicts": [],
+                "history_complete_through_candidate": True,
+                "prospective_claim": False,
+                "blind_holdout_claim": False,
+                "production_world_claim": False,
+            }
+            census["event_census_digest_sha256"] = digest(census)
+
             review = {
                 "schema_version": "prospective-holdout-eligibility-review-v1",
                 "registration_id": REGISTRATION_ID,
@@ -44,6 +89,7 @@ class ProspectiveEligibilityReviewCliTests(unittest.TestCase):
                 "reviewer_id": "reviewer-1",
                 "reviewer_independent": True,
                 "review_completed_before_repair": True,
+                "event_census": census,
                 "review_fields": {
                     "surface": "workflow",
                     "naturally_occurring": True,
@@ -69,6 +115,7 @@ class ProspectiveEligibilityReviewCliTests(unittest.TestCase):
             self.assertEqual(rc, 0)
             verdict = json.loads(output_path.read_text(encoding="utf-8"))
             self.assertEqual(verdict["status"], "REVIEW_ELIGIBLE")
+            self.assertRegex(verdict["event_census_digest_sha256"], r"^[0-9a-f]{64}$")
             self.assertFalse(verdict["selection_authorized"])
             self.assertFalse(verdict["lock_authorized"])
             self.assertNotIn("selection_lock_digest_sha256", verdict)
