@@ -124,7 +124,7 @@ rules:
     severity: ERROR
     message: "Possible hardcoded credential. Move it to a secret store/environment variable and rotate it if committed."
     metadata: {category: secrets, cwe: "CWE-798", confidence: MEDIUM}
-    pattern-regex: "(?i)\\b(api[_-]?key|secret|access[_-]?token|auth[_-]?token|password|passwd|client[_-]?secret)\\b[\\"'\\s:=]{1,8}[\\"'][A-Za-z0-9_./+\\-=]{16,}[\\"']"
+    pattern-regex: '(?i)\b(api[_-]?key|secret|access[_-]?token|auth[_-]?token|password|passwd|client[_-]?secret)\b[\"''\s:=]{1,8}[\"''][A-Za-z0-9_./+\-=]{16,}[\"'']'
 
   - id: audit-provider-tokens
     languages: [generic]
@@ -416,9 +416,9 @@ rules:
     message: "Upload/storage destination configuration found"
     metadata: {category: paths, surface: uploads, confidence: MEDIUM}
     pattern-either:
-      - pattern: multer({..., dest: $PATH, ...})
-      - pattern: multer.diskStorage({..., destination: $DEST, ...})
-      - pattern: $MULTER({..., dest: $PATH, ...})
+      - pattern: 'multer({..., dest: $PATH, ...})'
+      - pattern: 'multer.diskStorage({..., destination: $DEST, ...})'
+      - pattern: '$MULTER({..., dest: $PATH, ...})'
 
   # ---- Routes / URL paths ----
 
@@ -734,21 +734,21 @@ rules:
     severity: INFO
     message: "file:// URI found"
     metadata: {category: paths, surface: filesystem, confidence: HIGH}
-    pattern-regex: "file://[^\\s\\"'<>]+"
+    pattern-regex: 'file://[^\s\"''<>]+'
 
   - id: extract-content-uri
     languages: [generic]
     severity: INFO
     message: "Android/content URI found"
     metadata: {category: paths, surface: app-content, confidence: HIGH}
-    pattern-regex: "content://[^\\s\\"'<>]+"
+    pattern-regex: 'content://[^\s\"''<>]+'
 
   - id: extract-windows-absolute-path
     languages: [generic]
     severity: INFO
     message: "Windows absolute path literal found"
     metadata: {category: paths, surface: filesystem, confidence: MEDIUM}
-    pattern-regex: "[A-Za-z]:\\\\[^\\r\\n\\"']+"
+    pattern-regex: '[A-Za-z]:\\[^\r\n\"'']+'
 
   - id: extract-common-unix-android-path
     languages: [generic]
@@ -783,7 +783,7 @@ rules:
     severity: WARNING
     message: "Configuration appears to disable TLS/certificate verification. Confirm this is not used in production."
     metadata: {category: crypto, surface: tls, cwe: "CWE-295", confidence: MEDIUM}
-    pattern-regex: "(?i)(NODE_TLS_REJECT_UNAUTHORIZED\\s*[=:]\\s*[\\"']?0|rejectUnauthorized\\s*[:=]\\s*false|ssl[_-]?verify\\s*[:=]\\s*false|verify[_-]?ssl\\s*[:=]\\s*false)"
+    pattern-regex: '(?i)(NODE_TLS_REJECT_UNAUTHORIZED\s*[=:]\s*[\"'']?0|rejectUnauthorized\s*[:=]\s*false|ssl[_-]?verify\s*[:=]\s*false|verify[_-]?ssl\s*[:=]\s*false)'
 # ========================= DEVICE / PRIVACY SURFACE =========================
 
   # ---- Browser / PWA device characteristics ----
@@ -1063,7 +1063,7 @@ rules:
     severity: ERROR
     message: "Possible account/auth client secret in client-accessible source. Public clients should not embed confidential client secrets."
     metadata: {category: account, surface: account-auth, cwe: "CWE-798", confidence: MEDIUM}
-    pattern-regex: "(?i)\\b(client[_-]?secret|oauth[_-]?secret)\\b[\\"'\\s:=]{1,8}[\\"'][A-Za-z0-9_./+\\-=]{12,}[\\"']"
+    pattern-regex: '(?i)\b(client[_-]?secret|oauth[_-]?secret)\b[\"''\s:=]{1,8}[\"''][A-Za-z0-9_./+\-=]{12,}[\"'']'
 
   - id: extract-android-camera-gallery-files
     languages: [generic]
