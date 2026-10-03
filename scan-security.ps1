@@ -63,7 +63,26 @@ if ((Test-Path -LiteralPath $TargetPath -PathType Leaf) -and ([IO.Path]::GetExte
   exit $LASTEXITCODE
 }
 
+if (-not (Test-Path -LiteralPath $Config)) {
+    # Relative config resolved against CWD fails when the scanner is launched
+    # from another directory (e.g. the handoff adapter chdirs to its artifact
+    # dir). Fall back to the script's own directory (the lola repo root,
+    # where codex-security.yaml lives). An explicit, existing path is always
+    # honored as-is.
+    $Fallback = Join-Path $PSScriptRoot $Config
+    if (Test-Path -LiteralPath $Fallback) { $Config = $Fallback }
+}
 if (-not (Test-Path -LiteralPath $Config)) { Fail "Config does not exist: $Config" }
+
+# The helper python scripts (resolve-urls.py, analyze-code.py, ...) live next
+# to this script in the lola repo root. Resolve them by absolute path so the
+# scanner works no matter which directory it is invoked from (the handoff
+# adapter chdirs to its artifact dir before running).
+function Resolve-LolaHelper([string]$Name) {
+  $Near = Join-Path $PSScriptRoot $Name
+  if (Test-Path -LiteralPath $Near) { return $Near }
+  return $Name
+}
 
 Write-ScanEvent "start" "Scan requested in mode $Mode" "info" "running"
 
@@ -172,8 +191,8 @@ if ($LiveMonitor -and $Python -and (Test-Path -LiteralPath "network-monitor.html
   }
 }
 
-if ($Python -and (Test-Path -LiteralPath "resolve-urls.py")) {
-  $UrlArgs = @("resolve-urls.py","--manifest",$Manifest,"--output",$UrlReport)
+if ($Python -and (Test-Path -LiteralPath (Resolve-LolaHelper "resolve-urls.py"))) {
+  $UrlArgs = @((Resolve-LolaHelper "resolve-urls.py"),"--manifest",$Manifest,"--output",$UrlReport)
   if ($ResolveUrls) { $UrlArgs += "--probe" }
   & $Python.Source @UrlArgs
   if (Test-Path -LiteralPath $UrlReport) {
@@ -185,16 +204,16 @@ if ($Python -and (Test-Path -LiteralPath "resolve-urls.py")) {
   }
 }
 
-if ($Python -and (Test-Path -LiteralPath "analyze-code.py")) {
-  & $Python.Source "analyze-code.py" --manifest $Manifest --urls $UrlReport --output $CodeReport
+if ($Python -and (Test-Path -LiteralPath (Resolve-LolaHelper "analyze-code.py"))) {
+  & $Python.Source (Resolve-LolaHelper "analyze-code.py") --manifest $Manifest --urls $UrlReport --output $CodeReport
   if (Test-Path -LiteralPath $CodeReport) {
     Write-Host "CODE    : $((Resolve-Path -LiteralPath $CodeReport).Path)" -ForegroundColor DarkCyan
     Write-ScanEvent "code-analysis" "Deep code analysis generated" "info" "running"
   }
 }
 
-if ($Python -and (Test-Path -LiteralPath "preflight-analyze.py")) {
-  $PreflightArgs = @("preflight-analyze.py","--manifest",$Manifest,"--urls",$UrlReport,"--code",$CodeReport,"--output",$PreflightReport)
+if ($Python -and (Test-Path -LiteralPath (Resolve-LolaHelper "preflight-analyze.py"))) {
+  $PreflightArgs = @((Resolve-LolaHelper "preflight-analyze.py"),"--manifest",$Manifest,"--urls",$UrlReport,"--code",$CodeReport,"--output",$PreflightReport)
   if ($CopyPublicCerts) { $PreflightArgs += "--copy-certs" }
   if ($CaptureAllCode) { $PreflightArgs += "--capture-code" }
   & $Python.Source @PreflightArgs
@@ -212,8 +231,13 @@ Write-Host ""
 Write-Host "Running Semgrep..." -ForegroundColor Cyan
 Write-ScanEvent "semgrep" "Semgrep security scan running" "info" "running"
 & $Semgrep.Source @argsList
-$ExitCode = $LASTEXITCODE
-Write-ScanEvent "semgrep" "Semgrep completed with exit code $ExitCode" $(if ($ExitCode -eq 0) { "info" } else { "warning" }) "running"
+$ScanExit = $LASTEXITCODE
+Write-ScanEvent "semgrep" "Semgrep completed with exit code $ScanExit" $(if ($ScanExit -eq 0) { "info" } else { "warning" }) "running"
+# Semgrep exits non-zero on individual scan errors (e.g. a file it cannot
+# parse, exit 7) even though the report is written and complete. For a
+# completed scan the exit code must not masquerade as pipeline failure —
+# the findings are in the report; only an unwritten report is a real error.
+if (Test-Path -LiteralPath $Report) { $ExitCode = 0 } else { $ExitCode = 1 }
 
 if (Test-Path -LiteralPath $Report) {
   try {
@@ -232,24 +256,24 @@ if (Test-Path -LiteralPath $Report) {
     Write-Host "JSON    : $((Resolve-Path -LiteralPath $Report).Path)"
 
     $Python = Get-Command python -ErrorAction SilentlyContinue
-    if ($Python -and (Test-Path -LiteralPath "build-modes.py")) {
-      & $Python.Source "build-modes.py" --input $Report --manifest $Manifest --urls $UrlReport --output $ModeReport
+    if ($Python -and (Test-Path -LiteralPath (Resolve-LolaHelper "build-modes.py"))) {
+      & $Python.Source (Resolve-LolaHelper "build-modes.py") --input $Report --manifest $Manifest --urls $UrlReport --output $ModeReport
       if (Test-Path -LiteralPath $ModeReport) {
         Write-Host "MODES   : $((Resolve-Path -LiteralPath $ModeReport).Path)" -ForegroundColor DarkCyan
         Write-ScanEvent "mode-analysis" "Security/privacy mode data generated" "info" "running"
       }
     }
 
-    if ($Python -and (Test-Path -LiteralPath "analyze-network.py")) {
-      & $Python.Source "analyze-network.py" --urls $UrlReport --semgrep $Report --code $CodeReport --manifest $Manifest --output $NetworkReport
+    if ($Python -and (Test-Path -LiteralPath (Resolve-LolaHelper "analyze-network.py"))) {
+      & $Python.Source (Resolve-LolaHelper "analyze-network.py") --urls $UrlReport --semgrep $Report --code $CodeReport --manifest $Manifest --output $NetworkReport
       if (Test-Path -LiteralPath $NetworkReport) {
         Write-Host "NETWORK : $((Resolve-Path -LiteralPath $NetworkReport).Path)" -ForegroundColor DarkCyan
         Write-ScanEvent "network-analysis" "Network trace, route, map, visibility and real-IP analysis generated" "info" "running"
       }
     }
 
-    if ($Python -and (Test-Path -LiteralPath "build-report.py")) {
-      & $Python.Source "build-report.py" --input $Report --manifest $Manifest --urls $UrlReport --modes $ModeReport --code $CodeReport --network $NetworkReport --preflight $PreflightReport --mode $Mode --output $HtmlReport --target $TargetPath
+    if ($Python -and (Test-Path -LiteralPath (Resolve-LolaHelper "build-report.py"))) {
+      & $Python.Source (Resolve-LolaHelper "build-report.py") --input $Report --manifest $Manifest --urls $UrlReport --modes $ModeReport --code $CodeReport --network $NetworkReport --preflight $PreflightReport --mode $Mode --output $HtmlReport --target $TargetPath
       if (Test-Path -LiteralPath $HtmlReport) {
         $HtmlPath = (Resolve-Path -LiteralPath $HtmlReport).Path
         Write-Host "VISUAL  : $HtmlPath" -ForegroundColor Green
