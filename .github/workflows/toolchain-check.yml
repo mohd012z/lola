@@ -28,6 +28,8 @@ on:
       - "lola_handoff_adapter.py"
       - "lola_code_integration.py"
       - "lola_universal_converter.py"
+      - "lola_code_intel.py"
+      - "lola_candidate.py"
       - "analyze-apk.py"
       - "lola_mobile.py"
       - "lola_library.py"
@@ -63,6 +65,8 @@ on:
       - "lola_handoff_adapter.py"
       - "lola_code_integration.py"
       - "lola_universal_converter.py"
+      - "lola_code_intel.py"
+      - "lola_candidate.py"
       - "analyze-apk.py"
       - "lola_mobile.py"
       - "lola_library.py"
@@ -117,6 +121,8 @@ jobs:
             lola_handoff_adapter.py \
             lola_code_integration.py \
             lola_universal_converter.py \
+            lola_code_intel.py \
+            lola_candidate.py \
             analyze-apk.py \
             lola_mobile.py \
             lola_library.py \
@@ -128,6 +134,10 @@ jobs:
         run: python -m pytest tests -q
       - name: Sovereign cognitive smoke test
         run: python lola.py --cognitive-smoke
+      - name: Code Intelligence smoke test
+        run: python lola.py --code-intel-smoke
+      - name: Novel Candidate smoke test
+        run: python lola.py --candidate-smoke
       - name: Tiny-to-Beast harness smoke test
         run: python lola.py --tiny-beast-smoke
       - name: Controlled T2/T3 transfer benchmark

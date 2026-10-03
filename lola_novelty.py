@@ -136,6 +136,10 @@ def freeze_idea(idea: IdeaGenome) -> dict:
     against. Returns a new dict; the genome is not mutated.
     """
     return {
+        # The whole point of freezing is that the idea is locked BEFORE any
+        # external search. The runtime loop's novelty gate reads this flag;
+        # without it a genuinely-frozen idea would be quarantined.
+        "frozen_before_external": True,
         "idea_id": idea.idea_id,
         "timestamp": datetime.now(timezone.utc).isoformat(),
         "problem": idea.problem,

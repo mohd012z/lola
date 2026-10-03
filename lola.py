@@ -232,6 +232,24 @@ def build_parser() -> argparse.ArgumentParser:
         help="Re-verify the merged New LOLA stack: import every cognitive module and re-run the full-chain smoke + a delta-observe cycle. The single post-merge 'the chain holds together' check.",
     )
     p.add_argument(
+        "--code-intel-smoke",
+        action="store_true",
+        help="Run the deterministic Code Intelligence smoke test (incremental SQLite CodeGraph + FTS5 retrieval + context compiler) on a synthetic tree — zero models.",
+    )
+    p.add_argument(
+        "--candidate-smoke",
+        action="store_true",
+        help="Run the NovelCandidate v1 acceptance smoke: immutable candidates, structural fingerprints, state machine (VERIFIED only via observed episodes), deterministic operators, and the two-run learning test (run #2 suppresses the structure that failed in run #1) — zero models.",
+    )
+    p.add_argument(
+        "--code-intel",
+        help="Index a Python directory with the Code Intelligence layer and print the stats JSON (root path required; DB stored outside the root).",
+    )
+    p.add_argument(
+        "--code-intel-db",
+        help="Optional explicit Code Intelligence DB path (default: <root>.codeintel.sqlite next to the root).",
+    )
+    p.add_argument(
         "--tiny-beast-smoke",
         action="store_true",
         help="Run a synthetic smoke of the Tiny-to-Beast benchmark harness.",
@@ -449,6 +467,40 @@ def main() -> int:
         result = verify_merged_stack()
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("passed") else 1
+
+    if args.code_intel_smoke:
+        if args.target_option or args.target_positional:
+            parser.error("--code-intel-smoke must run without target inputs.")
+        from lola_code_intel import run_code_intel_smoke
+
+        result = run_code_intel_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
+
+    if args.candidate_smoke:
+        if args.target_option or args.target_positional:
+            parser.error("--candidate-smoke must run without target inputs.")
+        from lola_candidate import run_candidate_smoke
+
+        result = run_candidate_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
+
+    if args.code_intel:
+        if args.target_positional:
+            parser.error("--code-intel takes its root as the option value, not a positional.")
+        from dataclasses import asdict
+        from lola_code_intel import CodeIndex
+
+        root = Path(args.code_intel)
+        db = Path(args.code_intel_db) if args.code_intel_db else None
+        idx = CodeIndex(root, db_path=db)
+        try:
+            stats = idx.index()
+        finally:
+            idx.close()
+        print(json.dumps(asdict(stats), indent=2, ensure_ascii=False, sort_keys=True))
+        return 0
 
     if args.tiny_beast_smoke:
         if args.target_option or args.target_positional:
