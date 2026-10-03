@@ -6,6 +6,17 @@ Examples:
     python lola.py "C:\Apps\sample.apk"
     python lola.py --target "C:\Projects\MyApp"
     python lola.py "C:\Apps\sample.apk" --mode /apkpermissions
+    python lola.py --cognitive-smoke
+    python lola.py --cognitive-loop-smoke
+    python lola.py --tiny-beast-smoke
+    python lola.py --tiny-beast-benchmark benchmark.json
+    python lola.py --controlled-transfer-benchmark
+    python lola.py --historical-replay-scanner-cwd
+    python lola.py --historical-transfer-benchmark
+    python lola.py --prospective-transfer-prereg
+    python lola.py --prospective-holdout-observe workflow-event.json --holdout-observation-output observation.json
+    python lola.py --prospective-holdout-lock candidate.json --holdout-lock-output selection-lock.json
+    python lola.py --prospective-transfer-result result.json
 """
 
 from __future__ import annotations
@@ -192,6 +203,88 @@ def build_parser() -> argparse.ArgumentParser:
         default=None,
         help="Mode such as /apk360, /apkpermissions, /360, /deep-dive, /anonymus.",
     )
+    p.add_argument(
+        "--cognitive-smoke",
+        action="store_true",
+        help="Run the deterministic offline S0 sovereign cognitive smoke test.",
+    )
+    p.add_argument(
+        "--cognitive-loop-smoke",
+        action="store_true",
+        help="Run the end-to-end offline smoke of the New LOLA cognitive loop (triage, radar, novelty gate, planner, flow, governor).",
+    )
+    p.add_argument(
+        "--cognitive-loop",
+        help="Run the New LOLA cognitive loop on a real input JSON file (question + optional verified_state/inspectable/inventory/frozen_idea/external_hits/prediction/observed); prints the report JSON.",
+    )
+    p.add_argument(
+        "--cognitive-entry",
+        help="Run one raw human input through the full cognitive entry: Interaction Gateway (normalize + default-deny gate) -> KIPEnvelope -> cognitive loop -> answer + /flow + epistemic fuse. Input JSON: {transport, raw, actor: {actor_id, trust_class, granted_scopes[]}, session_id, capability?, verified_state?, inspectable?, inventory?, frozen_idea?, external_hits?, prediction?, observed?}.",
+    )
+    p.add_argument(
+        "--full-chain-smoke",
+        action="store_true",
+        help="Run the cross-module full-chain smoke: the single end-to-end proof that HUMAN -> GATEWAY -> KIPEnvelope -> loop -> fuse holds together (sovereign answer, default-deny-before-cognition, novelty-before-external fuse, prediction-error edge, determinism).",
+    )
+    p.add_argument(
+        "--stack-verify",
+        action="store_true",
+        help="Re-verify the merged New LOLA stack: import every cognitive module and re-run the full-chain smoke + a delta-observe cycle. The single post-merge 'the chain holds together' check.",
+    )
+    p.add_argument(
+        "--tiny-beast-smoke",
+        action="store_true",
+        help="Run a synthetic smoke of the Tiny-to-Beast benchmark harness.",
+    )
+    p.add_argument(
+        "--tiny-beast-benchmark",
+        help="Evaluate a JSON baseline/learned benchmark pair with fixed-model rules.",
+    )
+    p.add_argument(
+        "--controlled-transfer-benchmark",
+        action="store_true",
+        help="Run the controlled empirical T2/T3 transfer suite through Lola learning governance.",
+    )
+    p.add_argument(
+        "--historical-replay-scanner-cwd",
+        action="store_true",
+        help="Replay the provenance-pinned historical scanner CWD path-resolution incident.",
+    )
+    p.add_argument(
+        "--historical-transfer-benchmark",
+        action="store_true",
+        help="Run the multi-incident historical preflight-validity transfer benchmark.",
+    )
+    p.add_argument(
+        "--prospective-transfer-prereg",
+        action="store_true",
+        help="Validate the sealed prospective transfer preregistration; this never claims success before holdout reveal.",
+    )
+    p.add_argument(
+        "--prospective-holdout-observe",
+        help="Observe one GitHub workflow_run event and emit review-only post-anchor failure evidence; never selects or locks a holdout.",
+    )
+    p.add_argument(
+        "--holdout-observation-output",
+        help="Output JSON path for --prospective-holdout-observe. Written only for OBSERVED_REVIEW_REQUIRED.",
+    )
+    p.add_argument(
+        "--prospective-holdout-lock",
+        help="Validate the first eligible natural failure and create a pre-repair selection lock using real Git ancestry.",
+    )
+    p.add_argument(
+        "--holdout-lock-output",
+        help="Output JSON path for --prospective-holdout-lock. Written only when the candidate is valid.",
+    )
+    p.add_argument(
+        "--prospective-transfer-result",
+        help="Validate a Phase-B prospective transfer result using the sealed anchor and real local Git ancestry.",
+    )
+    p.add_argument(
+        "--require-sovereign",
+        action="store_true",
+        help="Require the learned benchmark trial to use no external AI.",
+    )
 
     # Shared / source-project options
     p.add_argument("--resolve-urls", action="store_true")
@@ -232,6 +325,259 @@ def main() -> int:
 
     if args.handoff_validate and args.handoff_run:
         parser.error("--handoff-validate and --handoff-run cannot be used together.")
+    if args.holdout_observation_output and not args.prospective_holdout_observe:
+        parser.error("--holdout-observation-output requires --prospective-holdout-observe.")
+    if args.holdout_lock_output and not args.prospective_holdout_lock:
+        parser.error("--holdout-lock-output requires --prospective-holdout-lock.")
+
+    special_modes = sum(
+        bool(value)
+        for value in (
+            args.cognitive_smoke,
+            args.cognitive_loop_smoke,
+            args.tiny_beast_smoke,
+            args.tiny_beast_benchmark,
+            args.controlled_transfer_benchmark,
+            args.historical_replay_scanner_cwd,
+            args.historical_transfer_benchmark,
+            args.prospective_transfer_prereg,
+            args.prospective_holdout_observe,
+            args.prospective_holdout_lock,
+            args.prospective_transfer_result,
+            args.handoff_validate,
+            args.handoff_run,
+            args.cognitive_loop,
+            args.cognitive_entry,
+            args.full_chain_smoke,
+            args.stack_verify,
+        )
+    )
+    if special_modes > 1:
+        parser.error("Choose only one cognitive/benchmark/handoff command at a time.")
+
+    if args.cognitive_smoke:
+        if args.target_option or args.target_positional:
+            parser.error("--cognitive-smoke must run without target inputs.")
+        from lola_sovereign_runtime import run_sovereign_smoke
+
+        result = run_sovereign_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
+
+    if args.cognitive_loop_smoke and args.cognitive_loop:
+        parser.error("--cognitive-loop-smoke and --cognitive-loop cannot be used together.")
+    if args.cognitive_loop_smoke:
+        if args.target_option or args.target_positional:
+            parser.error("--cognitive-loop-smoke must run without target inputs.")
+        from lola_cognitive_loop_smoke import run_cognitive_loop_smoke
+
+        result = run_cognitive_loop_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
+
+    if args.cognitive_loop:
+        if args.target_option or args.target_positional:
+            parser.error("--cognitive-loop must run without target inputs.")
+        from lola_cognitive_loop import run_cognitive_loop
+
+        input_doc = json.loads(Path(args.cognitive_loop).read_text(encoding="utf-8"))
+        result = run_cognitive_loop(input_doc)
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0
+
+    if args.cognitive_entry:
+        if args.target_option or args.target_positional:
+            parser.error("--cognitive-entry must run without target inputs.")
+        from dataclasses import asdict
+        from lola_cognitive_entry import cognitive_entry
+        from lola_interaction_gateway import ActorIdentity, TrustClass
+
+        doc = json.loads(Path(args.cognitive_entry).read_text(encoding="utf-8"))
+        actor_doc = doc.get("actor") or {}
+        actor = ActorIdentity(
+            actor_id=str(actor_doc.get("actor_id", "")),
+            trust_class=TrustClass(str(actor_doc.get("trust_class", "UNTRUSTED"))),
+            granted_scopes=frozenset(actor_doc.get("granted_scopes") or ()),
+        )
+        # the actors table is the gate's source of truth; when omitted,
+        # the single supplied actor is trusted to be known.
+        actors = doc.get("actors")
+        if actors is None:
+            actors = {actor.actor_id: actor}
+        else:
+            actors = {
+                str(aid): ActorIdentity(
+                    actor_id=str(aid),
+                    trust_class=TrustClass(str(ad.get("trust_class", "UNTRUSTED"))),
+                    granted_scopes=frozenset(ad.get("granted_scopes") or ()),
+                )
+                for aid, ad in actors.items()
+            }
+        result = cognitive_entry(
+            str(doc.get("transport", "")),
+            str(doc.get("raw", "")),
+            actor,
+            session_id=str(doc.get("session_id", "")),
+            actors=actors,
+            capability=str(doc.get("capability", "cognitive_query")),
+            verified_state=doc.get("verified_state") or {},
+            inspectable=tuple(doc.get("inspectable") or ()),
+            inventory=doc.get("inventory"),
+            frozen_idea=doc.get("frozen_idea"),
+            external_hits=tuple(doc.get("external_hits") or ()),
+            prediction=doc.get("prediction"),
+            observed=doc.get("observed"),
+        )
+        print(json.dumps(asdict(result), indent=2, ensure_ascii=False,
+                         sort_keys=True))
+        return 0
+
+    if args.full_chain_smoke:
+        if args.target_option or args.target_positional:
+            parser.error("--full-chain-smoke must run without target inputs.")
+        from lola_full_chain_smoke import run_full_chain_smoke
+
+        result = run_full_chain_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
+
+    if args.stack_verify:
+        if args.target_option or args.target_positional:
+            parser.error("--stack-verify must run without target inputs.")
+        from lola_stack_verify import verify_merged_stack
+
+        result = verify_merged_stack()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
+
+    if args.tiny_beast_smoke:
+        if args.target_option or args.target_positional:
+            parser.error("--tiny-beast-smoke must run without target inputs.")
+        from lola_tiny_beast_benchmark import run_tiny_beast_smoke
+
+        result = run_tiny_beast_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
+
+    if args.tiny_beast_benchmark:
+        if args.target_option or args.target_positional:
+            parser.error("--tiny-beast-benchmark must run without target inputs.")
+        from lola_tiny_beast_benchmark import evaluate_growth, load_benchmark_pair
+
+        baseline, learned = load_benchmark_pair(Path(args.tiny_beast_benchmark))
+        result = evaluate_growth(
+            baseline,
+            learned,
+            require_sovereign=bool(args.require_sovereign),
+        )
+        payload = result.as_dict()
+        payload["empirical_beast_claim"] = bool(result.passed)
+        print(json.dumps(payload, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.passed else 2
+
+    if args.controlled_transfer_benchmark:
+        if args.target_option or args.target_positional:
+            parser.error("--controlled-transfer-benchmark must run without target inputs.")
+        from lola_controlled_transfer_benchmark import run_controlled_transfer_suite
+
+        result = run_controlled_transfer_suite()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("controlled_empirical_claim") else 2
+
+    if args.historical_replay_scanner_cwd:
+        if args.target_option or args.target_positional:
+            parser.error("--historical-replay-scanner-cwd must run without target inputs.")
+        from lola_historical_replay import run_scanner_cwd_historical_replay
+
+        result = run_scanner_cwd_historical_replay()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("historical_replay_claim") else 2
+
+    if args.historical_transfer_benchmark:
+        if args.target_option or args.target_positional:
+            parser.error("--historical-transfer-benchmark must run without target inputs.")
+        from lola_historical_transfer import run_historical_transfer_suite
+
+        result = run_historical_transfer_suite()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("historical_transfer_claim") else 2
+
+    if args.prospective_transfer_prereg:
+        if args.target_option or args.target_positional:
+            parser.error("--prospective-transfer-prereg must run without target inputs.")
+        from lola_prospective_prereg import load_preregistration, validate_preregistration
+
+        result = validate_preregistration(load_preregistration())
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("valid") else 2
+
+    if args.prospective_holdout_observe:
+        if args.target_option or args.target_positional:
+            parser.error("--prospective-holdout-observe must run without target inputs.")
+        if not args.holdout_observation_output:
+            parser.error("--prospective-holdout-observe requires --holdout-observation-output.")
+        from lola_prospective_holdout_observer import observe_workflow_event
+
+        event_path = Path(args.prospective_holdout_observe)
+        event = json.loads(event_path.read_text(encoding="utf-8"))
+        result = observe_workflow_event(event, repository_root=ROOT)
+        if result.get("observation_created"):
+            output_path = Path(args.holdout_observation_output).expanduser().resolve()
+            output_path.parent.mkdir(parents=True, exist_ok=True)
+            output_path.write_text(
+                json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+                encoding="utf-8",
+            )
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0
+
+    if args.prospective_holdout_lock:
+        if args.target_option or args.target_positional:
+            parser.error("--prospective-holdout-lock must run without target inputs.")
+        if not args.holdout_lock_output:
+            parser.error("--prospective-holdout-lock requires --holdout-lock-output.")
+        from lola_prospective_holdout import build_selection_lock, validate_holdout_candidate
+
+        candidate_path = Path(args.prospective_holdout_lock)
+        candidate = json.loads(candidate_path.read_text(encoding="utf-8"))
+        if not isinstance(candidate, dict):
+            result = {
+                "valid_candidate": False,
+                "status": "REJECTED_HOLDOUT_CANDIDATE",
+                "reasons": ["candidate_must_be_json_object"],
+                "prospective_claim": False,
+                "blind_holdout_claim": False,
+                "production_world_claim": False,
+            }
+            print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+            return 2
+
+        verdict = validate_holdout_candidate(candidate, repository_root=ROOT)
+        if not verdict.get("valid_candidate"):
+            print(json.dumps(verdict, indent=2, ensure_ascii=False, sort_keys=True))
+            return 2
+
+        lock = build_selection_lock(candidate, repository_root=ROOT)
+        output_path = Path(args.holdout_lock_output).expanduser().resolve()
+        output_path.parent.mkdir(parents=True, exist_ok=True)
+        output_path.write_text(
+            json.dumps(lock, indent=2, ensure_ascii=False, sort_keys=True) + "\n",
+            encoding="utf-8",
+        )
+        print(json.dumps(lock, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0
+
+    if args.prospective_transfer_result:
+        if args.target_option or args.target_positional:
+            parser.error("--prospective-transfer-result must run without target inputs.")
+        from lola_prospective_result import load_prospective_result, evaluate_prospective_result
+
+        result = evaluate_prospective_result(
+            load_prospective_result(Path(args.prospective_transfer_result)),
+            repository_root=ROOT,
+        )
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("prospective_claim") else 2
 
     if args.handoff_validate or args.handoff_run:
         if args.target_option or args.target_positional:

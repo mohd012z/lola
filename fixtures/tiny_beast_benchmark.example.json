@@ -1,0 +1,34 @@
+{
+  "baseline": {
+    "task_id": "dependency-debug-baseline",
+    "family": "dependency-debug",
+    "transfer_distance": 0,
+    "model_id": "replace-with-exact-model-build",
+    "hardware_id": "replace-with-exact-hardware-profile",
+    "verified": true,
+    "false_solved": false,
+    "intellectual_level": 4,
+    "actions": 18,
+    "escalations": 2,
+    "tokens": 10000,
+    "wall_time_ms": 12000,
+    "external_ai_used": false,
+    "regression_failures": 0
+  },
+  "learned": {
+    "task_id": "dependency-debug-unseen-t2",
+    "family": "dependency-debug",
+    "transfer_distance": 2,
+    "model_id": "replace-with-exact-model-build",
+    "hardware_id": "replace-with-exact-hardware-profile",
+    "verified": true,
+    "false_solved": false,
+    "intellectual_level": 1,
+    "actions": 4,
+    "escalations": 0,
+    "tokens": 1800,
+    "wall_time_ms": 3500,
+    "external_ai_used": false,
+    "regression_failures": 0
+  }
+}

@@ -1,0 +1,57 @@
+{
+  "schema_version": "prospective-transfer-prereg-v1",
+  "registration_id": "lola-preflight-validity-prospective-001",
+  "phase": "PREREGISTRATION",
+  "registered_date": "2026-10-02",
+  "evidence_base": {
+    "repository": "mohd012z/lola",
+    "base_commit_sha": "92c7d553ba168cb5662b93f97497cfb8efb191a6",
+    "hypothesis": "preflight_validity",
+    "evaluator_path": "lola_historical_transfer.py",
+    "evaluator_blob_sha": "5274be28fe602edf18aeca1a2c287d0ac2c22f8b",
+    "training_fixture_path": "fixtures/historical_transfer_v2.json",
+    "training_fixture_blob_sha": "abe3feba07f9580fc694e32dd56576675f46e286",
+    "model_id": "kernel-historical-inspector-v2",
+    "hardware_id": "frozen-fixture-runtime"
+  },
+  "holdout_selection": {
+    "repository": "mohd012z/lola",
+    "selection_mode": "first_eligible_after_preregistration_merge",
+    "eligible_event": "first naturally occurring defect after preregistration merge that causes an observable CI, runtime, integration, or behavior failure and has independently verifiable before/fix evidence",
+    "eligible_surfaces": [
+      "source",
+      "workflow",
+      "config",
+      "runtime-integration"
+    ],
+    "excluded_events": [
+      "benchmark-authored or intentionally injected failures",
+      "documentation-only defects",
+      "test-only fixtures created for this benchmark",
+      "same-origin continuation of a training incident"
+    ],
+    "known_outcome_allowed": false,
+    "cherry_pick_allowed": false,
+    "holdout_revealed": false
+  },
+  "evaluation_contract": {
+    "minimum_transfer_distance": 2,
+    "same_model_required": true,
+    "same_hardware_required": true,
+    "sovereign_required": true,
+    "baseline_verified_required": true,
+    "learned_verified_required": true,
+    "minimum_intellectual_downshift": 1,
+    "minimum_action_delta": -1,
+    "maximum_regression_failures": 0,
+    "false_solved_allowed": false,
+    "evaluator_change_after_reveal_allowed": false,
+    "hypothesis_change_after_reveal_allowed": false
+  },
+  "claim_ceiling_before_reveal": {
+    "blind_holdout_claim": false,
+    "prospective_claim": false,
+    "production_world_claim": false
+  },
+  "seal_sha256": "0ad03ed5ba5c017e764ad43caeb1970e54d3bf81d64f367eb14320974d9ea46f"
+}
