@@ -1,0 +1,143 @@
+name: Prospective holdout observer
+
+on:
+  workflow_run:
+    workflows: ["Toolchain smoke check", "Lola Code Doctor", "Lola Bot Health"]
+    types: [completed]
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  observe-abnormal-outcome:
+    if: ${{ github.event.workflow_run.conclusion == 'failure' || github.event.workflow_run.conclusion == 'timed_out' || github.event.workflow_run.conclusion == 'startup_failure' || github.event.workflow_run.conclusion == 'action_required' || github.event.workflow_run.conclusion == 'cancelled' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Checkout trusted observer code
+        uses: actions/checkout@v7
+        with:
+          ref: ${{ github.event.repository.default_branch }}
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Set up Python
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12"
+
+      - name: Fetch abnormal-run commit as ancestry evidence only
+        env:
+          FAILED_SHA: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          git fetch --no-tags origin "$FAILED_SHA"
+          git cat-file -e "$FAILED_SHA^{commit}"
+
+      - name: Observe abnormal workflow outcome without selecting or repairing
+        run: |
+          python lola.py \
+            --prospective-holdout-observe "$GITHUB_EVENT_PATH" \
+            --holdout-observation-output prospective-holdout-observation.json
+
+      - name: Export complete read-only GitHub Actions history
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh api --paginate --slurp \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/${GITHUB_REPOSITORY}/actions/runs?per_page=100" \
+            > prospective-workflow-runs-pages.json
+
+      - name: Expand watched workflow attempts without losing rerun failures
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          import subprocess
+          from pathlib import Path
+          from lola_prospective_event_census import expand_workflow_attempt_history
+
+          pages = json.loads(Path("prospective-workflow-runs-pages.json").read_text(encoding="utf-8"))
+          runs = []
+          for page in pages:
+              if isinstance(page, dict):
+                  page_runs = page.get("workflow_runs", [])
+                  if isinstance(page_runs, list):
+                      runs.extend(page_runs)
+
+          repository = os.environ["GITHUB_REPOSITORY"]
+
+          def fetch_attempt(run_id: int, attempt: int):
+              endpoint = f"/repos/{repository}/actions/runs/{run_id}/attempts/{attempt}"
+              payload = subprocess.check_output(
+                  ["gh", "api", "-H", "Accept: application/vnd.github+json", endpoint],
+                  text=True,
+              )
+              return json.loads(payload)
+
+          attempts = expand_workflow_attempt_history(runs, fetch_attempt=fetch_attempt)
+          Path("prospective-workflow-attempts.json").write_text(
+              json.dumps(attempts, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+
+          reviewable = {"failure", "timed_out", "startup_failure", "action_required", "cancelled"}
+          shas = sorted(
+              {
+                  str(item.get("head_sha") or "")
+                  for item in attempts
+                  if str(item.get("conclusion") or "") in reviewable
+              }
+          )
+          Path("prospective-census-head-shas.txt").write_text(
+              "".join(f"{sha}\n" for sha in shas if sha),
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Fetch census head commits for ancestry verification
+        run: |
+          while IFS= read -r sha; do
+            [ -n "$sha" ] || continue
+            git fetch --no-tags origin "$sha"
+            git cat-file -e "$sha^{commit}"
+          done < prospective-census-head-shas.txt
+
+      - name: Build deterministic first-eligible event census
+        env:
+          CANDIDATE_RUN_ID: ${{ github.event.workflow_run.id }}
+          CANDIDATE_RUN_ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+        run: |
+          python - <<'PY'
+          import json
+          import os
+          from pathlib import Path
+          from lola_prospective_event_census import build_event_census
+
+          attempts = json.loads(Path("prospective-workflow-attempts.json").read_text(encoding="utf-8"))
+          census = build_event_census(
+              attempts,
+              candidate_run_id=int(os.environ["CANDIDATE_RUN_ID"]),
+              candidate_run_attempt=int(os.environ["CANDIDATE_RUN_ATTEMPT"]),
+              history_complete=True,
+              repository_root=Path("."),
+          )
+          Path("prospective-event-census.json").write_text(
+              json.dumps(census, indent=2, sort_keys=True) + "\n",
+              encoding="utf-8",
+          )
+          PY
+
+      - name: Upload review-only observation and census
+        if: ${{ hashFiles('prospective-holdout-observation.json') != '' && hashFiles('prospective-event-census.json') != '' }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: prospective-holdout-evidence-${{ github.event.workflow_run.id }}-attempt-${{ github.event.workflow_run.run_attempt }}
+          path: |
+            prospective-holdout-observation.json
+            prospective-event-census.json
+          if-no-files-found: error
+          retention-days: 30
