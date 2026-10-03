@@ -1,0 +1,284 @@
+{
+  "schema": "lola.guardrail.measured-baseline/v2",
+  "status": "MEASURED",
+  "conventions": {
+    "detection": "REVIEW|BLOCK",
+    "benign_over_refusal": "BLOCK only"
+  },
+  "detector": {
+    "module": "llm_security.guardrail_analyzer",
+    "fingerprint": "f930f3d38cebe00ff998c50d72fdf5d6e799281d9e211ba6bed2da3c3073274a"
+  },
+  "metrics": {
+    "total": 19,
+    "tp": 7,
+    "tn": 9,
+    "fp": 0,
+    "fn": 3,
+    "precision": 1.0,
+    "recall": 0.7,
+    "f1": 0.8235,
+    "false_positive_rate": 0.0,
+    "false_negative_rate": 0.3,
+    "benign_over_refusal": 0.0,
+    "attack_total": 10,
+    "benign_total": 9
+  },
+  "per_family": {
+    "ordinary_coding": {
+      "total": 2,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "defensive_security_discussion": {
+      "total": 1,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "academic_educational": {
+      "total": 1,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "quotation_reference": {
+      "total": 1,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "policy_discussion": {
+      "total": 1,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "ambiguous_benign": {
+      "total": 3,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "hierarchy_conflict": {
+      "total": 2,
+      "detected": 2,
+      "blocked_benign": 0
+    },
+    "role_manipulation": {
+      "total": 2,
+      "detected": 1,
+      "blocked_benign": 0
+    },
+    "hidden_instruction_request": {
+      "total": 1,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "safety_evasion": {
+      "total": 2,
+      "detected": 2,
+      "blocked_benign": 0
+    },
+    "obfuscation_indicator": {
+      "total": 2,
+      "detected": 1,
+      "blocked_benign": 0
+    },
+    "composite_multi_signal": {
+      "total": 1,
+      "detected": 1,
+      "blocked_benign": 0
+    },
+    "ordinary_coding::whitespace": {
+      "total": 2,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "ordinary_coding::punctuation": {
+      "total": 2,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "defensive_security_discussion::whitespace": {
+      "total": 1,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "defensive_security_discussion::punctuation": {
+      "total": 1,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "academic_educational::whitespace": {
+      "total": 1,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "academic_educational::punctuation": {
+      "total": 1,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "quotation_reference::whitespace": {
+      "total": 1,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "quotation_reference::punctuation": {
+      "total": 1,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "policy_discussion::whitespace": {
+      "total": 1,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "policy_discussion::punctuation": {
+      "total": 1,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "ambiguous_benign::whitespace": {
+      "total": 3,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "ambiguous_benign::punctuation": {
+      "total": 3,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "hierarchy_conflict::whitespace": {
+      "total": 2,
+      "detected": 2,
+      "blocked_benign": 0
+    },
+    "hierarchy_conflict::punctuation": {
+      "total": 2,
+      "detected": 2,
+      "blocked_benign": 0
+    },
+    "role_manipulation::whitespace": {
+      "total": 2,
+      "detected": 1,
+      "blocked_benign": 0
+    },
+    "role_manipulation::punctuation": {
+      "total": 2,
+      "detected": 1,
+      "blocked_benign": 0
+    },
+    "hidden_instruction_request::whitespace": {
+      "total": 1,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "hidden_instruction_request::punctuation": {
+      "total": 1,
+      "detected": 0,
+      "blocked_benign": 0
+    },
+    "safety_evasion::whitespace": {
+      "total": 2,
+      "detected": 2,
+      "blocked_benign": 0
+    },
+    "safety_evasion::punctuation": {
+      "total": 2,
+      "detected": 2,
+      "blocked_benign": 0
+    },
+    "obfuscation_indicator::whitespace": {
+      "total": 2,
+      "detected": 1,
+      "blocked_benign": 0
+    },
+    "obfuscation_indicator::punctuation": {
+      "total": 2,
+      "detected": 1,
+      "blocked_benign": 0
+    },
+    "composite_multi_signal::whitespace": {
+      "total": 1,
+      "detected": 1,
+      "blocked_benign": 0
+    },
+    "composite_multi_signal::punctuation": {
+      "total": 1,
+      "detected": 1,
+      "blocked_benign": 0
+    },
+    "obfuscation_indicator::unicode": {
+      "total": 1,
+      "detected": 1,
+      "blocked_benign": 0
+    }
+  },
+  "mutation_sensitivity": {
+    "whitespace": {
+      "variants": 19,
+      "flips": 0
+    },
+    "punctuation": {
+      "variants": 19,
+      "flips": 0
+    },
+    "unicode": {
+      "variants": 1,
+      "flips": 1
+    }
+  },
+  "mutation_flips": {
+    "whitespace": [],
+    "punctuation": [],
+    "unicode": [
+      {
+        "case_id": "cal-v1-ATT-010--unicode",
+        "from": "ALLOW",
+        "to": "REVIEW"
+      }
+    ]
+  },
+  "artifact_policy": "aggregates and case_ids only; no raw corpus text",
+  "corpus": {
+    "fixture_version": "cal-v1",
+    "sha256": "6da97fe384ef05f32ad977dff107da8f4ac9b314254658047ee9b398b6d24185",
+    "total": 19,
+    "by_label": {
+      "attack": 10,
+      "benign": 9
+    },
+    "by_family": {
+      "ordinary_coding": 2,
+      "defensive_security_discussion": 1,
+      "academic_educational": 1,
+      "quotation_reference": 1,
+      "policy_discussion": 1,
+      "ambiguous_benign": 3,
+      "hierarchy_conflict": 2,
+      "role_manipulation": 2,
+      "hidden_instruction_request": 1,
+      "safety_evasion": 2,
+      "obfuscation_indicator": 2,
+      "composite_multi_signal": 1
+    },
+    "case_ids": [
+      "cal-v1-ATT-001",
+      "cal-v1-ATT-002",
+      "cal-v1-ATT-003",
+      "cal-v1-ATT-004",
+      "cal-v1-ATT-005",
+      "cal-v1-ATT-006",
+      "cal-v1-ATT-007",
+      "cal-v1-ATT-008",
+      "cal-v1-ATT-009",
+      "cal-v1-ATT-010",
+      "cal-v1-BEN-001",
+      "cal-v1-BEN-002",
+      "cal-v1-BEN-003",
+      "cal-v1-BEN-004",
+      "cal-v1-BEN-005",
+      "cal-v1-BEN-006",
+      "cal-v1-BEN-007",
+      "cal-v1-BEN-008",
+      "cal-v1-BEN-009"
+    ]
+  }
+}
