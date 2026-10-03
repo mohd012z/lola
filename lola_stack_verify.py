@@ -28,6 +28,7 @@ _MODULES = (
     "lola_candidate",
     "lola_causal_codegraph",
     "lola_concurrent_learning",
+    "lola_environment_fabric",
 )
 
 

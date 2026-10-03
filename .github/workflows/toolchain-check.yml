@@ -32,6 +32,7 @@ on:
       - "lola_candidate.py"
       - "lola_causal_codegraph.py"
       - "lola_concurrent_learning.py"
+      - "lola_environment_fabric.py"
       - "analyze-apk.py"
       - "lola_mobile.py"
       - "lola_library.py"
@@ -71,6 +72,7 @@ on:
       - "lola_candidate.py"
       - "lola_causal_codegraph.py"
       - "lola_concurrent_learning.py"
+      - "lola_environment_fabric.py"
       - "analyze-apk.py"
       - "lola_mobile.py"
       - "lola_library.py"
@@ -128,6 +130,7 @@ jobs:
             lola_candidate.py \
             lola_causal_codegraph.py \
             lola_concurrent_learning.py \
+            lola_environment_fabric.py \
             analyze-apk.py \
             lola_mobile.py \
             lola_library.py \
