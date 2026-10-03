@@ -234,3 +234,41 @@ class RuntimeLoopTests(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class FreezeIdeaLoopSeamTests(unittest.TestCase):
+    """Integration seam: freeze_idea() output must satisfy the loop's
+    novelty-before-external gate. (freeze_idea's purpose is locking the
+    idea BEFORE external search; the gate reads that lock.)"""
+
+    def _frozen(self):
+        from lola_novelty import build_idea_genome, freeze_idea
+        ig = build_idea_genome(
+            problem="transfer benchmark fails",
+            mechanism="decoder buffer overflow above 4k",
+            predictions=("buffer >4k fails",),
+            counterpredictions=("small buffer succeeds",),
+            falsification_condition="small buffer succeeds",
+        )
+        return freeze_idea(ig)
+
+    def test_real_frozen_idea_passes_novelty_gate(self):
+        from lola_runtime_loop import run_loop
+        rep = run_loop(
+            "why does the transfer benchmark fail?",
+            inventory={"unknown": ("root cause",)},
+            frozen_idea=self._frozen(),
+            external_hits=("h1",),
+        )
+        self.assertFalse(rep.quarantined)
+        self.assertNotIn("NOVELTY_BEFORE_EXTERNAL", rep.violations)
+
+    def test_unfrozen_idea_still_quarantined(self):
+        from lola_runtime_loop import run_loop
+        rep = run_loop(
+            "why does the transfer benchmark fail?",
+            inventory={"unknown": ("root cause",)},
+            external_hits=("h1",),  # no frozen idea at all
+        )
+        self.assertTrue(rep.quarantined)
+        self.assertIn("NOVELTY_BEFORE_EXTERNAL", rep.violations)
