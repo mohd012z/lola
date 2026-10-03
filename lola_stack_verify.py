@@ -29,6 +29,7 @@ _MODULES = (
     "lola_causal_codegraph",
     "lola_concurrent_learning",
     "lola_environment_fabric",
+    "lola_lks",
 )
 
 
@@ -93,6 +94,14 @@ def _concurrent_learning_ok() -> bool:
         return False
 
 
+def _lks_ok() -> bool:
+    try:
+        from lola_lks import run_lks_smoke
+        return bool(run_lks_smoke()["passed"])
+    except Exception:
+        return False
+
+
 def verify_merged_stack() -> dict:
     modules = {name: _import_ok(name) for name in _MODULES}
     stages = {
@@ -102,6 +111,7 @@ def verify_merged_stack() -> dict:
         "candidate": _candidate_ok(),
         "causal_graph": _causal_graph_ok(),
         "concurrent_learning": _concurrent_learning_ok(),
+        "lks": _lks_ok(),
     }
     passed = all(modules.values()) and all(stages.values())
     return {
