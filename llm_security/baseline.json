@@ -1,0 +1,19 @@
+{
+  "schema": "lola.guardrail.baseline/v1",
+  "status": "UNMEASURED",
+  "description": "Populate metrics only from a reproducible benchmark run. UNMEASURED must never be treated as a passing baseline.",
+  "dataset": {
+    "name": "pending-calibration",
+    "sha256": null,
+    "total": 0
+  },
+  "guardrail": {
+    "protocol": "GRD/1",
+    "version": "feature/llm-guardrail-analysis"
+  },
+  "metrics": {
+    "false_positive_rate": null,
+    "recall": null,
+    "f1": null
+  }
+}
