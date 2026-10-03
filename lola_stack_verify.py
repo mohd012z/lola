@@ -26,6 +26,7 @@ _MODULES = (
     "lola_delta_observe",
     "lola_code_intel",
     "lola_candidate",
+    "lola_concurrent_learning",
 )
 
 
@@ -74,6 +75,14 @@ def _candidate_ok() -> bool:
         return False
 
 
+def _concurrent_learning_ok() -> bool:
+    try:
+        from lola_concurrent_learning import run_concurrent_learning_smoke
+        return bool(run_concurrent_learning_smoke()["passed"])
+    except Exception:
+        return False
+
+
 def verify_merged_stack() -> dict:
     modules = {name: _import_ok(name) for name in _MODULES}
     stages = {
@@ -81,6 +90,7 @@ def verify_merged_stack() -> dict:
         "delta_observe": _delta_observe_ok(),
         "code_intel": _code_intel_ok(),
         "candidate": _candidate_ok(),
+        "concurrent_learning": _concurrent_learning_ok(),
     }
     passed = all(modules.values()) and all(stages.values())
     return {
