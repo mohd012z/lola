@@ -68,10 +68,42 @@ Study source: shared thread `6ac11613-3f84-83ec-8511-1f0b79d231eb`
 - GGUF reader / ModelStore (the thread's §14) — deferred, needs real GGUF
   files (see prior study notes).
 
+## Weakness pass (2026-10-03, "deep-dive any weakness then make it improve and reliable")
+
+Adversarial probe of all six newest modules (LKS, concurrent-learning,
+candidate, causal-codegraph, env-fabric, apk-security) + the thread's own
+"deep-dive weakness" section (msgs 267–279). Findings:
+
+1. **CONFIRMED GAP — stale evidence / false green** (thread weakness #11:
+   "cached test PASS isn't necessarily evidence for the new candidate;
+   evidence needs sourceHash/dependencyHash/environmentHash/testHash/
+   candidateHash — only reuse when relevant inputs match. Otherwise
+   STALE EVIDENCE, not green"). LKS v1 had no input binding: a VERIFIED
+   atom stayed green forever even after the source/test it was verified
+   against changed. **Fixed**: `EvidenceRef.inputs` (name→content-hash
+   binding), `LKSStore.freshness(atom_id, current)` → TRUSTED / STALE /
+   UNBOUND / NOT_VERIFIED; bindings persist through the container
+   (schema v1.2, minor bump — additive), deltas, and compact().
+   Legacy unbound refs report UNBOUND (unverifiable — never falsely
+   red, never trusted). Law 1 symmetry: only E3–E6 refs can serve as the
+   freshness basis.
+2. PROBE false-alarm: `CausalCodeGraph()` without an index raising
+   TypeError is by design (it is a view over a `CodeIndex`).
+3. PROBE clean: LKS re-add after verify keeps state; bus `created_ns`
+   staleness is a scheduler concern (P-queue, not storage — thread §10);
+   env-fabric negative budgets rejected; LKS export gate is atom-level by
+   design (evidence *content* lives outside, keyed by hash).
+4. Still open (documented, not code): #10 index staleness end-to-end
+   (CodeIndex already hashes files; the freshness API is the missing link
+   to make callers *check*), #13 capability escalation (AuthorityKernel
+   lease — design), #6 self-learning poisoning (gate pipeline already
+   requires reproduction across cases; LKS freshness now covers the
+   storage side).
+
 ## Evidence
 
-- `pytest tests/test_lks.py` — 33 passed (0.11 s)
-- full suite — 701 passed (668 baseline + 33)
-- `--lks-smoke` — 19/19
+- `pytest tests/test_lks.py` — 46 passed (0.11 s) — 33 original + 13 freshness
+- full suite — 714 passed (701 + 13), 3.9 s
+- `--lks-smoke` — 25/25 (was 19; +6 freshness checks)
 - stack-verify — 28 modules + lks stage
 - CI: paths ×2, compile list, smoke step

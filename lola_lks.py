@@ -41,8 +41,8 @@ from typing import Iterable, Mapping, Sequence
 
 MAGIC = b"LOLAKS"
 FORMAT_VERSION_MAJOR = 1
-FORMAT_VERSION_MINOR = 0
-SCHEMA_VERSION = 1
+FORMAT_VERSION_MINOR = 2   # v2: evidence input bindings (freshness)
+SCHEMA_VERSION = 2
 MIN_READER = 1
 
 # Section ids in the container (header index points at each directly).
@@ -88,6 +88,15 @@ EVIDENCE_CLASSES: tuple[str, ...] = (
     E0_UNSUPPORTED, E1_INDIRECT, E2_REFERENCE, E3_DETERMINISTIC,
     E4_TEST, E5_RUNTIME, E6_REPEATED,
 )
+
+# Freshness verdicts (thread weakness #11: cached PASS is not evidence for a
+# new candidate — "only reuse when relevant inputs match. Otherwise STALE
+# EVIDENCE, not green."):
+TRUSTED = "TRUSTED"    # verified AND its input binding matches current inputs
+STALE = "STALE"        # verified but inputs changed — must be re-verified
+UNBOUND = "UNBOUND"    # verified with no input binding — unverifiable;
+                       # reported, never trusted, never falsely red
+NOT_VERIFIED = "NOT_VERIFIED"  # atom state is not VERIFIED at all
 
 
 # ---------------------------------------------------------------------------
@@ -169,23 +178,47 @@ class StringDictionary:
 class EvidenceRef:
     """A reference to raw evidence — the bytes live in the object store,
     keyed by this hash.  Atoms never embed raw logs (section 4 of the
-    compaction design)."""
+    compaction design).
+
+    `inputs` is the **freshness binding** (thread weakness #11,
+    'build cache can produce false green'): the content hashes of the
+    inputs this evidence was produced against (source_hash, test_hash,
+    dependency_hash, environment_hash, ...). A verified atom whose binding
+    no longer matches the current inputs is STALE — never silently green.
+    Legacy refs with no binding are UNBOUND: unverifiable, not trusted,
+    not falsely red.
+    """
     evidence_id: str
     content_hash: str
     evidence_class: str = E2_REFERENCE
+    inputs: tuple[tuple[str, str], ...] = ()
 
     def __post_init__(self) -> None:
         if self.evidence_class not in EVIDENCE_CLASSES:
             raise ValueError(f"unknown evidence class: {self.evidence_class}")
         if not self.evidence_id or not self.content_hash:
             raise ValueError("evidence_id and content_hash are required")
+        for name, h in self.inputs:
+            if not name or not h:
+                raise ValueError("input bindings need a name and a hash")
 
 
 def make_evidence_ref(evidence_id: str, raw: bytes,
-                      evidence_class: str = E2_REFERENCE) -> EvidenceRef:
+                      evidence_class: str = E2_REFERENCE,
+                      inputs: Mapping[str, str] | None = None) -> EvidenceRef:
+    binding = tuple(sorted((inputs or {}).items()))
     return EvidenceRef(evidence_id=evidence_id,
                        content_hash=hashlib.sha256(raw).hexdigest(),
-                       evidence_class=evidence_class)
+                       evidence_class=evidence_class,
+                       inputs=binding)
+
+
+def inputs_match(ref: EvidenceRef, current: Mapping[str, str]) -> bool:
+    """True iff every bound input name is present in `current` with the
+    same hash.  Extra current inputs are fine; a missing or changed bound
+    input is a mismatch.  An unbound ref is vacuously matching (callers
+    distinguish that via UNBOUND, not via this predicate)."""
+    return all(current.get(name) == h for name, h in ref.inputs)
 
 
 def _canon_slot(value: str) -> str:
@@ -397,6 +430,40 @@ class LKSStore:
     def exportable(self, transport: Transport) -> list[KnowledgeAtom]:
         return [a for a in self._atoms.values() if export_allowed(a, transport)]
 
+    def freshness(self, atom_id: str, current: Mapping[str, str]) -> str:
+        """Deterministic freshness verdict for a verified atom.
+
+        * NOT_VERIFIED — the atom is not in VERIFIED state (nothing to go
+          stale; the gate pipeline owns that).
+        * TRUSTED — at least one verifying ref (E3-E6) is input-bound and
+          its binding matches `current` (every bound input present with the
+          same hash).
+        * STALE — the atom is verified but NO verifying ref's binding
+          matches `current`: the evidence was produced against different
+          inputs than now.  This is the false-green guard — a cached PASS
+          from before the source/test/dependency change is not evidence.
+        * UNBOUND — the atom is verified only through refs without input
+          bindings (legacy): unverifiable.  Reported as such; callers must
+          not treat it as TRUSTED, and it is not falsely marked STALE.
+
+        A verifying ref is one of class E3-E6 (the same classes that may
+        verify — Law 1 symmetry: what may make knowledge trusted is what
+        freshness re-checks).
+        """
+        atom = self._atoms[atom_id]
+        if atom.state != AtomState.VERIFIED.value:
+            return NOT_VERIFIED
+        verifying = [e for e in atom.evidence
+                     if e.evidence_class in
+                     (E3_DETERMINISTIC, E4_TEST, E5_RUNTIME, E6_REPEATED)]
+        if not verifying:
+            return NOT_VERIFIED
+        if any(e.inputs and inputs_match(e, current) for e in verifying):
+            return TRUSTED
+        if any(e.inputs for e in verifying):
+            return STALE
+        return UNBOUND
+
     @property
     def version(self) -> int:
         return self._version
@@ -446,6 +513,11 @@ def _encode_container(store: LKSStore) -> bytes:
     # pre-intern graph node ids + edge relations so the dictionary is complete
     for src, rel, dst in store._graph:
         d.intern(src); d.intern(rel); d.intern(dst)
+    # pre-intern evidence input bindings (names + hashes)
+    for k in sorted(store._atoms):
+        for e in store._atoms[k].evidence:
+            for name, h in e.inputs:
+                d.intern(name); d.intern(h)
 
     # --- dictionary section ---
     dict_blob = bytearray()
@@ -472,6 +544,10 @@ def _encode_container(store: LKSStore) -> bytes:
             atom_blob += varint_encode(d.intern(e.evidence_id))
             atom_blob += varint_encode(d.intern(e.content_hash))
             atom_blob += varint_encode(d.intern(e.evidence_class))
+            atom_blob += varint_encode(len(e.inputs))
+            for name, h in e.inputs:
+                atom_blob += varint_encode(d.intern(name))
+                atom_blob += varint_encode(d.intern(h))
     atom_bytes = _seg(bytes(atom_blob))
 
     # --- evidence section: the distinct evidence refs (registry) ---
@@ -489,6 +565,10 @@ def _encode_container(store: LKSStore) -> bytes:
         ev_blob += varint_encode(d.intern(e.evidence_id))
         ev_blob += varint_encode(d.intern(e.content_hash))
         ev_blob += varint_encode(d.intern(e.evidence_class))
+        ev_blob += varint_encode(len(e.inputs))
+        for name, h in e.inputs:
+            ev_blob += varint_encode(d.intern(name))
+            ev_blob += varint_encode(d.intern(h))
     ev_bytes = _seg(bytes(ev_blob))
 
     # --- conflicts section ---
@@ -597,7 +677,13 @@ def _decode_container(data: bytes) -> LKSStore:
             eid = D.get(varint_decode(ab, p)[0]); p = varint_decode(ab, p)[1]
             ch = D.get(varint_decode(ab, p)[0]); p = varint_decode(ab, p)[1]
             ec = D.get(varint_decode(ab, p)[0]); p = varint_decode(ab, p)[1]
-            evs.append(EvidenceRef(eid, ch, ec))
+            nin, p = varint_decode(ab, p)
+            binds = []
+            for _ in range(nin):
+                nm = D.get(varint_decode(ab, p)[0]); p = varint_decode(ab, p)[1]
+                hh = D.get(varint_decode(ab, p)[0]); p = varint_decode(ab, p)[1]
+                binds.append((nm, hh))
+            evs.append(EvidenceRef(eid, ch, ec, tuple(binds)))
         store._atoms[aid] = KnowledgeAtom(
             atom_id=aid, subject=subj, relation=rel, object=obj, context=ctx,
             constraints=cons, state=state, export_policy=pol,
@@ -610,6 +696,10 @@ def _decode_container(data: bytes) -> LKSStore:
     nev, p = varint_decode(eb, 0)
     for _ in range(nev):
         for _ in range(3):
+            p = varint_decode(eb, p)[1]
+        nin, p = varint_decode(eb, p)
+        for _ in range(nin):
+            p = varint_decode(eb, p)[1]
             p = varint_decode(eb, p)[1]
     # conflicts
     cb = unseg(sections[SEC_CONFLICTS])
@@ -739,8 +829,10 @@ def _unseg_public(b: bytes) -> bytes:
 
 
 def _evidence_from_dict(d: Mapping) -> EvidenceRef:
+    inputs = tuple(sorted((d.get("inputs") or {}).items()))
     return EvidenceRef(evidence_id=d["evidence_id"], content_hash=d["content_hash"],
-                       evidence_class=d.get("evidence_class", E2_REFERENCE))
+                       evidence_class=d.get("evidence_class", E2_REFERENCE),
+                       inputs=inputs)
 
 
 def _apply_delta(store: LKSStore, data: bytes) -> None:
@@ -873,7 +965,37 @@ def run_lks_smoke() -> dict:
     except ValueError:
         check("version_gate", True)
 
-    # 10. varint / zigzag sanity
+    # 10. freshness: verified knowledge must not silently go green after its
+    #     inputs change (thread weakness #11: cached PASS != evidence for the
+    #     new candidate)
+    fs = LKSStore()
+
+    def fatom(aid, sub, rel, obj, ctx):
+        return KnowledgeAtom(atom_id=aid, subject=sub, relation=rel,
+                             object=obj, context=ctx)
+
+    f1 = fs.add_atom(fatom("F1", "Build", "passes_with", "dep-v1", "ci"))
+    fs.record_verification(f1, EvidenceRef("FEV", "ff" * 32, E4_TEST,
+                                           inputs=(("source_hash", "aa" * 32),
+                                                   ("test_hash", "bb" * 32))))
+    check("fresh_trusted", fs.freshness(f1, {"source_hash": "aa" * 32,
+                                             "test_hash": "bb" * 32}) == TRUSTED)
+    check("stale_after_input_change", fs.freshness(f1, {"source_hash": "cc" * 32,
+                                                        "test_hash": "bb" * 32}) == STALE)
+    check("stale_when_binding_missing", fs.freshness(f1, {"other": "dd" * 32}) == STALE)
+    f2 = fs.add_atom(fatom("F2", "Legacy", "known", "fact", "old"))
+    fs.record_verification(f2, EvidenceRef("FEV2", "ee" * 32, E3_DETERMINISTIC))
+    check("unbound_reported_not_trusted", fs.freshness(f2, {}) == UNBOUND)
+    f3 = fs.add_atom(fatom("F3", "x", "y", "z", ""))
+    check("not_verified", fs.freshness(f3, {}) == NOT_VERIFIED)
+    # bindings survive the container round-trip
+    fb = _decode_container(fs.to_base_bytes())
+    check("bindings_survive_roundtrip", fb.freshness(f1, {"source_hash": "aa" * 32,
+                                                          "test_hash": "bb" * 32}) == TRUSTED
+          and fb.freshness(f1, {"source_hash": "99" * 32,
+                                "test_hash": "bb" * 32}) == STALE)
+
+    # 11. varint / zigzag sanity
     check("varint_roundtrip",
           all(varint_decode(varint_encode(v), 0)[0] == v for v in (0, 1, 127, 128, 300, 100000)))
     check("zigzag_roundtrip",

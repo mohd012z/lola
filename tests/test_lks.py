@@ -11,6 +11,10 @@ import unittest
 
 from lola_lks import (
     MAGIC,
+    NOT_VERIFIED,
+    STALE,
+    TRUSTED,
+    UNBOUND,
     AtomState,
     ConflictSet,
     E2_REFERENCE,
@@ -27,6 +31,7 @@ from lola_lks import (
     LKSStore,
     Transport,
     _decode_container,
+    inputs_match,
     run_lks_smoke,
     varint_decode,
     varint_encode,
@@ -266,6 +271,101 @@ class DeltaTests(unittest.TestCase):
         f.deltas[0] = bytes(bad)
         with self.assertRaises(ValueError):
             f.snapshot()
+
+
+class FreshnessTests(unittest.TestCase):
+    """Thread weakness #11: a cached PASS is not evidence for a new
+    candidate. Only reuse verified knowledge when its relevant inputs
+    match — otherwise STALE, never silently green."""
+
+    def _verified(self, inputs=None):
+        s = LKSStore()
+        aid = s.add_atom(_atom("A1", "Build", "passes_with", "dep-v1",
+                               context="ci"))
+        s.record_verification(aid, EvidenceRef("EV", "aa" * 32, E4_TEST,
+                                               inputs=inputs or ()))
+        return s, aid
+
+    def test_trusted_when_inputs_match(self):
+        s, aid = self._verified((("source_hash", "aa" * 32),
+                                 ("test_hash", "bb" * 32)))
+        self.assertEqual(s.freshness(aid, {"source_hash": "aa" * 32,
+                                           "test_hash": "bb" * 32}), TRUSTED)
+
+    def test_stale_when_source_changes(self):
+        s, aid = self._verified((("source_hash", "aa" * 32),
+                                 ("test_hash", "bb" * 32)))
+        self.assertEqual(s.freshness(aid, {"source_hash": "cc" * 32,
+                                           "test_hash": "bb" * 32}), STALE)
+
+    def test_stale_when_test_changes(self):
+        s, aid = self._verified((("source_hash", "aa" * 32),
+                                 ("test_hash", "bb" * 32)))
+        self.assertEqual(s.freshness(aid, {"source_hash": "aa" * 32,
+                                           "test_hash": "dd" * 32}), STALE)
+
+    def test_stale_when_binding_input_absent(self):
+        s, aid = self._verified((("source_hash", "aa" * 32),))
+        self.assertEqual(s.freshness(aid, {"unrelated": "ee" * 32}), STALE)
+
+    def test_extra_current_inputs_do_not_invalidate(self):
+        s, aid = self._verified((("source_hash", "aa" * 32),))
+        self.assertEqual(s.freshness(aid, {"source_hash": "aa" * 32,
+                                           "env_hash": "ff" * 32}), TRUSTED)
+
+    def test_unbound_legacy_verified_reported_not_trusted(self):
+        s, aid = self._verified(())
+        self.assertEqual(s.freshness(aid, {}), UNBOUND)
+        self.assertNotEqual(s.freshness(aid, {}), TRUSTED)
+
+    def test_not_verified_state(self):
+        s = LKSStore()
+        aid = s.add_atom(_atom("A1", "x", "y", "z"))
+        self.assertEqual(s.freshness(aid, {}), NOT_VERIFIED)
+
+    def test_falsified_is_not_verified(self):
+        s, aid = self._verified((("source_hash", "aa" * 32),))
+        s.record_falsification(aid, EvidenceRef("EV2", "bb" * 32, E3_DETERMINISTIC))
+        self.assertEqual(s.freshness(aid, {}), NOT_VERIFIED)
+
+    def test_e2_evidence_cannot_be_a_verifying_ref(self):
+        # Law 1 symmetry: E0-E2 can never verify, so they can never be the
+        # freshness basis either.
+        s, aid = self._verified((("source_hash", "aa" * 32),))
+        with self.assertRaises(PermissionError):
+            s.record_verification(aid, EvidenceRef("EV3", "cc" * 32, E2_REFERENCE,
+                                                   inputs=(("source_hash", "cc" * 32),)))
+        self.assertEqual(s.freshness(aid, {"source_hash": "aa" * 32}), TRUSTED)
+
+    def test_bindings_survive_container_roundtrip(self):
+        s, aid = self._verified((("source_hash", "aa" * 32),
+                                 ("test_hash", "bb" * 32)))
+        s2 = _decode_container(s.to_base_bytes())
+        self.assertEqual(s2.freshness(aid, {"source_hash": "aa" * 32,
+                                            "test_hash": "bb" * 32}), TRUSTED)
+        self.assertEqual(s2.freshness(aid, {"source_hash": "99" * 32,
+                                            "test_hash": "bb" * 32}), STALE)
+
+    def test_bindings_survive_delta_compact(self):
+        s, aid = self._verified((("source_hash", "aa" * 32),))
+        f = LKSFile.new()
+        f.base = s.to_base_bytes()
+        c = f.compact()
+        s2 = c.snapshot()
+        self.assertEqual(s2.freshness(aid, {"source_hash": "aa" * 32}), TRUSTED)
+
+    def test_invalid_binding_rejected(self):
+        with self.assertRaises(ValueError):
+            EvidenceRef("EV", "aa" * 32, E3_DETERMINISTIC, inputs=(("name", ""),))
+        with self.assertRaises(ValueError):
+            EvidenceRef("EV", "aa" * 32, E3_DETERMINISTIC, inputs=(("", "hh" * 32),))
+
+    def test_inputs_match_helper(self):
+        ref = EvidenceRef("EV", "aa" * 32, E3_DETERMINISTIC,
+                          inputs=(("a", "1"), ("b", "2")))
+        self.assertTrue(inputs_match(ref, {"a": "1", "b": "2", "c": "3"}))
+        self.assertFalse(inputs_match(ref, {"a": "1", "b": "X"}))
+        self.assertFalse(inputs_match(ref, {"a": "1"}))
 
 
 class CodecTests(unittest.TestCase):
