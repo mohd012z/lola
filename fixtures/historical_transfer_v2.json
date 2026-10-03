@@ -1,0 +1,74 @@
+{
+  "schema_version": "historical-transfer-v2",
+  "abstract_failure_role": "preflight_validity",
+  "training_incidents": [
+    {
+      "incident_id": "ps-validateset-extra-bracket",
+      "origin_domain": "powershell-parser",
+      "language": "powershell",
+      "validator": "powershell_attribute_delimiter",
+      "source": {
+        "repository": "mohd012z/lola",
+        "path": "scan-security.ps1",
+        "before_sha": "2d111721f88c794506c5e56a9471afee7474c635",
+        "fix_sha": "475d5cb2487334b282aa0b7616258f36e769c35d",
+        "before_blob_sha": "6bc9571cacf434e8898503467d08c7124cd3d1ae",
+        "fixed_blob_sha": "f433e44786574a5fa3d9f54d2812f7cc48059af5"
+      },
+      "before": {
+        "excerpt": "\"/apktools\")]]\n  [string]$Mode=\"/360\",",
+        "excerpt_sha256": "26111d8cef9121cca2ba80858249955ac2d513446258347a5f748040a1f7b107"
+      },
+      "after": {
+        "excerpt": "\"/apktools\")]\n  [string]$Mode=\"/360\",",
+        "excerpt_sha256": "3dee3ddb52fe8e98f2d52fc95f9d40a4aec5c9b8752bd1f1a7f674236ab45489"
+      }
+    },
+    {
+      "incident_id": "python-office-invalid-import",
+      "origin_domain": "python-parser",
+      "language": "python",
+      "validator": "python_ast",
+      "source": {
+        "repository": "mohd012z/lola",
+        "path": "lola_office_layout.py",
+        "before_sha": "39425e889a26c769b3fe09d6f4eaaaeb0c3b20a6",
+        "fix_sha": "79c62b3cfbc002d800df09526c0451101758849a",
+        "before_blob_sha": "4c88d1f9e94439c3c7cf29bdbd269e028a26eec4",
+        "fixed_blob_sha": "52b41595f8d30282fd50d685f2bbebb34de4d693"
+      },
+      "before": {
+        "excerpt": "\"\"\"Document-order Word renderer and richer Excel layout metadata for Lola.\"\"\"\nfrom __future__ import annotations\nimport html\nfrom lola_office_html_styles import data_uri if False else None\n",
+        "excerpt_sha256": "4dc0bbee5cf43206febf1ebb7b394c999eca1ff7886349cd8620548e45295621"
+      },
+      "after": {
+        "excerpt": "\"\"\"Document-order Word renderer and richer Excel layout metadata for Lola.\"\"\"\nfrom __future__ import annotations\nimport html\n",
+        "excerpt_sha256": "f12a6a67702b2d8f36cc6277965caf9c7adc549dbddf14d65db8b3a40cf20d30"
+      }
+    }
+  ],
+  "holdout_incident": {
+    "incident_id": "semgrep-file-uri-yaml-quote",
+    "origin_domain": "semgrep-yaml-parser",
+    "language": "yaml",
+    "validator": "yaml_scalar_lexical",
+    "blind_holdout": false,
+    "transfer_distance": 3,
+    "source": {
+      "repository": "mohd012z/lola",
+      "path": "codex-security.yaml",
+      "before_sha": "66d9bd02d5b9ed195aaccf6d922b8b08d522505e",
+      "fix_sha": "6b1929f587050e378bfb4ae86817d7c9a9370e10",
+      "before_blob_sha": "7ce03df1248529bf200495fb6cc7926d71ef6434",
+      "fixed_blob_sha": "060094018e54e2af74e5eb46b4fb5eaf0264309b"
+    },
+    "before": {
+      "excerpt": "  - id: extract-file-uri\n    languages: [generic]\n    severity: INFO\n    message: \"file:// URI found\"\n    metadata: {category: paths, surface: filesystem, confidence: HIGH}\n    pattern-regex: \"file://[^\\\\s\\\\\"'<>]+\"\n",
+      "excerpt_sha256": "4c9888ae5d8cfcdb9fc262077a21e4b9b675c59ea977ee6dbf428aa160a8ea72"
+    },
+    "after": {
+      "excerpt": "  - id: extract-file-uri\n    languages: [generic]\n    severity: INFO\n    message: \"file:// URI found\"\n    metadata: {category: paths, surface: filesystem, confidence: HIGH}\n    pattern-regex: 'file://[^\\s\\\"''<>]+'\n",
+      "excerpt_sha256": "d75e2090f215805b9393434ffd31b18e31df5c83740ac9783afe7cd3563c9b02"
+    }
+  }
+}
