@@ -242,6 +242,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the NovelCandidate v1 acceptance smoke: immutable candidates, structural fingerprints, state machine (VERIFIED only via observed episodes), deterministic operators, and the two-run learning test (run #2 suppresses the structure that failed in run #1) — zero models.",
     )
     p.add_argument(
+        "--concurrent-learning-smoke",
+        action="store_true",
+        help="Run the concurrent learning bus smoke: thread-safe ingestion with exact dedupe, bounded ordered draining, and the single-writer bridge into the governed learning gate (OBSERVED/INFERRED/IMAGINED never self-promote; model-sourced capped at CANDIDATE layer) — zero models.",
+    )
+    p.add_argument(
         "--code-intel",
         help="Index a Python directory with the Code Intelligence layer and print the stats JSON (root path required; DB stored outside the root).",
     )
@@ -483,6 +488,15 @@ def main() -> int:
         from lola_candidate import run_candidate_smoke
 
         result = run_candidate_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
+
+    if args.concurrent_learning_smoke:
+        if args.target_option or args.target_positional:
+            parser.error("--concurrent-learning-smoke must run without target inputs.")
+        from lola_concurrent_learning import run_concurrent_learning_smoke
+
+        result = run_concurrent_learning_smoke()
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("passed") else 1
 
