@@ -252,6 +252,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the concurrent learning bus smoke: thread-safe ingestion with exact dedupe, bounded ordered draining, and the single-writer bridge into the governed learning gate (OBSERVED/INFERRED/IMAGINED never self-promote; model-sourced capped at CANDIDATE layer) — zero models.",
     )
     p.add_argument(
+        "--lks-smoke",
+        action="store_true",
+        help="Run the LOLA Knowledge Store (LKS) smoke: form-invariant semantic dedup with repetition-as-counter, Law 1 at the storage boundary (only E3-E6 evidence may verify/falsify an atom), ConflictSets (contradictions never averaged away), export policy gate, LOLAKS container round-trip with CRC + version gating, and BASE + DELTA + compact equivalence — zero models.",
+    )
+    p.add_argument(
         "--code-intel",
         help="Index a Python directory with the Code Intelligence layer and print the stats JSON (root path required; DB stored outside the root).",
     )
@@ -511,6 +516,15 @@ def main() -> int:
         from lola_concurrent_learning import run_concurrent_learning_smoke
 
         result = run_concurrent_learning_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
+
+    if args.lks_smoke:
+        if args.target_option or args.target_positional:
+            parser.error("--lks-smoke must run without target inputs.")
+        from lola_lks import run_lks_smoke
+
+        result = run_lks_smoke()
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("passed") else 1
 
