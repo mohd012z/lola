@@ -56,6 +56,8 @@ HUMAN
 | Cognitive entry (capstone) | `lola_cognitive_entry` | gateway -> KIPEnvelope -> loop -> fuse in one call; gate BEFORE cognition | `--cognitive-entry FILE.json` | `tests/test_cognitive_entry.py` |
 | Learning governor | `lola_runtime_loop.learning_governor` | PROMOTE needs verified + transfer + regression; quarantined/contradicted -> REJECT | via runner/entry | `tests/test_runtime_loop.py` |
 | Delta-rule memory + reasoning layout | `lola_delta_memory`, `lola_reasoning_layout` | GigaChat 3.5 ports: prediction-error store; chatml-v5 invariants | — | `tests/test_gigachat_methods.py` |
+| Prediction-error store (delta observe) | `lola_delta_observe` | #42's DeltaMemory(dim=1) as the forecast; a stable signal's prediction error drives to ~0 (overwrite corrects, doesn't duplicate) | `--cognitive-loop` (observed_sequence) | `tests/test_delta_observe_stack.py` |
+| Stack verification (post-merge) | `lola_stack_verify` | all 23 New LOLA modules import + full-chain smoke + delta cycle pass — the single "the chain holds together" re-check | `--stack-verify` | `tests/test_delta_observe_stack.py` |
 
 ## How to exercise it (all offline, deterministic, stdlib-only)
 
@@ -65,6 +67,7 @@ python3 lola.py --cognitive-loop-smoke     # #44-#48 pipeline smoke (12 checks)
 python3 lola.py --cognitive-loop in.json   # pipeline on a real input -> report JSON
 python3 lola.py --cognitive-entry in.json  # full chain: gateway -> loop -> fuse
 python3 lola.py --full-chain-smoke         # THE end-to-end proof (7 checks, exit 0/1)
+python3 lola.py --stack-verify             # post-merge re-check: all 23 modules + 2 stages
 ```
 
 `--full-chain-smoke` is the single CI assertion that the whole
@@ -104,3 +107,4 @@ any link in the chain is cut, this fails.
 | #49 | loop runner, recheck edge | `lola_cognitive_loop`, `lola_recheck` |
 | #50 | cognitive entry (capstone) | `lola_cognitive_entry` |
 | #51 | full-chain smoke, this map | `lola_full_chain_smoke`, `NEW_LOLA.md` |
+| #52 | delta-observe wiring, stack verification | `lola_delta_observe`, `lola_stack_verify` |
