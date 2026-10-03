@@ -26,6 +26,7 @@ _MODULES = (
     "lola_delta_observe",
     "lola_code_intel",
     "lola_candidate",
+    "lola_causal_codegraph",
     "lola_concurrent_learning",
 )
 
@@ -75,6 +76,14 @@ def _candidate_ok() -> bool:
         return False
 
 
+def _causal_graph_ok() -> bool:
+    try:
+        from lola_causal_codegraph import run_causal_codegraph_smoke
+        return bool(run_causal_codegraph_smoke()["passed"])
+    except Exception:
+        return False
+
+
 def _concurrent_learning_ok() -> bool:
     try:
         from lola_concurrent_learning import run_concurrent_learning_smoke
@@ -90,6 +99,7 @@ def verify_merged_stack() -> dict:
         "delta_observe": _delta_observe_ok(),
         "code_intel": _code_intel_ok(),
         "candidate": _candidate_ok(),
+        "causal_graph": _causal_graph_ok(),
         "concurrent_learning": _concurrent_learning_ok(),
     }
     passed = all(modules.values()) and all(stages.values())
