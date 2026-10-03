@@ -41,6 +41,8 @@ class LoopReport:
     regression_passed: bool = False
     answer_type: str = ""
     planned_sections: tuple = ()
+    prediction_error: float | None = None
+    needs_recheck: bool = False
 
 
 def _claim_states(bus: EvidenceBus, claims: Sequence[str]) -> list:
@@ -70,11 +72,24 @@ def run_loop(
     frozen_idea: Mapping[str, Any] | None = None,
     external_hits: Sequence[str] = (),
     budget: CognitiveBudget | None = None,
+    prediction: float | None = None,
+    observed: float | None = None,
 ) -> LoopReport:
     budget = budget or CognitiveBudget()
     trace: list = []
     violations: list = []
     quarantined = False
+
+    # OBSERVE stage: TEST -> OBSERVE -> PREDICTION ERROR. Only active
+    # when both a prediction and an observation are supplied.
+    pred_err = None
+    needs_recheck = False
+    if prediction is not None and observed is not None:
+        from lola_observe import record_observation
+        obs = record_observation("obs-1", expected=prediction,
+                                 observed=observed, source="test_run")
+        pred_err = obs.prediction_error
+        needs_recheck = obs.needs_recheck
 
     def step(name: str, status: str = "done") -> None:
         trace.append({"step": name, "status": status})
@@ -89,6 +104,8 @@ def run_loop(
         step("Local knowledge checked")
         ev = f"verified:{triage.match}"
         conf = "SUPPORTED"
+        if pred_err is not None:
+            step(f"Observe (delta {pred_err:+.6g})")
         step("Synthesize")
         step(f"Answer ({plan.question_type})")
         report = LoopReport(
@@ -99,6 +116,7 @@ def run_loop(
             violations=tuple(violations), trace=tuple(trace),
             answer_type=plan.question_type,
             planned_sections=plan.sections,
+            prediction_error=pred_err, needs_recheck=needs_recheck,
         )
         return report
 
@@ -133,6 +151,8 @@ def run_loop(
     claims = _claim_states(bus, ["GAP_RESOLVED"])
     conf = confidence_from_evidence(claims)["confidence"] if claims else "UNVERIFIED"
     ev = bus.evidence_ids()
+    if pred_err is not None:
+        step(f"Observe (delta {pred_err:+.6g})")
     step("Verify")
     step("Synthesize")
     step(f"Answer ({plan.question_type})")
@@ -154,6 +174,7 @@ def run_loop(
         violations=tuple(violations), trace=tuple(trace),
         answer_type=plan.question_type,
         planned_sections=plan.sections,
+        prediction_error=pred_err, needs_recheck=needs_recheck,
     )
 
 
