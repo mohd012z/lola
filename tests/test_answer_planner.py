@@ -93,14 +93,17 @@ class CognitiveLoopSmokeTests(unittest.TestCase):
 
 class CliSmokeTest(unittest.TestCase):
     def test_cli_flag_runs_and_passes(self):
+        import json
         import subprocess
         import sys
+        from pathlib import Path
+
+        repo_root = Path(__file__).resolve().parent.parent
         proc = subprocess.run(
             [sys.executable, "lola.py", "--cognitive-loop-smoke"],
-            capture_output=True, text=True, cwd="/opt/data/lola",
+            capture_output=True, text=True, cwd=repo_root,
         )
         self.assertEqual(proc.returncode, 0, proc.stdout + proc.stderr)
-        import json
         payload = json.loads(proc.stdout)
         self.assertTrue(payload["passed"])
 
