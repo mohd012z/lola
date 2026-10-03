@@ -7,6 +7,7 @@ Examples:
     python lola.py --target "C:\Projects\MyApp"
     python lola.py "C:\Apps\sample.apk" --mode /apkpermissions
     python lola.py --cognitive-smoke
+    python lola.py --cognitive-loop-smoke
     python lola.py --tiny-beast-smoke
     python lola.py --tiny-beast-benchmark benchmark.json
     python lola.py --controlled-transfer-benchmark
@@ -208,6 +209,29 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the deterministic offline S0 sovereign cognitive smoke test.",
     )
     p.add_argument(
+        "--cognitive-loop-smoke",
+        action="store_true",
+        help="Run the end-to-end offline smoke of the New LOLA cognitive loop (triage, radar, novelty gate, planner, flow, governor).",
+    )
+    p.add_argument(
+        "--cognitive-loop",
+        help="Run the New LOLA cognitive loop on a real input JSON file (question + optional verified_state/inspectable/inventory/frozen_idea/external_hits/prediction/observed); prints the report JSON.",
+    )
+    p.add_argument(
+        "--cognitive-entry",
+        help="Run one raw human input through the full cognitive entry: Interaction Gateway (normalize + default-deny gate) -> KIPEnvelope -> cognitive loop -> answer + /flow + epistemic fuse. Input JSON: {transport, raw, actor: {actor_id, trust_class, granted_scopes[]}, session_id, capability?, verified_state?, inspectable?, inventory?, frozen_idea?, external_hits?, prediction?, observed?}.",
+    )
+    p.add_argument(
+        "--full-chain-smoke",
+        action="store_true",
+        help="Run the cross-module full-chain smoke: the single end-to-end proof that HUMAN -> GATEWAY -> KIPEnvelope -> loop -> fuse holds together (sovereign answer, default-deny-before-cognition, novelty-before-external fuse, prediction-error edge, determinism).",
+    )
+    p.add_argument(
+        "--stack-verify",
+        action="store_true",
+        help="Re-verify the merged New LOLA stack: import every cognitive module and re-run the full-chain smoke + a delta-observe cycle. The single post-merge 'the chain holds together' check.",
+    )
+    p.add_argument(
         "--tiny-beast-smoke",
         action="store_true",
         help="Run a synthetic smoke of the Tiny-to-Beast benchmark harness.",
@@ -310,6 +334,7 @@ def main() -> int:
         bool(value)
         for value in (
             args.cognitive_smoke,
+            args.cognitive_loop_smoke,
             args.tiny_beast_smoke,
             args.tiny_beast_benchmark,
             args.controlled_transfer_benchmark,
@@ -321,6 +346,10 @@ def main() -> int:
             args.prospective_transfer_result,
             args.handoff_validate,
             args.handoff_run,
+            args.cognitive_loop,
+            args.cognitive_entry,
+            args.full_chain_smoke,
+            args.stack_verify,
         )
     )
     if special_modes > 1:
@@ -332,6 +361,92 @@ def main() -> int:
         from lola_sovereign_runtime import run_sovereign_smoke
 
         result = run_sovereign_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
+
+    if args.cognitive_loop_smoke and args.cognitive_loop:
+        parser.error("--cognitive-loop-smoke and --cognitive-loop cannot be used together.")
+    if args.cognitive_loop_smoke:
+        if args.target_option or args.target_positional:
+            parser.error("--cognitive-loop-smoke must run without target inputs.")
+        from lola_cognitive_loop_smoke import run_cognitive_loop_smoke
+
+        result = run_cognitive_loop_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
+
+    if args.cognitive_loop:
+        if args.target_option or args.target_positional:
+            parser.error("--cognitive-loop must run without target inputs.")
+        from lola_cognitive_loop import run_cognitive_loop
+
+        input_doc = json.loads(Path(args.cognitive_loop).read_text(encoding="utf-8"))
+        result = run_cognitive_loop(input_doc)
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0
+
+    if args.cognitive_entry:
+        if args.target_option or args.target_positional:
+            parser.error("--cognitive-entry must run without target inputs.")
+        from dataclasses import asdict
+        from lola_cognitive_entry import cognitive_entry
+        from lola_interaction_gateway import ActorIdentity, TrustClass
+
+        doc = json.loads(Path(args.cognitive_entry).read_text(encoding="utf-8"))
+        actor_doc = doc.get("actor") or {}
+        actor = ActorIdentity(
+            actor_id=str(actor_doc.get("actor_id", "")),
+            trust_class=TrustClass(str(actor_doc.get("trust_class", "UNTRUSTED"))),
+            granted_scopes=frozenset(actor_doc.get("granted_scopes") or ()),
+        )
+        # the actors table is the gate's source of truth; when omitted,
+        # the single supplied actor is trusted to be known.
+        actors = doc.get("actors")
+        if actors is None:
+            actors = {actor.actor_id: actor}
+        else:
+            actors = {
+                str(aid): ActorIdentity(
+                    actor_id=str(aid),
+                    trust_class=TrustClass(str(ad.get("trust_class", "UNTRUSTED"))),
+                    granted_scopes=frozenset(ad.get("granted_scopes") or ()),
+                )
+                for aid, ad in actors.items()
+            }
+        result = cognitive_entry(
+            str(doc.get("transport", "")),
+            str(doc.get("raw", "")),
+            actor,
+            session_id=str(doc.get("session_id", "")),
+            actors=actors,
+            capability=str(doc.get("capability", "cognitive_query")),
+            verified_state=doc.get("verified_state") or {},
+            inspectable=tuple(doc.get("inspectable") or ()),
+            inventory=doc.get("inventory"),
+            frozen_idea=doc.get("frozen_idea"),
+            external_hits=tuple(doc.get("external_hits") or ()),
+            prediction=doc.get("prediction"),
+            observed=doc.get("observed"),
+        )
+        print(json.dumps(asdict(result), indent=2, ensure_ascii=False,
+                         sort_keys=True))
+        return 0
+
+    if args.full_chain_smoke:
+        if args.target_option or args.target_positional:
+            parser.error("--full-chain-smoke must run without target inputs.")
+        from lola_full_chain_smoke import run_full_chain_smoke
+
+        result = run_full_chain_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
+
+    if args.stack_verify:
+        if args.target_option or args.target_positional:
+            parser.error("--stack-verify must run without target inputs.")
+        from lola_stack_verify import verify_merged_stack
+
+        result = verify_merged_stack()
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("passed") else 1
 
