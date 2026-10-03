@@ -218,6 +218,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the New LOLA cognitive loop on a real input JSON file (question + optional verified_state/inspectable/inventory/frozen_idea/external_hits/prediction/observed); prints the report JSON.",
     )
     p.add_argument(
+        "--cognitive-entry",
+        help="Run one raw human input through the full cognitive entry: Interaction Gateway (normalize + default-deny gate) -> KIPEnvelope -> cognitive loop -> answer + /flow + epistemic fuse. Input JSON: {transport, raw, actor: {actor_id, trust_class, granted_scopes[]}, session_id, capability?, verified_state?, inspectable?, inventory?, frozen_idea?, external_hits?, prediction?, observed?}.",
+    )
+    p.add_argument(
         "--tiny-beast-smoke",
         action="store_true",
         help="Run a synthetic smoke of the Tiny-to-Beast benchmark harness.",
@@ -332,6 +336,8 @@ def main() -> int:
             args.prospective_transfer_result,
             args.handoff_validate,
             args.handoff_run,
+            args.cognitive_loop,
+            args.cognitive_entry,
         )
     )
     if special_modes > 1:
@@ -365,6 +371,53 @@ def main() -> int:
         input_doc = json.loads(Path(args.cognitive_loop).read_text(encoding="utf-8"))
         result = run_cognitive_loop(input_doc)
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0
+
+    if args.cognitive_entry:
+        if args.target_option or args.target_positional:
+            parser.error("--cognitive-entry must run without target inputs.")
+        from dataclasses import asdict
+        from lola_cognitive_entry import cognitive_entry
+        from lola_interaction_gateway import ActorIdentity, TrustClass
+
+        doc = json.loads(Path(args.cognitive_entry).read_text(encoding="utf-8"))
+        actor_doc = doc.get("actor") or {}
+        actor = ActorIdentity(
+            actor_id=str(actor_doc.get("actor_id", "")),
+            trust_class=TrustClass(str(actor_doc.get("trust_class", "UNTRUSTED"))),
+            granted_scopes=frozenset(actor_doc.get("granted_scopes") or ()),
+        )
+        # the actors table is the gate's source of truth; when omitted,
+        # the single supplied actor is trusted to be known.
+        actors = doc.get("actors")
+        if actors is None:
+            actors = {actor.actor_id: actor}
+        else:
+            actors = {
+                str(aid): ActorIdentity(
+                    actor_id=str(aid),
+                    trust_class=TrustClass(str(ad.get("trust_class", "UNTRUSTED"))),
+                    granted_scopes=frozenset(ad.get("granted_scopes") or ()),
+                )
+                for aid, ad in actors.items()
+            }
+        result = cognitive_entry(
+            str(doc.get("transport", "")),
+            str(doc.get("raw", "")),
+            actor,
+            session_id=str(doc.get("session_id", "")),
+            actors=actors,
+            capability=str(doc.get("capability", "cognitive_query")),
+            verified_state=doc.get("verified_state") or {},
+            inspectable=tuple(doc.get("inspectable") or ()),
+            inventory=doc.get("inventory"),
+            frozen_idea=doc.get("frozen_idea"),
+            external_hits=tuple(doc.get("external_hits") or ()),
+            prediction=doc.get("prediction"),
+            observed=doc.get("observed"),
+        )
+        print(json.dumps(asdict(result), indent=2, ensure_ascii=False,
+                         sort_keys=True))
         return 0
 
     if args.tiny_beast_smoke:
