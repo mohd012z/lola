@@ -6,7 +6,7 @@ from pathlib import Path
 from unittest.mock import patch
 
 from lola_prospective_result import ANCHOR_SHA, evaluate_prospective_result
-from test_prospective_repair_authorization_binding import (
+from prospective_repair_authorization_binding_legacy import (
     ProspectiveRepairAuthorizationBindingTests,
     _digest,
 )

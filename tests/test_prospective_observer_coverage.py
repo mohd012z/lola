@@ -39,7 +39,12 @@ class ProspectiveObserverCoverageTests(unittest.TestCase):
         self.assertEqual(result["extra"], [])
         self.assertEqual(
             result["production_workflows"],
-            ["Lola Bot Health", "Lola Code Doctor", "Toolchain smoke check"],
+            [
+                "LLM Guardrail CI",
+                "Lola Bot Health",
+                "Lola Code Doctor",
+                "Toolchain smoke check",
+            ],
         )
 
     def test_toolchain_tracks_and_compiles_coverage_checker(self):

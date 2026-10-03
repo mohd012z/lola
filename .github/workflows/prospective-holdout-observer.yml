@@ -2,7 +2,7 @@ name: Prospective holdout observer
 
 on:
   workflow_run:
-    workflows: ["Toolchain smoke check", "Lola Code Doctor", "Lola Bot Health"]
+    workflows: ["Toolchain smoke check", "Lola Code Doctor", "Lola Bot Health", "LLM Guardrail CI"]
     types: [completed]
 
 permissions:

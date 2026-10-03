@@ -4,12 +4,9 @@ import prospective_repair_authorization_binding_legacy as _legacy
 from prospective_execution_fixture_adapter import upgrade_payload
 
 # Preserve the original helper class for the execution-receipt contract tests.
-# This module's own test suite is migrated through load_tests below rather than
-# mutating the legacy class globally.
-_digest = _legacy._digest
-ProspectiveRepairAuthorizationBindingTests = (
-    _legacy.ProspectiveRepairAuthorizationBindingTests
-)
+# Migrated tests subclass it below; the raw class is intentionally NOT
+# re-exported at module level so pytest does not collect it directly (its
+# fixtures predate the execution-receipt contract).
 
 
 class _MigratedProspectiveRepairAuthorizationBindingTests(

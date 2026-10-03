@@ -83,6 +83,10 @@ jobs:
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
+          cache: "pip"
+          cache-dependency-path: requirements-test.txt
+      - name: Install test dependencies
+        run: python -m pip install --disable-pip-version-check -r requirements-test.txt
       - name: Validate JSON manifests
         run: |
           python -m json.tool toolchain.json > /dev/null
@@ -119,8 +123,8 @@ jobs:
             frida_library.py \
             frida_runtime.py \
             apk_runtime_monitor.py
-      - name: Run unit tests
-        run: python -m unittest discover -s tests -p "test_*.py" -v
+      - name: Run complete test suite (unit + LLM guardrail) via pytest
+        run: python -m pytest tests -q
       - name: Sovereign cognitive smoke test
         run: python lola.py --cognitive-smoke
       - name: Tiny-to-Beast harness smoke test
