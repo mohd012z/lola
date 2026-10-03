@@ -227,6 +227,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the cross-module full-chain smoke: the single end-to-end proof that HUMAN -> GATEWAY -> KIPEnvelope -> loop -> fuse holds together (sovereign answer, default-deny-before-cognition, novelty-before-external fuse, prediction-error edge, determinism).",
     )
     p.add_argument(
+        "--stack-verify",
+        action="store_true",
+        help="Re-verify the merged New LOLA stack: import every cognitive module and re-run the full-chain smoke + a delta-observe cycle. The single post-merge 'the chain holds together' check.",
+    )
+    p.add_argument(
         "--tiny-beast-smoke",
         action="store_true",
         help="Run a synthetic smoke of the Tiny-to-Beast benchmark harness.",
@@ -344,6 +349,7 @@ def main() -> int:
             args.cognitive_loop,
             args.cognitive_entry,
             args.full_chain_smoke,
+            args.stack_verify,
         )
     )
     if special_modes > 1:
@@ -432,6 +438,15 @@ def main() -> int:
         from lola_full_chain_smoke import run_full_chain_smoke
 
         result = run_full_chain_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
+
+    if args.stack_verify:
+        if args.target_option or args.target_positional:
+            parser.error("--stack-verify must run without target inputs.")
+        from lola_stack_verify import verify_merged_stack
+
+        result = verify_merged_stack()
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("passed") else 1
 

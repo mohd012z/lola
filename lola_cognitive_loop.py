@@ -72,4 +72,18 @@ def run_cognitive_loop(input: Mapping[str, Any], *, task_id: str = "loop") -> di
         rc = recheck_cycle(expected_values=(0,),
                            observed_values=(report.prediction_error,))
         out["recheck"] = _jsonable(dataclasses.asdict(rc))
+    # delta-rule prediction-error store (#42 wiring): when a sequence of
+    # observations is supplied, run it through the delta memory and
+    # report the converged forecast + per-cycle prediction errors.
+    seq = input.get("observed_sequence")
+    if seq:
+        from lola_delta_observe import PredictionErrorStore, run_recheck
+        res = run_recheck(PredictionErrorStore(), list(seq))
+        out["delta_store"] = _jsonable({
+            "cycles": [
+                {k: v for k, v in c.items()} for c in res["cycles"]
+            ],
+            "converged_prediction": res["converged_prediction"],
+            "total_abs_error": res["total_abs_error"],
+        })
     return out
