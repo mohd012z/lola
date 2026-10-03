@@ -138,7 +138,8 @@ class ProspectiveEventCensusGenerationTests(unittest.TestCase):
         )
 
     def test_observer_workflow_uses_read_only_actions_and_expands_attempts(self):
-        workflow = Path(".github/workflows/prospective-holdout-observer.yml").read_text(encoding="utf-8")
+        repo_root = Path(__file__).resolve().parents[1]
+        workflow = (repo_root / ".github/workflows/prospective-holdout-observer.yml").read_text(encoding="utf-8")
         self.assertIn("contents: read", workflow)
         self.assertIn("actions: read", workflow)
         self.assertNotIn("contents: write", workflow)
