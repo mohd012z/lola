@@ -117,6 +117,7 @@ jobs:
             lola_prospective_result.py \
             lola_cognitive_transaction.py \
             lola_toolchain.py \
+            lola_handoff.py \
             lola_handoff_adapter.py \
             lola_code_integration.py \
             lola_universal_converter.py \
