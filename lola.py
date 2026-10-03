@@ -222,6 +222,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run one raw human input through the full cognitive entry: Interaction Gateway (normalize + default-deny gate) -> KIPEnvelope -> cognitive loop -> answer + /flow + epistemic fuse. Input JSON: {transport, raw, actor: {actor_id, trust_class, granted_scopes[]}, session_id, capability?, verified_state?, inspectable?, inventory?, frozen_idea?, external_hits?, prediction?, observed?}.",
     )
     p.add_argument(
+        "--full-chain-smoke",
+        action="store_true",
+        help="Run the cross-module full-chain smoke: the single end-to-end proof that HUMAN -> GATEWAY -> KIPEnvelope -> loop -> fuse holds together (sovereign answer, default-deny-before-cognition, novelty-before-external fuse, prediction-error edge, determinism).",
+    )
+    p.add_argument(
         "--tiny-beast-smoke",
         action="store_true",
         help="Run a synthetic smoke of the Tiny-to-Beast benchmark harness.",
@@ -338,6 +343,7 @@ def main() -> int:
             args.handoff_run,
             args.cognitive_loop,
             args.cognitive_entry,
+            args.full_chain_smoke,
         )
     )
     if special_modes > 1:
@@ -419,6 +425,15 @@ def main() -> int:
         print(json.dumps(asdict(result), indent=2, ensure_ascii=False,
                          sort_keys=True))
         return 0
+
+    if args.full_chain_smoke:
+        if args.target_option or args.target_positional:
+            parser.error("--full-chain-smoke must run without target inputs.")
+        from lola_full_chain_smoke import run_full_chain_smoke
+
+        result = run_full_chain_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
 
     if args.tiny_beast_smoke:
         if args.target_option or args.target_positional:
