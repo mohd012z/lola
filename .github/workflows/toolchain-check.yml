@@ -4,10 +4,32 @@ on:
   push:
     paths:
       - "toolchain.json"
+      - "COGNITIVE_FABRIC.md"
+      - "docs/prospective-transfer-prereg-v1.md"
+      - "fixtures/tiny_beast_benchmark.example.json"
+      - "fixtures/historical_scanner_cwd_v1.json"
+      - "fixtures/historical_transfer_v2.json"
+      - "fixtures/prospective_transfer_prereg_v1.json"
+      - "lola.py"
+      - "lola_sovereign_runtime.py"
+      - "lola_tiny_beast_benchmark.py"
+      - "lola_controlled_transfer_benchmark.py"
+      - "lola_historical_replay.py"
+      - "lola_historical_transfer.py"
+      - "lola_prospective_prereg.py"
+      - "lola_prospective_holdout.py"
+      - "lola_prospective_holdout_observer.py"
+      - "lola_prospective_observer_coverage.py"
+      - "lola_prospective_event_census.py"
+      - "lola_prospective_eligibility_review.py"
+      - "lola_prospective_candidate.py"
+      - "lola_prospective_result.py"
       - "lola_toolchain.py"
       - "lola_handoff_adapter.py"
       - "lola_code_integration.py"
       - "lola_universal_converter.py"
+      - "lola_code_intel.py"
+      - "lola_candidate.py"
       - "analyze-apk.py"
       - "lola_mobile.py"
       - "lola_library.py"
@@ -15,13 +37,36 @@ on:
       - "frida_runtime.py"
       - "tests/test_*.py"
       - ".github/workflows/toolchain-check.yml"
+      - ".github/workflows/prospective-holdout-observer.yml"
   pull_request:
     paths:
       - "toolchain.json"
+      - "COGNITIVE_FABRIC.md"
+      - "docs/prospective-transfer-prereg-v1.md"
+      - "fixtures/tiny_beast_benchmark.example.json"
+      - "fixtures/historical_scanner_cwd_v1.json"
+      - "fixtures/historical_transfer_v2.json"
+      - "fixtures/prospective_transfer_prereg_v1.json"
+      - "lola.py"
+      - "lola_sovereign_runtime.py"
+      - "lola_tiny_beast_benchmark.py"
+      - "lola_controlled_transfer_benchmark.py"
+      - "lola_historical_replay.py"
+      - "lola_historical_transfer.py"
+      - "lola_prospective_prereg.py"
+      - "lola_prospective_holdout.py"
+      - "lola_prospective_holdout_observer.py"
+      - "lola_prospective_observer_coverage.py"
+      - "lola_prospective_event_census.py"
+      - "lola_prospective_eligibility_review.py"
+      - "lola_prospective_candidate.py"
+      - "lola_prospective_result.py"
       - "lola_toolchain.py"
       - "lola_handoff_adapter.py"
       - "lola_code_integration.py"
       - "lola_universal_converter.py"
+      - "lola_code_intel.py"
+      - "lola_candidate.py"
       - "analyze-apk.py"
       - "lola_mobile.py"
       - "lola_library.py"
@@ -29,6 +74,7 @@ on:
       - "frida_runtime.py"
       - "tests/test_*.py"
       - ".github/workflows/toolchain-check.yml"
+      - ".github/workflows/prospective-holdout-observer.yml"
   workflow_dispatch:
 
 jobs:
@@ -36,6 +82,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-python@v6
         with:
           python-version: "3.12"
@@ -43,15 +91,37 @@ jobs:
           cache-dependency-path: requirements-test.txt
       - name: Install test dependencies
         run: python -m pip install --disable-pip-version-check -r requirements-test.txt
-      - name: Validate JSON manifest
-        run: python -m json.tool toolchain.json > /dev/null
+      - name: Validate JSON manifests
+        run: |
+          python -m json.tool toolchain.json > /dev/null
+          python -m json.tool fixtures/tiny_beast_benchmark.example.json > /dev/null
+          python -m json.tool fixtures/historical_scanner_cwd_v1.json > /dev/null
+          python -m json.tool fixtures/historical_transfer_v2.json > /dev/null
+          python -m json.tool fixtures/prospective_transfer_prereg_v1.json > /dev/null
       - name: Compile Lola Python modules
         run: |
           python -m py_compile \
+            lola.py \
+            lola_sovereign_runtime.py \
+            lola_tiny_beast_benchmark.py \
+            lola_controlled_transfer_benchmark.py \
+            lola_historical_replay.py \
+            lola_historical_transfer.py \
+            lola_prospective_prereg.py \
+            lola_prospective_holdout.py \
+            lola_prospective_holdout_observer.py \
+            lola_prospective_observer_coverage.py \
+            lola_prospective_event_census.py \
+            lola_prospective_eligibility_review.py \
+            lola_prospective_candidate.py \
+            lola_prospective_result.py \
+            lola_cognitive_transaction.py \
             lola_toolchain.py \
             lola_handoff_adapter.py \
             lola_code_integration.py \
             lola_universal_converter.py \
+            lola_code_intel.py \
+            lola_candidate.py \
             analyze-apk.py \
             lola_mobile.py \
             lola_library.py \
@@ -59,7 +129,23 @@ jobs:
             frida_library.py \
             frida_runtime.py \
             apk_runtime_monitor.py
-      - name: Run complete test suite
-        run: python -m pytest tests -v
+      - name: Run complete test suite (unit + LLM guardrail) via pytest
+        run: python -m pytest tests -q
+      - name: Sovereign cognitive smoke test
+        run: python lola.py --cognitive-smoke
+      - name: Code Intelligence smoke test
+        run: python lola.py --code-intel-smoke
+      - name: Novel Candidate smoke test
+        run: python lola.py --candidate-smoke
+      - name: Tiny-to-Beast harness smoke test
+        run: python lola.py --tiny-beast-smoke
+      - name: Controlled T2/T3 transfer benchmark
+        run: python lola.py --controlled-transfer-benchmark
+      - name: Historical scanner CWD replay
+        run: python lola.py --historical-replay-scanner-cwd
+      - name: Multi-incident historical transfer benchmark
+        run: python lola.py --historical-transfer-benchmark
+      - name: Prospective transfer preregistration seal
+        run: python lola.py --prospective-transfer-prereg
       - name: Toolchain status smoke test
         run: python lola_toolchain.py status
