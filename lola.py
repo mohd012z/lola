@@ -7,6 +7,7 @@ Examples:
     python lola.py --target "C:\Projects\MyApp"
     python lola.py "C:\Apps\sample.apk" --mode /apkpermissions
     python lola.py --cognitive-smoke
+    python lola.py --cognitive-loop-smoke
     python lola.py --tiny-beast-smoke
     python lola.py --tiny-beast-benchmark benchmark.json
     python lola.py --controlled-transfer-benchmark
@@ -208,6 +209,11 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the deterministic offline S0 sovereign cognitive smoke test.",
     )
     p.add_argument(
+        "--cognitive-loop-smoke",
+        action="store_true",
+        help="Run the end-to-end offline smoke of the New LOLA cognitive loop (triage, radar, novelty gate, planner, flow, governor).",
+    )
+    p.add_argument(
         "--tiny-beast-smoke",
         action="store_true",
         help="Run a synthetic smoke of the Tiny-to-Beast benchmark harness.",
@@ -310,6 +316,7 @@ def main() -> int:
         bool(value)
         for value in (
             args.cognitive_smoke,
+            args.cognitive_loop_smoke,
             args.tiny_beast_smoke,
             args.tiny_beast_benchmark,
             args.controlled_transfer_benchmark,
@@ -332,6 +339,15 @@ def main() -> int:
         from lola_sovereign_runtime import run_sovereign_smoke
 
         result = run_sovereign_smoke()
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0 if result.get("passed") else 1
+
+    if args.cognitive_loop_smoke:
+        if args.target_option or args.target_positional:
+            parser.error("--cognitive-loop-smoke must run without target inputs.")
+        from lola_cognitive_loop_smoke import run_cognitive_loop_smoke
+
+        result = run_cognitive_loop_smoke()
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("passed") else 1
 

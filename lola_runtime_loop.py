@@ -22,6 +22,7 @@ from lola_cognitive_budget import CognitiveBudget, stop_condition
 from lola_evidence_bus import EvidenceBus
 from lola_fast_triage import fast_triage
 from lola_presentation import confidence_from_evidence
+from lola_answer_planner import plan_answer
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,8 @@ class LoopReport:
     trace: tuple
     transfer_passed: bool = False
     regression_passed: bool = False
+    answer_type: str = ""
+    planned_sections: tuple = ()
 
 
 def _claim_states(bus: EvidenceBus, claims: Sequence[str]) -> list:
@@ -77,6 +80,7 @@ def run_loop(
         trace.append({"step": name, "status": status})
 
     step("Intake")
+    plan = plan_answer(question)
     triage = fast_triage(question, verified_state=verified_state,
                          inspectable=inspectable)
     step(f"Triage: {triage.route}")
@@ -84,16 +88,17 @@ def run_loop(
     if triage.route == "ANSWER":
         step("Local knowledge checked")
         ev = f"verified:{triage.match}"
-        claims = _claim_states(EvidenceBus(), [])
         conf = "SUPPORTED"
         step("Synthesize")
-        step("Answer")
+        step(f"Answer ({plan.question_type})")
         report = LoopReport(
             question=question, route="ANSWER",
             stopped_by="ANSWERED_WITH_EVIDENCE",
             evidence_ids=(ev,), confidence=conf, agents_used=0,
             external_sources_used=0, quarantined=False,
             violations=tuple(violations), trace=tuple(trace),
+            answer_type=plan.question_type,
+            planned_sections=plan.sections,
         )
         return report
 
@@ -130,7 +135,7 @@ def run_loop(
     ev = bus.evidence_ids()
     step("Verify")
     step("Synthesize")
-    step("Answer")
+    step(f"Answer ({plan.question_type})")
 
     answered = bool(ev) and conf == "SUPPORTED"
     state = {
@@ -147,6 +152,8 @@ def run_loop(
         evidence_ids=ev, confidence=conf, agents_used=0,
         external_sources_used=sources_used, quarantined=quarantined,
         violations=tuple(violations), trace=tuple(trace),
+        answer_type=plan.question_type,
+        planned_sections=plan.sections,
     )
 
 
