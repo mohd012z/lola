@@ -485,7 +485,7 @@ def _artifact_metadata(label: str, path: Path) -> dict[str, Any]:
 def _execute_project_scan(validated: dict[str, Any], artifact_dir: Path) -> tuple[int, dict[str, str], list[str]]:
     from argparse import Namespace
 
-    from lola import run_project
+    from lola_scan_runners import run_project
 
     flags = validated["options"]["flags"]
     args = Namespace(
@@ -519,7 +519,7 @@ def _execute_project_scan(validated: dict[str, Any], artifact_dir: Path) -> tupl
 def _execute_apk_scan(validated: dict[str, Any], artifact_dir: Path) -> tuple[int, dict[str, str], list[str]]:
     from argparse import Namespace
 
-    from lola import run_apk
+    from lola_scan_runners import run_apk
 
     flags = validated["options"]["flags"]
     artifact_dir.mkdir(parents=True, exist_ok=True)

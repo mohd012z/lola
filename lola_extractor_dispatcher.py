@@ -10,7 +10,8 @@ from lola_universal_converter import detect as detect_format, python_summary, pl
 from lola_document_converter import conversion_plan as document_conversion_plan, matrix as document_matrix
 from lola_office_engine import capabilities as office_capabilities, convert as office_convert
 from lola_office_html import convert as html_convert, matrix as html_matrix
-from lola_pdf_html_rich import pdf_rich, batch_convert
+from lola_pdf_html_rich import pdf_rich
+from lola_office_html import batch_convert
 from lola_pdf_ocr import capabilities as ocr_capabilities, readiness as ocr_readiness, ocr_pages, searchable_pdf
 from lola_code_inspector import run_mode as code_inspect
 from lola_code_integration import task as integration_task, merge_plan

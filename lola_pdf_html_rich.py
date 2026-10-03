@@ -34,16 +34,3 @@ def pdf_rich(src,dst,dpi=144,ocr=False,lang="eng"):
     shell=shell.replace("</style>",""" .pdf-page{margin:18px auto 34px;max-width:1000px;border:1px solid #bbb;background:#fff;box-shadow:0 2px 10px #0002}.pdf-page header{padding:7px 10px;background:#f0f2f4;font-weight:600}.pdf-image{display:block;width:100%}.pdf-text{padding:12px;line-height:1.45}.page-nav{display:flex;gap:5px;overflow:auto;position:sticky;top:48px;background:white;padding:6px;z-index:8}.page-nav a{padding:5px 8px;border:1px solid #aaa;text-decoration:none}@media print{.page-nav,.pdf-text{display:none}.pdf-page{break-after:page;box-shadow:none;border:0}} </style>""")
     p=Path(dst);p.parent.mkdir(parents=True,exist_ok=True);p.write_text(shell,encoding="utf-8")
     return {"ok":True,"output":str(p),"pages":len(pdf),"ocr_pages":ocr_pages,"dpi":dpi,"language":lang}
-
-def batch_convert(folder,out_dir,recursive=False,ocr_pdf=False):
-    from lola_office_html import convert
-    root=Path(folder);out=Path(out_dir);out.mkdir(parents=True,exist_ok=True)
-    iterator=root.rglob("*") if recursive else root.glob("*");results=[]
-    allowed={".docx",".xlsx",".csv",".txt",".md",".log",".pdf"}
-    for p in iterator:
-        if not p.is_file() or p.suffix.lower() not in allowed:continue
-        rel=p.relative_to(root);dst=(out/rel).with_suffix(".html");dst.parent.mkdir(parents=True,exist_ok=True)
-        try:r=pdf_rich(p,dst,ocr=ocr_pdf) if p.suffix.lower()==".pdf" else convert(p,dst)
-        except Exception as e:r={"ok":False,"error":str(e)}
-        r["source"]=str(p);results.append(r)
-    return {"ok":all(x.get("ok") for x in results) if results else True,"count":len(results),"results":results}

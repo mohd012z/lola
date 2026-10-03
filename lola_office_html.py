@@ -93,3 +93,16 @@ def matrix():
     return {"direct":["DOCX->HTML","XLSX->HTML","CSV->HTML","TXT/MD/LOG->HTML","PDF->HTML"],
             "staged":["DOC->DOCX->HTML","ODT->DOCX->HTML","XLS->XLSX->HTML","ODS->XLSX->HTML"],
             "html_features":["responsive viewport","semantic tables","sheet sections","PDF page provenance","escaped source text"]}
+
+
+def batch_convert(folder,out_dir,recursive=False,ocr_pdf=False):
+    root=Path(folder);out=Path(out_dir);out.mkdir(parents=True,exist_ok=True)
+    iterator=root.rglob("*") if recursive else root.glob("*");results=[]
+    allowed={".docx",".xlsx",".csv",".txt",".md",".log",".pdf"}
+    for p in iterator:
+        if not p.is_file() or p.suffix.lower() not in allowed:continue
+        rel=p.relative_to(root);dst=(out/rel).with_suffix(".html");dst.parent.mkdir(parents=True,exist_ok=True)
+        try:r=pdf_rich(p,dst,ocr=ocr_pdf) if p.suffix.lower()==".pdf" else convert(p,dst)
+        except Exception as e:r={"ok":False,"error":str(e)}
+        r["source"]=str(p);results.append(r)
+    return {"ok":all(x.get("ok") for x in results) if results else True,"count":len(results),"results":results}
