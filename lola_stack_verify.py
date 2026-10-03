@@ -24,6 +24,7 @@ _MODULES = (
     "lola_observe", "lola_recheck", "lola_cognitive_loop",
     "lola_cognitive_entry", "lola_full_chain_smoke",
     "lola_delta_observe",
+    "lola_code_intel",
 )
 
 
@@ -56,11 +57,20 @@ def _delta_observe_ok() -> bool:
         return False
 
 
+def _code_intel_ok() -> bool:
+    try:
+        from lola_code_intel import run_code_intel_smoke
+        return bool(run_code_intel_smoke()["passed"])
+    except Exception:
+        return False
+
+
 def verify_merged_stack() -> dict:
     modules = {name: _import_ok(name) for name in _MODULES}
     stages = {
         "full_chain_smoke": _full_chain_ok(),
         "delta_observe": _delta_observe_ok(),
+        "code_intel": _code_intel_ok(),
     }
     passed = all(modules.values()) and all(stages.values())
     return {
