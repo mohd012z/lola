@@ -131,6 +131,40 @@ class CompiledContext:
     source: str = "code_intel"
     verified: bool = False  # evidence, not verification (Law 1)
     model_calls: int = 0    # this layer never calls a model
+    stale: bool = False     # True only when check_staleness=True AND the
+                            # index's file hashes no longer match disk
+
+
+@dataclass
+class StalenessReport:
+    """Read-only answer to: 'does this index still match the source tree?'
+
+    Thread weakness #10 ('index staleness'): 'Never trust an index whose
+    source hash doesn't match.'  This probe hashes every file under the
+    root (no parsing, no writes) and compares against the recorded file
+    hashes — so a consumer can decide to reindex BEFORE reasoning from a
+    possibly-stale graph.  Cost is O(files) hash work; it performs NO
+    reindexing itself (that remains an explicit, separate act).
+    """
+    is_fresh: bool
+    changed: tuple[str, ...]      # indexed, on disk, hash differs
+    removed: tuple[str, ...]      # indexed, no longer on disk
+    unindexed: tuple[str, ...]    # on disk, not yet in the index
+    unreadable: tuple[str, ...]   # on disk (indexed or not), could not be hashed
+
+    def summary(self) -> str:
+        if self.is_fresh:
+            return "fresh"
+        parts = []
+        if self.changed:
+            parts.append(f"changed={len(self.changed)}")
+        if self.removed:
+            parts.append(f"removed={len(self.removed)}")
+        if self.unindexed:
+            parts.append(f"unindexed={len(self.unindexed)}")
+        if self.unreadable:
+            parts.append(f"unreadable={len(self.unreadable)}")
+        return "stale (" + ", ".join(parts) + ")"
 
 
 class CodeIndex:
@@ -452,6 +486,40 @@ class CodeIndex:
             "SELECT value FROM meta WHERE key='graph_version'").fetchone()
         return row["value"] if row else ""
 
+    # -- staleness (read-only probe; thread weakness #10) ------------------
+    def staleness_report(self) -> "StalenessReport":
+        """Hash every file under the root (no parsing, NO writes) and compare
+        with the recorded file hashes.  Returns a StalenessReport; performs
+        no reindexing.  An unreadable indexed file counts as unreadable, not
+        silently fresh (fail-closed)."""
+        prev = {r["rel_path"]: r["hash"]
+                for r in self.conn.execute("SELECT rel_path, hash FROM files")}
+        changed: list[str] = []
+        unindexed: list[str] = []
+        unreadable: list[str] = []
+        seen: set[str] = set()
+        for path in self._iter_py_files():
+            rel = path.relative_to(self.root).as_posix()
+            seen.add(rel)
+            try:
+                text = path.read_text(encoding="utf-8", errors="replace")
+            except OSError:
+                unreadable.append(rel)
+                continue
+            h = _sha(text)
+            if rel not in prev:
+                unindexed.append(rel)
+            elif prev[rel] != h:
+                changed.append(rel)
+        removed = [rel for rel in prev if rel not in seen]
+        report = StalenessReport(
+            is_fresh=not (changed or removed or unindexed or unreadable),
+            changed=tuple(sorted(changed)),
+            removed=tuple(sorted(removed)),
+            unindexed=tuple(sorted(unindexed)),
+            unreadable=tuple(sorted(unreadable)))
+        return report
+
     def get_symbol(self, symbol_id: str) -> dict | None:
         r = self.conn.execute(
             "SELECT * FROM symbols WHERE symbol_id=?", (symbol_id,)).fetchone()
@@ -574,12 +642,18 @@ class ContextCompiler:
     def __init__(self, idx: CodeIndex):
         self.idx = idx
 
-    def compile(self, target_id: str, include_source: bool = False) -> CompiledContext:
+    def compile(self, target_id: str, include_source: bool = False,
+                check_staleness: bool = False) -> CompiledContext:
+        stale = False
+        if check_staleness:
+            # Read-only probe; the context carries the verdict so a caller
+            # never silently reasons from a stale graph (weakness #10).
+            stale = not self.idx.staleness_report().is_fresh
         s = self.idx.get_symbol(target_id)
         if not s:
             return CompiledContext(
                 target_id=target_id, target={}, callers=[], callees=[],
-                tests=[], graph_version=self.idx.graph_version())
+                tests=[], graph_version=self.idx.graph_version(), stale=stale)
         callers, callees, tests = [], [], []
         for e in self.idx.symbol_neighbors(target_id):
             if e["relation"] == REL_CALLS:
@@ -606,7 +680,8 @@ class ContextCompiler:
         return CompiledContext(
             target_id=target_id, target=target,
             callers=self._dedupe(callers), callees=self._dedupe(callees),
-            tests=self._dedupe(tests), graph_version=self.idx.graph_version())
+            tests=self._dedupe(tests), graph_version=self.idx.graph_version(),
+            stale=stale)
 
     @staticmethod
     def _brief(s: dict) -> dict:
@@ -721,6 +796,34 @@ def run_code_intel_smoke() -> dict:
               f"reindexed={st2.files_reindexed} unchanged={st2.files_unchanged}")
         check("graph version changes on content change",
               idx.graph_version() != gv1)
+
+        # staleness (read-only probe; thread weakness #10)
+        check("fresh after reindex", idx.staleness_report().is_fresh,
+              idx.staleness_report().summary())
+        (root / "app.py").write_text(
+            (root / "app.py").read_text() + "\n# tail change\n", encoding="utf-8")
+        (root / "new_file.py").write_text("def n():\n    return 2\n", encoding="utf-8")
+        report = idx.staleness_report()
+        check("detects changed file", "app.py" in report.changed, report.summary())
+        check("detects unindexed file", "new_file.py" in report.unindexed,
+              report.summary())
+        check("stale not fresh", not report.is_fresh)
+        # the probe must NOT have reindexed: graph version unchanged
+        gv_before = idx.graph_version()
+        idx.staleness_report()
+        check("probe is read-only (no reindex)", idx.graph_version() == gv_before)
+        # reindex clears staleness
+        idx.index()
+        check("reindex clears staleness", idx.staleness_report().is_fresh)
+        # context compiler carries the verdict when asked
+        ctx_stale = ContextCompiler(idx).compile(compute_id, check_staleness=True)
+        check("context fresh when clean", ctx_stale.stale is False)
+        (root / "app.py").write_text(
+            (root / "app.py").read_text() + "# mutate\n", encoding="utf-8")
+        ctx_dirty = ContextCompiler(idx).compile(compute_id, check_staleness=True)
+        check("context flags stale graph", ctx_dirty.stale is True)
+        check("context stale still verified=False (Law 1)",
+              ctx_dirty.verified is False)
 
         idx.close()
 
