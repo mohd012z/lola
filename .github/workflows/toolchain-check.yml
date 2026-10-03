@@ -32,6 +32,7 @@ on:
       - "lola_candidate.py"
       - "lola_causal_codegraph.py"
       - "lola_concurrent_learning.py"
+      - "lola_lks.py"
       - "analyze-apk.py"
       - "lola_mobile.py"
       - "lola_library.py"
@@ -71,6 +72,7 @@ on:
       - "lola_candidate.py"
       - "lola_causal_codegraph.py"
       - "lola_concurrent_learning.py"
+      - "lola_lks.py"
       - "analyze-apk.py"
       - "lola_mobile.py"
       - "lola_library.py"
@@ -128,6 +130,7 @@ jobs:
             lola_candidate.py \
             lola_causal_codegraph.py \
             lola_concurrent_learning.py \
+            lola_lks.py \
             analyze-apk.py \
             lola_mobile.py \
             lola_library.py \
@@ -147,6 +150,8 @@ jobs:
         run: python lola.py --causal-graph-smoke
       - name: Concurrent Learning smoke test
         run: python lola.py --concurrent-learning-smoke
+      - name: LKS knowledge store smoke test
+        run: python lola.py --lks-smoke
       - name: Tiny-to-Beast harness smoke test
         run: python lola.py --tiny-beast-smoke
       - name: Controlled T2/T3 transfer benchmark
