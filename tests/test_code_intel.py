@@ -87,6 +87,85 @@ class CodeIntelIndexTests(unittest.TestCase):
         self.assertIn("syntax", st.files_failed_list[0]["error"])
 
 
+class CodeIntelStalenessTests(unittest.TestCase):
+    """Thread weakness #10: 'Never trust an index whose source hash doesn't
+    match.'  The staleness probe must be READ-ONLY (no reindex) so a consumer
+    can decide whether to reindex BEFORE reasoning from the graph."""
+
+    def setUp(self):
+        self._td = tempfile.TemporaryDirectory()
+        root = Path(self._td.name) / "proj"
+        root.mkdir()
+        (root / "app.py").write_text(APP, encoding="utf-8")
+        (root / "test_app.py").write_text(TEST_APP, encoding="utf-8")
+        self.root = root
+        self.idx = CodeIndex(root, db_path=Path(self._td.name) / "proj.db")
+        self.idx.index()
+
+    def tearDown(self):
+        self.idx.close()
+        self._td.cleanup()
+
+    def test_fresh_after_index(self):
+        r = self.idx.staleness_report()
+        self.assertTrue(r.is_fresh, r.summary())
+
+    def test_detects_changed_file(self):
+        (self.root / "app.py").write_text(APP + "\n# mutated\n", encoding="utf-8")
+        r = self.idx.staleness_report()
+        self.assertFalse(r.is_fresh)
+        self.assertIn("app.py", r.changed)
+
+    def test_detects_removed_file(self):
+        (self.root / "test_app.py").unlink()
+        r = self.idx.staleness_report()
+        self.assertFalse(r.is_fresh)
+        self.assertIn("test_app.py", r.removed)
+
+    def test_detects_unindexed_file(self):
+        (self.root / "brand_new.py").write_text("def z():\n    return 0\n",
+                                                encoding="utf-8")
+        r = self.idx.staleness_report()
+        self.assertFalse(r.is_fresh)
+        self.assertIn("brand_new.py", r.unindexed)
+
+    def test_probe_is_read_only(self):
+        (self.root / "app.py").write_text(APP + "\n# mutated\n", encoding="utf-8")
+        gv_before = self.idx.graph_version()
+        self.idx.staleness_report()  # must NOT reindex
+        self.assertEqual(self.idx.graph_version(), gv_before)
+        # and the graph still serves the (stale) data unchanged
+        self.assertIsNotNone(self.idx.find_by_qualname("compute"))
+
+    def test_reindex_clears_staleness(self):
+        (self.root / "app.py").write_text(APP + "\n# mutated\n", encoding="utf-8")
+        self.assertFalse(self.idx.staleness_report().is_fresh)
+        self.idx.index()
+        self.assertTrue(self.idx.staleness_report().is_fresh)
+
+    def test_context_compiler_flags_stale_when_asked(self):
+        cid = self.idx.find_by_qualname("compute")["symbol_id"]
+        self.assertFalse(ContextCompiler(self.idx)
+                         .compile(cid, check_staleness=True).stale)
+        (self.root / "app.py").write_text(APP + "\n# mutated\n", encoding="utf-8")
+        ctx = ContextCompiler(self.idx).compile(cid, check_staleness=True)
+        self.assertTrue(ctx.stale)
+        self.assertFalse(ctx.verified)  # Law 1: stale is not verification
+
+    def test_context_compiler_default_is_stale_false(self):
+        # without check_staleness the probe is skipped (cheap default path)
+        cid = self.idx.find_by_qualname("compute")["symbol_id"]
+        ctx = ContextCompiler(self.idx).compile(cid)
+        self.assertFalse(ctx.stale)
+
+    def test_summary_reports_categories(self):
+        (self.root / "app.py").write_text(APP + "\n# x\n", encoding="utf-8")
+        (self.root / "test_app.py").unlink()
+        r = self.idx.staleness_report()
+        self.assertIn("changed=1", r.summary())
+        self.assertIn("removed=1", r.summary())
+
+
 class CodeIntelRetrievalTests(unittest.TestCase):
     def setUp(self):
         self._td = tempfile.TemporaryDirectory()

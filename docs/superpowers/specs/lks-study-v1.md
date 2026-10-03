@@ -93,17 +93,47 @@ candidate, causal-codegraph, env-fabric, apk-security) + the thread's own
    staleness is a scheduler concern (P-queue, not storage — thread §10);
    env-fabric negative budgets rejected; LKS export gate is atom-level by
    design (evidence *content* lives outside, keyed by hash).
-4. Still open (documented, not code): #10 index staleness end-to-end
-   (CodeIndex already hashes files; the freshness API is the missing link
-   to make callers *check*), #13 capability escalation (AuthorityKernel
-   lease — design), #6 self-learning poisoning (gate pipeline already
-   requires reproduction across cases; LKS freshness now covers the
-   storage side).
+4. Still open (design-level, not code): #13 capability-escalation lease
+   (AuthorityKernel), #6 self-learning poisoning (gate pipeline already
+   requires reproduction across cases; LKS freshness covers storage).
+   ~~#10 index staleness end-to-end~~ — **closed in this commit** (see
+   'Weakness pass 2' below).
+
+## Weakness pass 2 (2026-10-03, "continue recheck and improve weakness")
+
+#10 was closed end-to-end in this commit:
+
+**Gap (proven first, per FAIL→EVIDENCE):** on main, after any disk mutation
+(mutate/add/remove a file) a `CodeIndex` consumer could NOT detect
+staleness without calling `index()` — a *write* that re-parses. `graph_version()`
+stayed static and `find_by_name` kept returning symbols of **removed**
+files: LOLA was silently reasoning from stale structure, exactly the
+thread's #10 ('Never trust an index whose source hash doesn't match').
+
+**Fix (read-only, deterministic):**
+- `CodeIndex.staleness_report()` → `StalenessReport(is_fresh, changed,
+  removed, unindexed, unreadable)` — hashes every file under the root
+  (no parsing, **no writes**) and compares with recorded file hashes.
+  Unreadable files count as unreadable, not silently fresh (fail-closed).
+- `ContextCompiler.compile(..., check_staleness=True)` →
+  `CompiledContext.stale` — the context carries the verdict so a caller
+  never silently reasons from a stale graph; default path stays cheap
+  (probe skipped unless asked). `verified` stays False (Law 1).
+- Smoke: +9 checks (14→23). Tests: +9 (`CodeIntelStalenessTests`).
+
+**Proof (synthetic AND real-scale, per 'validate against real artifacts,
+not only small fixtures'):** copy of the actual lola repo slice (157 .py
+files → 1,095 symbols / 3,000 edges): probe = **0.012 s**; correctly
+reported `stale (changed=2, removed=1, unindexed=1)`; context flagged
+`stale=True, verified=False`; incremental reindex touched exactly 3 of
+157 files and cleared staleness.
 
 ## Evidence
 
 - `pytest tests/test_lks.py` — 46 passed (0.11 s) — 33 original + 13 freshness
-- full suite — 714 passed (701 + 13), 3.9 s
-- `--lks-smoke` — 25/25 (was 19; +6 freshness checks)
-- stack-verify — 28 modules + lks stage
+- `pytest tests/test_code_intel.py` — 22 passed (0.18 s) — 13 original + 9 staleness
+- full suite — 723 passed (714 + 9), 3.9 s
+- `--lks-smoke` — 25/25 · `--code-intel-smoke` — 23/23 (was 14; +9 staleness checks)
+- `--stack-verify` — 28 modules, all stages ok
+- real-scale proof: 157-file repo slice, 12 ms probe, 3/157 incremental reindex
 - CI: paths ×2, compile list, smoke step
