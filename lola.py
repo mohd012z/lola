@@ -214,6 +214,10 @@ def build_parser() -> argparse.ArgumentParser:
         help="Run the end-to-end offline smoke of the New LOLA cognitive loop (triage, radar, novelty gate, planner, flow, governor).",
     )
     p.add_argument(
+        "--cognitive-loop",
+        help="Run the New LOLA cognitive loop on a real input JSON file (question + optional verified_state/inspectable/inventory/frozen_idea/external_hits/prediction/observed); prints the report JSON.",
+    )
+    p.add_argument(
         "--tiny-beast-smoke",
         action="store_true",
         help="Run a synthetic smoke of the Tiny-to-Beast benchmark harness.",
@@ -342,6 +346,8 @@ def main() -> int:
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("passed") else 1
 
+    if args.cognitive_loop_smoke and args.cognitive_loop:
+        parser.error("--cognitive-loop-smoke and --cognitive-loop cannot be used together.")
     if args.cognitive_loop_smoke:
         if args.target_option or args.target_positional:
             parser.error("--cognitive-loop-smoke must run without target inputs.")
@@ -350,6 +356,16 @@ def main() -> int:
         result = run_cognitive_loop_smoke()
         print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
         return 0 if result.get("passed") else 1
+
+    if args.cognitive_loop:
+        if args.target_option or args.target_positional:
+            parser.error("--cognitive-loop must run without target inputs.")
+        from lola_cognitive_loop import run_cognitive_loop
+
+        input_doc = json.loads(Path(args.cognitive_loop).read_text(encoding="utf-8"))
+        result = run_cognitive_loop(input_doc)
+        print(json.dumps(result, indent=2, ensure_ascii=False, sort_keys=True))
+        return 0
 
     if args.tiny_beast_smoke:
         if args.target_option or args.target_positional:
